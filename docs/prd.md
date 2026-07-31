@@ -191,6 +191,8 @@ Workflow:
 ```text
 Import
 ↓
+Page reduced to relevant text
+↓
 AI parses
 ↓
 Recipe cleaned
@@ -199,6 +201,8 @@ Uncertainties highlighted
 ↓
 Save
 ```
+
+Before AI parsing, fetched webpages are reduced to their recipe-relevant text — navigation, ads, comments, scripts, and other boilerplate are stripped server-side rather than sent to the AI as raw HTML. This keeps AI cost predictable, improves extraction reliability on ad-heavy recipe sites, and reduces the prompt-injection surface of untrusted page content (see §30).
 
 No mandatory review.
 
