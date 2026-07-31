@@ -20,6 +20,7 @@ android/
 .env
 .env.local
 .env.*.local
+.env.example
 *.pem
 *.p8
 *.p12
