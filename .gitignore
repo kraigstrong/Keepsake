@@ -21,6 +21,8 @@ android/
 .env.local
 .env.*.local
 .env.example
+client.env
+server.env
 *.pem
 *.p8
 *.p12
