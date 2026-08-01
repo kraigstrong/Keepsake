@@ -86,6 +86,7 @@ jobs:
       # Fail only on high/critical — moderate currently includes a known,
       # unfixable-without-regression finding in Expo's own build-tooling
       # chain (uuid <11.1.1 via xcode -> @expo/config-plugins -> expo
-      # CLI internals, not a runtime/app dependency). Tracked in
-      # docs/security-checklist.md rather than force-downgrading Expo.
+      # CLI internals, not a runtime/app dependency). See the "Wire up
+      # secret and dependency scanning" commit message for the full
+      # reasoning rather than force-downgrading Expo.
       - run: npm audit --audit-level=high
