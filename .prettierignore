@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+package-lock.json
+
+# Hand-authored prose and agent tooling — not app code, not Prettier's job
+docs/
+.claude/
+.github/
+*.md

@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Typecheck, lint, format, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test -- --ci
+
+  database:
+    name: Migration apply/reset and RLS tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `supabase start` applies every migration in supabase/migrations/
+      # to a fresh local database — this is the "apply" half of migration
+      # verification.
+      - run: npx supabase start
+
+      # Supabase migrations are forward-only (no per-migration down
+      # script); `db reset` drops and re-applies all migrations from
+      # scratch, which is the project's equivalent "rollback" check —
+      # it catches non-idempotent or order-dependent migrations.
+      - run: npx supabase db reset
+
+      - run: npx supabase test db --local supabase/tests/database
+
+      - if: always()
+        run: npx supabase stop
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-scan:
+    name: Dependency scan (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Fail only on high/critical — moderate currently includes a known,
+      # unfixable-without-regression finding in Expo's own build-tooling
+      # chain (uuid <11.1.1 via xcode -> @expo/config-plugins -> expo
+      # CLI internals, not a runtime/app dependency). See the "Wire up
+      # secret and dependency scanning" commit message for the full
+      # reasoning rather than force-downgrading Expo.
+      - run: npm audit --audit-level=high

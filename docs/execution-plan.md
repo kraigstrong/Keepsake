@@ -786,6 +786,7 @@ Turn a recipe webpage into a usable saved recipe without mandatory review.
 - URL normalization
 - Duplicate detection
 - Secure fetcher
+- Content reduction (strip fetched HTML to recipe-relevant text — no ads, nav, comments, scripts, or boilerplate — before any AI call)
 - Structured extraction
 - Content fallback
 - Claude structured response
@@ -803,7 +804,7 @@ Turn a recipe webpage into a usable saved recipe without mandatory review.
 - DNS and redirect revalidation
 - Size and timeout limits
 - Content-type checks
-- HTML cleanup
+- HTML cleanup — reduce to text-only content prior to sending anything to Claude (bounds token cost per import and shrinks prompt-injection surface from untrusted page content)
 - Prompt-injection resistance
 - Schema-only AI output
 - Server-side credentials
