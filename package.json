@@ -23,7 +23,7 @@
     "jest-expo": "~57.0.3",
     "prettier": "^3.9.6",
     "supabase": "^2.111.0",
-    "typescript": "~6.0.3"
+    "typescript": "~7.0.2"
   },
   "scripts": {
     "start": "expo start",
