@@ -11,6 +11,23 @@ updates:
           - "expo*"
           - "react-native*"
           - "@expo/*"
+          - "react"
+          - "react-dom"
+    ignore:
+      # eslint-config-expo and jest-expo pin their own compatible versions
+      # of these — bumping major versions independently breaks things (see
+      # PRs #7, #8, #9: eslint 10 and typescript 7 broke eslint-config-expo's
+      # bundled plugins, jest bumped ahead of jest-expo's internal
+      # jest-runtime). Let Expo's own config upgrades pull these forward
+      # instead of Dependabot proposing them independently.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/jest"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
