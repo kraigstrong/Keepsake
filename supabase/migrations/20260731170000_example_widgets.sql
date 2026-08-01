@@ -26,3 +26,11 @@ create policy "Owners can insert their own widgets"
   for insert
   to authenticated
   with check (owner_id = auth.uid());
+
+-- RLS policies only govern which ROWS a role can see once it's already
+-- allowed at the table; without this grant, `authenticated` fails at the
+-- SQL-privilege check before RLS is even consulted ("permission denied
+-- for table", not a policy denial). Grant only what the two policies
+-- above actually cover — no update/delete policy exists yet, so no
+-- update/delete grant either.
+grant select, insert on public.example_widgets to authenticated;

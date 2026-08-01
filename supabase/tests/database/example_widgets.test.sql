@@ -3,10 +3,12 @@
 -- example_widgets.sql. Real household RLS tests land in Phase 3 with the
 -- real schema; this proves the harness works before that schema exists.
 --
--- NOTE: written but not locally executed — this sandbox has no reachable
--- Docker daemon, so `supabase start` / `supabase test db` couldn't run
--- here. Verify on first CI run (Phase 0's CI workflow runs this job) or
--- with `supabase test db` on a machine with Docker before trusting it.
+-- First real CI run (PR #1) caught a genuine bug this sandbox's lack of
+-- Docker couldn't: "permission denied for table example_widgets" — RLS
+-- policies only govern row visibility once a role already has table-level
+-- privilege, and `authenticated` never had one. Fixed with an explicit
+-- GRANT in the migration. Left as evidence this harness actually works,
+-- not just that it runs.
 
 begin;
 
