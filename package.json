@@ -4,14 +4,17 @@
   "private": true,
   "main": "index.ts",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "expo": "~57.0.9",
     "expo-dev-client": "~57.0.10",
+    "expo-linking": "~57.0.4",
     "expo-sqlite": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-native": "0.86.2",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@testing-library/react-native": "^14.0.1",
@@ -44,14 +47,5 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "prepare": "husky"
-  },
-  "jest": {
-    "preset": "jest-expo",
-    "collectCoverageFrom": [
-      "**/*.{ts,tsx}",
-      "!**/coverage/**",
-      "!**/node_modules/**",
-      "!**/.expo/**"
-    ]
   }
 }
