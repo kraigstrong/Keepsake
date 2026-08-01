@@ -1,10 +1,17 @@
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { parseInvitationLink } from './src/deepLinks/parseInvitationLink';
+import { useCookingModeAwake } from './src/keepAwake/useCookingModeAwake';
 import { logError, trackEvent } from './src/observability';
+import { pickExistingPhoto, type PickedPhoto } from './src/photoImport/photoImport';
+import {
+  addGroceryReminder,
+  getOrCreateGroceryList,
+  requestReminderPermission,
+} from './src/reminders/reminders';
 
 // Phase 1 risk-spike wiring only — proves deep links reach the app and
 // parse/reject correctly. Real UI (accept/decline screen, server call)
@@ -34,23 +41,85 @@ function useLastDeepLinkResult() {
   return result;
 }
 
+// Phase 1 risk-spike wiring only — every section below gets replaced by
+// real UI in a later phase (keep-awake -> Phase 15 cooking mode,
+// photo -> Phase 4/10, reminders -> Phase 14). This screen exists only
+// so each native module can be tapped and verified on Simulator/device.
 export default function App() {
   const lastDeepLink = useLastDeepLinkResult();
+  const [awakeEnabled, setAwakeEnabled] = useState(false);
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [reminderStatus, setReminderStatus] = useState<string | null>(null);
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text>Keepsake — application shell lands in Phase 2.</Text>
       {lastDeepLink && <Text testID="deep-link-result">Last deep link: {lastDeepLink}</Text>}
+
+      <View style={styles.spikeSection}>
+        <Text>Keep-awake spike: {awakeEnabled ? 'ACTIVE' : 'inactive'}</Text>
+        <Button
+          title={awakeEnabled ? 'Deactivate keep-awake' : 'Activate keep-awake'}
+          onPress={() => setAwakeEnabled((v) => !v)}
+        />
+        {awakeEnabled && <KeepAwakeActive />}
+      </View>
+
+      <View style={styles.spikeSection}>
+        <Text>Photo spike: {photo ? `picked (${photo.width}x${photo.height})` : 'none'}</Text>
+        <Button
+          title="Pick existing photo"
+          onPress={async () => {
+            const result = await pickExistingPhoto();
+            setPhoto(result);
+          }}
+        />
+      </View>
+
+      <View style={styles.spikeSection}>
+        <Text>Reminders spike: {reminderStatus ?? 'not tried'}</Text>
+        <Button
+          title="Add test grocery reminder"
+          onPress={async () => {
+            try {
+              const granted = await requestReminderPermission();
+              if (!granted) {
+                setReminderStatus('permission denied');
+                return;
+              }
+              const listId = await getOrCreateGroceryList();
+              await addGroceryReminder(listId, `Keepsake spike test item (${Date.now()})`);
+              setReminderStatus('reminder created');
+            } catch (error) {
+              logError(error, { spike: 'reminders' });
+              setReminderStatus(`error: ${String(error)}`);
+            }
+          }}
+        />
+      </View>
+
       <StatusBar style="auto" />
-    </View>
+    </ScrollView>
   );
+}
+
+function KeepAwakeActive() {
+  useCookingModeAwake();
+  return null;
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 40,
+  },
+  spikeSection: {
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
   },
 });
