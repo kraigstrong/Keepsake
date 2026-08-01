@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Best-effort local secret scan. CI (.github/workflows/ci.yml) runs the
+# real gitleaks-action gate on every PR — this hook is fast feedback for
+# whoever has gitleaks installed locally, not the enforced check.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --config .gitleaks.toml
+else
+  echo "gitleaks not found locally — skipping pre-commit secret scan (CI still enforces this)."
+  echo "Install: brew install gitleaks  (or see https://github.com/gitleaks/gitleaks#installing)"
+fi

@@ -1,0 +1,14 @@
+title = "Keepsake gitleaks config"
+
+# Extend gitleaks' maintained default ruleset rather than hand-rolling
+# detection rules — see https://github.com/gitleaks/gitleaks#configuration
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''package-lock\.json''',
+  '''\.expo/''',
+  '''node_modules/''',
+  '''coverage/''',
+]

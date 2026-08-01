@@ -57,3 +57,35 @@ jobs:
 
       - if: always()
         run: npx supabase stop
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-scan:
+    name: Dependency scan (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Fail only on high/critical — moderate currently includes a known,
+      # unfixable-without-regression finding in Expo's own build-tooling
+      # chain (uuid <11.1.1 via xcode -> @expo/config-plugins -> expo
+      # CLI internals, not a runtime/app dependency). Tracked in
+      # docs/security-checklist.md rather than force-downgrading Expo.
+      - run: npm audit --audit-level=high
