@@ -14,8 +14,9 @@ import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-libr
 // would corrupt the real route tree it's trying to test.
 //
 // This suite exercises tab/header navigation, which only exists behind
-// the authenticated route boundary — a signed-in session is mocked here
-// so the boundary itself isn't what's under test. See
+// the authenticated route boundary — a signed-in, onboarded session is
+// mocked here (real profile/household rows, not null) so neither the
+// auth boundary nor the onboarding gate is what's under test. See
 // authBoundary.signedIn/signedOut.test.tsx for the redirect behavior.
 jest.mock('../supabase/instance', () => ({
   supabase: {
@@ -27,6 +28,23 @@ jest.mock('../supabase/instance', () => ({
         .fn()
         .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
     },
+    from: jest.fn((table: string) => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          maybeSingle: jest.fn().mockResolvedValue({
+            data: { id: 'test-user', display_name: 'Test User' },
+            error: null,
+          }),
+        })),
+        maybeSingle: jest
+          .fn()
+          .mockResolvedValue(
+            table === 'households'
+              ? { data: { id: 'household-1' }, error: null }
+              : { data: null, error: null },
+          ),
+      })),
+    })),
   },
 }));
 //

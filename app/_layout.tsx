@@ -2,6 +2,8 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
+import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
 import { initObservability } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 
@@ -14,33 +16,48 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <SessionProvider>
-          <AuthenticatedRouteBoundary />
-        </SessionProvider>
+        <DeepLinkProvider>
+          <SessionProvider>
+            <HouseholdProvider>
+              <AuthenticatedRouteBoundary />
+            </HouseholdProvider>
+          </SessionProvider>
+        </DeepLinkProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
-// Phase 2 builds the boundary/shape; Phase 3 supplies the real Supabase
-// Auth session behind useSession() (ADR-0007). `isLoading` briefly gates
-// nothing/blank rather than a real loading state — swapped for the shared
-// loading component once that exists (later Phase 2 commit).
+// Three mutually exclusive branches on one Stack (ADR-0007/ADR-0008):
+// signed out, signed in but missing a profile/household (onboarding),
+// or fully set up. `isLoading` briefly gates nothing/blank rather than
+// a real loading state — swapped for the shared loading component once
+// that exists (later Phase 2 commit).
 function AuthenticatedRouteBoundary() {
-  const { session, isLoading } = useSession();
+  const { session, isLoading: sessionLoading } = useSession();
+  const { profile, household, isLoading: householdLoading } = useHousehold();
 
-  if (isLoading) {
+  if (sessionLoading) {
+    return null;
+  }
+  if (session !== null && householdLoading) {
     return null;
   }
 
+  const isOnboarded = session !== null && profile !== null && household !== null;
+  const needsOnboarding = session !== null && !isOnboarded;
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={session !== null}>
+      <Stack.Protected guard={isOnboarded}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="settings"
           options={{ headerShown: true, title: 'Settings', presentation: 'modal' }}
         />
+      </Stack.Protected>
+      <Stack.Protected guard={needsOnboarding}>
+        <Stack.Screen name="onboarding" />
       </Stack.Protected>
       <Stack.Protected guard={session === null}>
         <Stack.Screen name="sign-in" />
