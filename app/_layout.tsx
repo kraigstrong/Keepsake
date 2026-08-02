@@ -2,7 +2,13 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { initObservability } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
+
+// Runs once, at module-evaluation time — before RootLayout's first
+// render — because Sentry wants init() to run as early as possible so
+// it can catch startup errors.
+initObservability();
 
 export default function RootLayout() {
   return (
