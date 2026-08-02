@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 
 import { supabase } from '../supabase/instance';
 
@@ -32,7 +33,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
     });
 
-    return () => subscription.unsubscribe();
+    // supabase-js's autoRefreshToken timer doesn't reliably fire while
+    // the JS runtime is backgrounded on mobile (no such issue on web) —
+    // Supabase's own React Native guidance is to drive it from AppState
+    // instead of relying on the timer alone.
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      appStateSubscription.remove();
+    };
   }, []);
 
   const sendOtp = async (email: string): Promise<{ error: string | null }> => {

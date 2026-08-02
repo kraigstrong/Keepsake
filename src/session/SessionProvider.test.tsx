@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { AppState } from 'react-native';
 
 import { SessionProvider, useSession } from './SessionProvider';
 import { supabase } from '../supabase/instance';
@@ -12,6 +13,8 @@ jest.mock('../supabase/instance', () => ({
       signInWithOtp: jest.fn(),
       verifyOtp: jest.fn(),
       signOut: jest.fn(),
+      startAutoRefresh: jest.fn(),
+      stopAutoRefresh: jest.fn(),
     },
   },
 }));
@@ -26,12 +29,24 @@ const fakeSession = { user: { id: 'user-123' } } as unknown as Session;
 let authStateCallback: (event: AuthChangeEvent, session: Session | null) => void;
 const unsubscribe = jest.fn();
 
+// Same capture pattern for the AppState listener SessionProvider registers
+// to drive supabase-js's auto-refresh timer from foreground/background
+// transitions (the timer alone isn't reliable while backgrounded on
+// mobile — see the comment in SessionProvider.tsx).
+const addEventListenerSpy = jest.spyOn(AppState, 'addEventListener');
+let appStateHandler: (state: string) => void;
+const removeAppStateListener = jest.fn();
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockedAuth.getSession.mockResolvedValue({ data: { session: null }, error: null } as never);
   mockedAuth.onAuthStateChange.mockImplementation((callback) => {
     authStateCallback = callback;
     return { data: { subscription: { unsubscribe } } } as never;
+  });
+  addEventListenerSpy.mockImplementation((_event, handler) => {
+    appStateHandler = handler as (state: string) => void;
+    return { remove: removeAppStateListener } as never;
   });
 });
 
@@ -124,13 +139,25 @@ describe('SessionProvider / useSession', () => {
     expect(mockedAuth.signOut).toHaveBeenCalled();
   });
 
-  it('unsubscribes from auth state changes on unmount', async () => {
+  it('unsubscribes from auth state changes and the AppState listener on unmount', async () => {
     const { result, unmount } = await renderHook(() => useSession(), { wrapper: SessionProvider });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => unmount());
 
     expect(unsubscribe).toHaveBeenCalled();
+    expect(removeAppStateListener).toHaveBeenCalled();
+  });
+
+  it('starts and stops auto-refresh as the app foregrounds and backgrounds', async () => {
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => appStateHandler('active'));
+    expect(mockedAuth.startAutoRefresh).toHaveBeenCalled();
+
+    await act(async () => appStateHandler('background'));
+    expect(mockedAuth.stopAutoRefresh).toHaveBeenCalled();
   });
 
   it('throws when used outside a SessionProvider', async () => {
