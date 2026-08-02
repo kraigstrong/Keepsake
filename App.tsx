@@ -3,6 +3,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import {
+  isAppGroupContainerAvailable,
+  readTestPayload,
+  writeTestPayload,
+} from './src/appGroup/appGroupHandoff';
 import { parseInvitationLink } from './src/deepLinks/parseInvitationLink';
 import { useCookingModeAwake } from './src/keepAwake/useCookingModeAwake';
 import { logError, trackEvent } from './src/observability';
@@ -43,13 +48,15 @@ function useLastDeepLinkResult() {
 
 // Phase 1 risk-spike wiring only — every section below gets replaced by
 // real UI in a later phase (keep-awake -> Phase 15 cooking mode,
-// photo -> Phase 4/10, reminders -> Phase 14). This screen exists only
-// so each native module can be tapped and verified on Simulator/device.
+// photo -> Phase 4/10, reminders -> Phase 14, App Group -> Phase 9 Share
+// Extension). This screen exists only so each native module can be tapped
+// and verified on Simulator/device.
 export default function App() {
   const lastDeepLink = useLastDeepLinkResult();
   const [awakeEnabled, setAwakeEnabled] = useState(false);
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [reminderStatus, setReminderStatus] = useState<string | null>(null);
+  const [appGroupStatus, setAppGroupStatus] = useState<string | null>(null);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -94,6 +101,25 @@ export default function App() {
               logError(error, { spike: 'reminders' });
               setReminderStatus(`error: ${String(error)}`);
             }
+          }}
+        />
+      </View>
+
+      <View style={styles.spikeSection}>
+        <Text>App Group spike: {appGroupStatus ?? 'not tried'}</Text>
+        <Button
+          title="Write + read App Group payload"
+          onPress={() => {
+            if (!isAppGroupContainerAvailable()) {
+              setAppGroupStatus('container unavailable');
+              return;
+            }
+            const value = `keepsake-app-group-test ${Date.now()}`;
+            const wrote = writeTestPayload(value);
+            const readBack = readTestPayload();
+            setAppGroupStatus(
+              wrote && readBack === value ? `round-tripped (${readBack})` : 'round-trip mismatch',
+            );
           }}
         />
       </View>

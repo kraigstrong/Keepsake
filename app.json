@@ -9,7 +9,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.kraigstrong.keepsake",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "appleTeamId": "MKACSCQ588",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.kraigstrong.keepsake"]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
