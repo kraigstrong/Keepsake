@@ -2,18 +2,43 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SessionProvider, useSession } from '../src/session/SessionProvider';
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="settings"
-            options={{ headerShown: true, title: 'Settings', presentation: 'modal' }}
-          />
-        </Stack>
+        <SessionProvider>
+          <AuthenticatedRouteBoundary />
+        </SessionProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// Phase 2 builds the boundary/shape; Phase 3 supplies the real Supabase
+// Auth session behind useSession() (ADR-0007). `isLoading` briefly gates
+// nothing/blank rather than a real loading state — swapped for the shared
+// loading component once that exists (later Phase 2 commit).
+function AuthenticatedRouteBoundary() {
+  const { session, isLoading } = useSession();
+
+  if (isLoading) {
+    return null;
+  }
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={session !== null}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="settings"
+          options={{ headerShown: true, title: 'Settings', presentation: 'modal' }}
+        />
+      </Stack.Protected>
+      <Stack.Protected guard={session === null}>
+        <Stack.Screen name="sign-in" />
+      </Stack.Protected>
+    </Stack>
   );
 }
