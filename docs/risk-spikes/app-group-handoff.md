@@ -28,11 +28,10 @@ Does the App Group entitlement (`com.apple.security.application-groups`) actuall
 
 This spike's payload is a disposable test string with no credential material. The real Share Extension design (Phase 9) must keep that constraint: only a URL/import-job description goes in the shared container, never an auth token — the extension itself must stay unable to authenticate on its own, matching "no privileged credential in app or extension bundle."
 
-## Not yet done
+## Physical-device confirmation
 
-- Cross-process proof: this spike only proves the *main app* can read/write the container. Proving a second process (the actual Share Extension target) can write and the main app can read what it wrote is task #20's job, not this one.
-- Physical-device confirmation — App Group container resolution on a real device also needs a valid provisioning profile with the App Group capability enabled in the Apple Developer portal, which requires the developer's Apple ID signed into Xcode. That's an account-level action reserved for the developer, per ADR-0003's physical-device requirement for this phase.
+Confirmed by the developer on 2026-08-02, both directly (the round-trip button) and indirectly (the real provisioning-profile-backed App Group capability is exactly what made the Share Extension's on-device handoff work — see [safari-share-extension.md](safari-share-extension.md)).
 
 ## Conclusion
 
-The entitlement and shared-container mechanism are proven end-to-end on Simulator, at both the app-behavior level and the filesystem level. What's left — a second process actually writing to it, and physical-device signing — is explicitly scoped to task #20 and the developer's device pass.
+The entitlement and shared-container mechanism are proven end-to-end on both Simulator and a physical device, at the app-behavior level, the filesystem level, and (via the Share Extension spike) the cross-process level.

@@ -16,10 +16,10 @@
 
 `src/reminders/reminders.test.ts` — 5 tests: permission reflection, list reuse, list creation (including the "no reminder source available" error case), and reminder creation. Native calls mocked.
 
-## Not yet done
+## Physical-device confirmation
 
-Physical-device confirmation — this spike is Simulator-verified only so far; per ADR-0003, Phase 1's exit gate wants physical-device proof, planned before this phase closes out.
+Confirmed by the developer on 2026-08-02.
 
 ## Conclusion
 
-Chosen implementation path exists and is verified two ways — unit tests against the mocked API, and a real end-to-end Simulator run that created a genuine EventKit list and item, confirmed by inspecting the actual Reminders app.
+Chosen implementation path exists and is verified three ways — unit tests against the mocked API, a real end-to-end Simulator run that created a genuine EventKit list and item confirmed by inspecting the actual Reminders app, and a physical-device pass.
