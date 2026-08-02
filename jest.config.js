@@ -15,7 +15,12 @@ module.exports = {
       ...jestExpoPreset,
       displayName: 'app',
       rootDir: __dirname,
-      testMatch: ['<rootDir>/App.test.tsx', '<rootDir>/src/**/*.test.{ts,tsx}'],
+      // Deliberately excludes app/**/*.test.{ts,tsx}: Expo Router's context
+      // scanner treats every file under app/ as a candidate route, so a
+      // colocated test file would pollute the real route tree. Route/nav
+      // tests live under src/navigation/ instead, and use renderRouter's
+      // context param to point back at app/.
+      testMatch: ['<rootDir>/src/**/*.test.{ts,tsx}'],
     },
     {
       ...jestExpoPreset,

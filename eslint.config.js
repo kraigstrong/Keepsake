@@ -15,6 +15,7 @@ module.exports = [
       // CommonJS Node tooling configs, not app source — same treatment
       // as eslint.config.js itself (which flat config never lints).
       'jest.config.js',
+      'babel.config.js',
     ],
   },
 ];
