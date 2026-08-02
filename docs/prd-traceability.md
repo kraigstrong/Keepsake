@@ -103,7 +103,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| WEEK-01 | This Week is the default screen | 2 / 12 | Not Started |
+| WEEK-01 | This Week is the default screen | 2 / 12 | Done (tested) |
 | WEEK-02 | Select recipes → choose servings → review → confirm | 12 | Not Started |
 | WEEK-03 | Confirming increments planned count | 12 | Not Started |
 | WEEK-04 | Cards show image and title | 12 | Not Started |
