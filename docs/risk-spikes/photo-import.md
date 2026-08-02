@@ -18,10 +18,14 @@ Camera capture (`captureFromCamera()`) is unit-tested but not exercised on Simul
 
 `src/photoImport/photoImport.test.ts` — 5 tests (both functions × permission-denied/cancelled/success), native calls mocked.
 
+## Physical-device confirmation
+
+Photo-library picker confirmed by the developer on a real device (2026-08-02). `captureFromCamera()` deliberately deferred — no button was wired into the spike screen for it (Simulator has no camera, so there was nothing to test there), and the developer chose to defer the live-camera check rather than block Phase 1 exit on it. Still only unit-tested/mock-verified as of this writing.
+
 ## Not yet done
 
-Physical-device confirmation of `captureFromCamera()` — Simulator has no camera, so this is inherently a device-only check, reserved for the developer per the Phase 1 exit gate.
+Physical-device confirmation of `captureFromCamera()` specifically — deferred by the developer, not forgotten. Low risk: it shares its permission-request/return-null-on-cancel pattern with `pickExistingPhoto()`, which is confirmed working, and `launchCameraAsync()` is the same well-established `expo-image-picker` API just pointed at the camera instead of the library.
 
 ## Conclusion
 
-Photo-library import is fully verified end-to-end (permission text, real picker UI, real asset data). Camera capture is verified only at the unit-test/mock level; real capture needs the developer's physical-device pass.
+Photo-library import is fully verified end-to-end on both Simulator and a physical device (permission text, real picker UI, real asset data). Camera capture is verified only at the unit-test/mock level; the developer has explicitly deferred the live-camera physical-device check rather than blocking on it now.

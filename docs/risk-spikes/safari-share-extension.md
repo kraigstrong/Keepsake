@@ -29,6 +29,10 @@ Resolved without weakening the gate for the app itself: `@bacons/apple-targets` 
 3. Share Sheet dismissed cleanly with no crash.
 4. Relaunched the main Keepsake app (`xcrun simctl launch`, simulating a cold-launch-after-share) — the app read the same payload on mount and displayed `Share Extension spike: received https://example.com/ (at 1785685999129)`, matching the file on disk exactly.
 
+**Verified end-to-end on a physical device (developer, 2026-08-02):** real Safari Share Sheet on-device, "Keepsake" appeared and captured the URL, main app read it back correctly on reopen. Confirms the App Group container resolves correctly with a real provisioning profile, not just Simulator's unenforced version.
+
+**Real UX finding from the physical-device pass, not visible from Simulator taps:** the extension's "Saved to Keepsake" confirmation state is too brief (0.6s) to register — from the developer's own words, "it just disappeared. No confirmation, but the data was sent, which is the important part." The mechanism works; the felt experience doesn't yet match the PRD's "calm" ethos — a share action that appears to do nothing undermines confidence even when it worked. This is a UX-polish item, not a mechanism failure, so it's scoped to Phase 9 ("Final Share Extension") rather than fixed in this spike — but flagged explicitly here so Phase 9 doesn't rediscover it from scratch. Candidate fixes for Phase 9 to evaluate: a longer/more legible confirmation state, a success icon instead of just text, or haptic feedback on capture.
+
 ## Security note (execution-plan.md §2.6, "No privileged credentials in extension")
 
 The extension writes only a URL and a timestamp to the shared container — no auth token, no session data. It cannot authenticate on its own; the main app owns all credentialed calls. This constraint must hold through Phase 9's real implementation, not just this spike.
@@ -36,9 +40,9 @@ The extension writes only a URL and a timestamp to the shared container — no a
 ## Not yet done
 
 - Authenticated submission, offline staging when signed out, retry, and bulk URL import — all explicitly Phase 9 scope ("Final Share Extension"), not this spike's job.
-- Physical-device confirmation — per ADR-0003 and execution-plan.md's Phase 9 note, Share Extension behavior "is not fully representative on Simulator" (App Group container resolution, code signing, and memory limits specific to extensions all behave differently on-device). This spike is Simulator-verified only; reserved for the developer's device pass.
+- Share Extension confirmation-state UX (see finding above) — Phase 9.
 - Re-run `npm audit` without `--omit=dev` periodically to check whether `@bacons/apple-targets` picks up a fix for the `@xmldom/xmldom` findings upstream.
 
 ## Conclusion
 
-The full mechanism — Safari Share Sheet → real Xcode extension target → App Group container → main app read — is proven end-to-end on Simulator with a real URL, not a mock. The one open architectural decision (accepting a devDependency with unresolved high-severity build-tooling findings) was made explicitly with the developer, scoped narrowly via `--omit=dev`, and documented in three places rather than silently absorbed into the existing dependency-scan exception.
+The full mechanism — Safari Share Sheet → real Xcode extension target → App Group container → main app read — is proven end-to-end on both Simulator and a physical device, with a real URL, not a mock. The one open architectural decision (accepting a devDependency with unresolved high-severity build-tooling findings) was made explicitly with the developer, scoped narrowly via `--omit=dev`, and documented in three places rather than silently absorbed into the existing dependency-scan exception. The physical-device pass surfaced one real UX gap (confirmation state too brief to register) — captured for Phase 9, not silently dropped.

@@ -18,10 +18,10 @@ Does `expo-keep-awake` actually disable the iOS idle timer while active, and can
 
 `src/keepAwake/useCookingModeAwake.test.tsx` — 2 tests (activates on mount, deactivates on unmount) with the native module mocked via `renderHook`.
 
-## Not yet done
+## Physical-device confirmation
 
-Physical-device confirmation that the screen genuinely stays on (and returns to normal idle behavior on deactivation/unmount) — Simulator has no idle-sleep behavior to observe, so this is inherently a device-only check, reserved for the developer per the Phase 1 exit gate.
+Confirmed by the developer on 2026-08-02: activating keep-awake genuinely keeps the screen on past its normal auto-lock timeout on a real device.
 
 ## Conclusion
 
-The native module wires up and toggles state correctly on Simulator; the actual "does the screen stay on" claim can only be settled on a physical device.
+Verified on both Simulator (state toggling, no crash) and a physical device (the actual "screen stays on" claim, which Simulator can't represent).
