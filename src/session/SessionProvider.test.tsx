@@ -1,61 +1,136 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import * as SecureStore from 'expo-secure-store';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { SessionProvider, useSession } from './SessionProvider';
+import { supabase } from '../supabase/instance';
 
-jest.mock('expo-secure-store', () => ({
-  getItemAsync: jest.fn(),
-  setItemAsync: jest.fn(),
-  deleteItemAsync: jest.fn(),
+jest.mock('../supabase/instance', () => ({
+  supabase: {
+    auth: {
+      getSession: jest.fn(),
+      onAuthStateChange: jest.fn(),
+      signInWithOtp: jest.fn(),
+      verifyOtp: jest.fn(),
+      signOut: jest.fn(),
+    },
+  },
 }));
 
-const mocked = SecureStore as jest.Mocked<typeof SecureStore>;
+const mockedAuth = supabase.auth as jest.Mocked<typeof supabase.auth>;
 
-afterEach(() => jest.clearAllMocks());
+const fakeSession = { user: { id: 'user-123' } } as unknown as Session;
 
-// renderHook (this @testing-library/react-native version) is async, same
-// as render() — every call below is awaited.
+// Captures the callback SessionProvider hands to onAuthStateChange, so
+// tests can fire it manually to simulate what supabase-js does internally
+// after a real sign-in/sign-out/token-refresh.
+let authStateCallback: (event: AuthChangeEvent, session: Session | null) => void;
+const unsubscribe = jest.fn();
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockedAuth.getSession.mockResolvedValue({ data: { session: null }, error: null } as never);
+  mockedAuth.onAuthStateChange.mockImplementation((callback) => {
+    authStateCallback = callback;
+    return { data: { subscription: { unsubscribe } } } as never;
+  });
+});
+
 describe('SessionProvider / useSession', () => {
-  it('resolves to null when nothing is stored', async () => {
-    mocked.getItemAsync.mockResolvedValue(null);
+  it('resolves to null when there is no existing Supabase session', async () => {
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.session).toBeNull();
   });
 
-  it('resolves to the stored session', async () => {
-    mocked.getItemAsync.mockResolvedValue('{"userId":"user-123"}');
+  it('resolves to the existing Supabase session', async () => {
+    mockedAuth.getSession.mockResolvedValue({
+      data: { session: fakeSession },
+      error: null,
+    } as never);
+
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.session).toEqual({ userId: 'user-123' });
+    expect(result.current.session).toEqual(fakeSession);
   });
 
-  it('signIn stores and reflects the new session', async () => {
-    mocked.getItemAsync.mockResolvedValue(null);
+  it('updates session when onAuthStateChange fires', async () => {
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
+    await act(async () => authStateCallback('SIGNED_IN', fakeSession));
+
+    await waitFor(() => expect(result.current.session).toEqual(fakeSession));
+  });
+
+  it('sendOtp calls signInWithOtp and reports no error on success', async () => {
+    mockedAuth.signInWithOtp.mockResolvedValue({ data: {}, error: null } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
     await act(async () => {
-      await result.current.signIn({ userId: 'user-456' });
+      outcome = await result.current.sendOtp('user@example.test');
     });
 
-    expect(result.current.session).toEqual({ userId: 'user-456' });
-    expect(mocked.setItemAsync).toHaveBeenCalledWith('keepsake-session', '{"userId":"user-456"}');
+    expect(mockedAuth.signInWithOtp).toHaveBeenCalledWith({ email: 'user@example.test' });
+    expect(outcome).toEqual({ error: null });
   });
 
-  it('signOut clears the stored session', async () => {
-    mocked.getItemAsync.mockResolvedValue('{"userId":"user-123"}');
+  it('sendOtp surfaces the Supabase error message', async () => {
+    mockedAuth.signInWithOtp.mockResolvedValue({
+      data: {},
+      error: { message: 'rate limited' },
+    } as never);
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
-    await waitFor(() => expect(result.current.session).toEqual({ userId: 'user-123' }));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.sendOtp('user@example.test');
+    });
+
+    expect(outcome).toEqual({ error: 'rate limited' });
+  });
+
+  it('verifyOtp calls verifyOtp with the email code as an email-type OTP', async () => {
+    mockedAuth.verifyOtp.mockResolvedValue({ data: {}, error: null } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.verifyOtp('user@example.test', '123456');
+    });
+
+    expect(mockedAuth.verifyOtp).toHaveBeenCalledWith({
+      email: 'user@example.test',
+      token: '123456',
+      type: 'email',
+    });
+    expect(outcome).toEqual({ error: null });
+  });
+
+  it('signOut calls supabase.auth.signOut', async () => {
+    mockedAuth.signOut.mockResolvedValue({ error: null } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
       await result.current.signOut();
     });
 
-    expect(result.current.session).toBeNull();
-    expect(mocked.deleteItemAsync).toHaveBeenCalledWith('keepsake-session');
+    expect(mockedAuth.signOut).toHaveBeenCalled();
+  });
+
+  it('unsubscribes from auth state changes on unmount', async () => {
+    const { result, unmount } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => unmount());
+
+    expect(unsubscribe).toHaveBeenCalled();
   });
 
   it('throws when used outside a SessionProvider', async () => {
