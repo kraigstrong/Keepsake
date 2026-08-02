@@ -1,10 +1,12 @@
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
+  clearSharedImport,
   isAppGroupContainerAvailable,
+  readSharedImport,
   readTestPayload,
   writeTestPayload,
 } from './src/appGroup/appGroupHandoff';
@@ -46,6 +48,26 @@ function useLastDeepLinkResult() {
   return result;
 }
 
+// Phase 1 risk-spike wiring only — proves the real Share Extension target
+// (targets/share/ShareViewController.swift) can hand a URL to the main app
+// via the App Group container. Re-checks on foreground, not just mount,
+// since sharing from Safari typically resumes rather than cold-launches
+// the app. Real UI (import job, save screen) is Phase 9's job.
+function useSharedImport() {
+  const [sharedImport, setSharedImport] = useState(() => readSharedImport());
+
+  const check = () => setSharedImport(readSharedImport());
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return { sharedImport, check };
+}
+
 // Phase 1 risk-spike wiring only — every section below gets replaced by
 // real UI in a later phase (keep-awake -> Phase 15 cooking mode,
 // photo -> Phase 4/10, reminders -> Phase 14, App Group -> Phase 9 Share
@@ -57,6 +79,7 @@ export default function App() {
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [reminderStatus, setReminderStatus] = useState<string | null>(null);
   const [appGroupStatus, setAppGroupStatus] = useState<string | null>(null);
+  const { sharedImport, check: checkSharedImport } = useSharedImport();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -122,6 +145,25 @@ export default function App() {
             );
           }}
         />
+      </View>
+
+      <View style={styles.spikeSection}>
+        <Text>
+          Share Extension spike:{' '}
+          {sharedImport
+            ? `received ${sharedImport.url} (at ${sharedImport.receivedAt})`
+            : 'nothing shared yet — use Safari’s Share Sheet'}
+        </Text>
+        <Button title="Check for shared import" onPress={checkSharedImport} />
+        {sharedImport && (
+          <Button
+            title="Clear shared import"
+            onPress={() => {
+              clearSharedImport();
+              checkSharedImport();
+            }}
+          />
+        )}
       </View>
 
       <StatusBar style="auto" />

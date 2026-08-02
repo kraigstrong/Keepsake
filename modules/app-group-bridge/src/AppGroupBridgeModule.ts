@@ -5,6 +5,8 @@ declare class AppGroupBridgeModule extends NativeModule<{}> {
   containerAvailable(): boolean;
   writeTestPayload(value: string): boolean;
   readTestPayload(): string | null;
+  readSharePayload(): string | null;
+  clearSharePayload(): boolean;
 }
 
 export default requireNativeModule<AppGroupBridgeModule>('AppGroupBridge');

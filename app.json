@@ -34,7 +34,8 @@
           "calendarPermission": false,
           "remindersPermission": "Keepsake needs Reminders access to export your grocery list."
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ]
   }
 }

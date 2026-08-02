@@ -9,6 +9,8 @@ jest.mock('./modules/app-group-bridge/src/AppGroupBridgeModule', () => ({
   containerAvailable: jest.fn(),
   writeTestPayload: jest.fn(),
   readTestPayload: jest.fn(),
+  readSharePayload: jest.fn(),
+  clearSharePayload: jest.fn(),
 }));
 
 describe('App', () => {
