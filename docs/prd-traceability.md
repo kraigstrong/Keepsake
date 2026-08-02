@@ -191,7 +191,7 @@ Cross-cutting per execution-plan.md §2.6 — every phase must address these whe
 | SEC-02 | Approved secret management (1Password) is used | 0 | Done (tested) |
 | SEC-03 | Household data is protected server-side (RLS) | 3 | Not Started |
 | SEC-04 | Storage is restricted by membership | 3 | Not Started |
-| SEC-05 | Sensitive content is excluded from telemetry | Continuous, gated at 2 | In Progress |
+| SEC-05 | Sensitive content is excluded from telemetry | Continuous, gated at 2 | Done (tested) |
 | SEC-06 | External input is validated | 8 (primary), continuous | Not Started |
 | SEC-07 | Destructive operations are authorized and idempotent | 16 (primary), continuous | Not Started |
 | SEC-08 | Security scanning runs in CI | 0 | Done (tested) |
