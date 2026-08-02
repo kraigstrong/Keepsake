@@ -8,9 +8,9 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| HH-01 | One shared household | 3 | Not Started |
-| HH-02 | Multiple household members | 3 | Not Started |
-| HH-03 | Equal permissions for all members | 3 | Not Started |
+| HH-01 | One shared household | 3 | Done (tested) |
+| HH-02 | Multiple household members | 3 | Done (tested) |
+| HH-03 | Equal permissions for all members | 3 | Done (tested) |
 
 ## Recipe Model (REC)
 
@@ -189,8 +189,8 @@ Cross-cutting per execution-plan.md §2.6 — every phase must address these whe
 |---|---|---|---|
 | SEC-01 | No secret is ever committed to Git | Continuous, gated at 0 | Done (tested) |
 | SEC-02 | Approved secret management (1Password) is used | 0 | Done (tested) |
-| SEC-03 | Household data is protected server-side (RLS) | 3 | Not Started |
-| SEC-04 | Storage is restricted by membership | 3 | Not Started |
+| SEC-03 | Household data is protected server-side (RLS) | 3 | Done (tested) |
+| SEC-04 | Storage is restricted by membership | 3 | Done (tested) |
 | SEC-05 | Sensitive content is excluded from telemetry | Continuous, gated at 2 | Done (tested) |
 | SEC-06 | External input is validated | 8 (primary), continuous | Not Started |
 | SEC-07 | Destructive operations are authorized and idempotent | 16 (primary), continuous | Not Started |
