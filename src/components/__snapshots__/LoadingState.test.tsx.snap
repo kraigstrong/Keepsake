@@ -1,0 +1,32 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`LoadingState matches its snapshot 1`] = `
+<View
+  style={
+    {
+      "alignItems": "center",
+      "gap": 8,
+      "justifyContent": "center",
+      "padding": 32,
+    }
+  }
+>
+  <ActivityIndicator
+    accessible={true}
+    color="#2E7D5B"
+    role="progressbar"
+  />
+  <Text
+    style={
+      {
+        "color": "#5C5C5C",
+        "fontSize": 16,
+        "fontWeight": "400",
+        "lineHeight": 22,
+      }
+    }
+  >
+    Loading recipes…
+  </Text>
+</View>
+`;

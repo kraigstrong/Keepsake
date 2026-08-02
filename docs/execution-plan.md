@@ -610,6 +610,35 @@ Two users can share one household, and a non-member cannot access it through any
 
 ---
 
+# Phase 3.5 — Design Direction and Visual Iteration
+
+## Objective
+
+Replace Phase 2's placeholder design tokens with a real, deliberate visual direction before Phase 4 builds the first content-rich vertical slice on top of it.
+
+## Build scope
+
+- Developer-led visual exploration outside this environment (Claude's design mode or equivalent) — color palette, typography, spacing rhythm, imagery/photo treatment, iconography direction
+- Update `src/theme/tokens.ts` to reflect the chosen direction
+- Re-skin the Phase 2 primitives (Button, Row, Chip, Sheet, Toast, Empty/Loading/Error/Offline states, ImagePlaceholder) against the new tokens
+- Refresh component snapshots deliberately, reviewed rather than blindly regenerated
+- No new screens, features, or backend work
+
+## Validation
+
+- Existing primitive/state test suites still pass against the updated tokens — accessibility roles, Dynamic Type support, and Reduced Motion behavior are unchanged by a visual pass; only styling values move
+- Simulator check across This Week, Library, Settings, and the global add Sheet with the new direction applied
+
+## Exit gate
+
+The shell reflects a real, deliberate visual direction — not Phase 2's placeholder tokens — and Phase 4 can build recipe content on top of it without a later re-skin.
+
+## Non-goals
+
+No new product features. No backend or data-model work — that starts in Phase 4.
+
+---
+
 # Phase 4 — Manual Recipe Vertical Slice
 
 ## Objective

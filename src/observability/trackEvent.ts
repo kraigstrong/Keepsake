@@ -1,8 +1,12 @@
+import { capture } from './posthog';
+
 /**
  * The only sanctioned way to record an analytics event. Application code
  * must never import PostHog directly — see ADR-0006. PostHog only ever
  * receives events whose name appears in `AnalyticsEvent`; there is no
- * passthrough for arbitrary event names or app state (PRD §30, SEC-05).
+ * passthrough for arbitrary event names or app state (PRD §30, SEC-05) —
+ * enforced at compile time by this type, not by a runtime check (see
+ * observability.test.ts's @ts-expect-error case).
  *
  * This is an allowlist, not a registry of what exists yet — Phase 0 has
  * no real features, so it starts near-empty. Add a name here only when
@@ -19,5 +23,5 @@ export function trackEvent(
     console.log('[trackEvent]', name, props);
   }
 
-  // Phase 2: forward to PostHog when EXPO_PUBLIC_POSTHOG_KEY is configured.
+  capture(name, props);
 }
