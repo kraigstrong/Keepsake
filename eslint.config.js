@@ -6,6 +6,15 @@ module.exports = [
   ...expoConfig,
   eslintConfigPrettier,
   {
-    ignores: ['dist/*', 'node_modules/*', '.expo/*', 'coverage/*', '.claude/*'],
+    ignores: [
+      'dist/*',
+      'node_modules/*',
+      '.expo/*',
+      'coverage/*',
+      '.claude/*',
+      // CommonJS Node tooling configs, not app source — same treatment
+      // as eslint.config.js itself (which flat config never lints).
+      'jest.config.js',
+    ],
   },
 ];

@@ -7,7 +7,7 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 - [ ] CI is green on the commit being released: typecheck, lint, format, unit tests, migration apply/reset, RLS/pgTAP tests, secret scan, dependency scan (all jobs in `.github/workflows/ci.yml`).
 - [ ] No `Not Started` PRD requirement is claimed as shipped — check `docs/prd-traceability.md` for the requirements this release is supposed to include.
 - [ ] `docs/phase-status.md` reflects reality — no phase marked done that isn't.
-- [ ] Dependency scan has no unresolved high/critical findings (`npm audit --audit-level=high`); any accepted moderate findings are documented, not silently ignored.
+- [ ] Dependency scan has no unresolved high/critical findings in runtime dependencies (`npm audit --omit=dev --audit-level=high`); any accepted moderate findings, and any high/critical findings scoped out via `--omit=dev` (build-tooling-only), are documented in `.github/workflows/ci.yml`, not silently ignored.
 - [ ] No secret, credential, or production config value appears anywhere in the diff being released (belt-and-suspenders on top of the CI gitleaks job).
 
 ## Credentials and environment *(Phase 0 mechanism, verified every release)*

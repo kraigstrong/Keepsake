@@ -9,10 +9,33 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.kraigstrong.keepsake",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "appleTeamId": "MKACSCQ588",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.kraigstrong.keepsake"]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Keepsake needs photo access to import a recipe photo.",
+          "cameraPermission": "Keepsake needs camera access to photograph a recipe.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": false,
+          "remindersPermission": "Keepsake needs Reminders access to export your grocery list."
+        }
+      ],
+      "@bacons/apple-targets"
+    ]
   }
 }
