@@ -117,12 +117,10 @@ describe('createHousehold', () => {
 
 describe('createInvitation', () => {
   it('calls the create_invitation RPC and returns the token', async () => {
-    const single = jest
-      .fn()
-      .mockResolvedValue({
-        data: { token: 'tok', expires_at: '2026-01-01T00:00:00Z' },
-        error: null,
-      });
+    const single = jest.fn().mockResolvedValue({
+      data: { token: 'tok', expires_at: '2026-01-01T00:00:00Z' },
+      error: null,
+    });
     mockedRpc.mockReturnValue({ single });
 
     await expect(createInvitation()).resolves.toEqual({

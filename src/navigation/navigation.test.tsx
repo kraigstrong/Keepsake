@@ -28,23 +28,39 @@ jest.mock('../supabase/instance', () => ({
         .fn()
         .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
     },
-    from: jest.fn((table: string) => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          maybeSingle: jest.fn().mockResolvedValue({
-            data: { id: 'test-user', display_name: 'Test User' },
-            error: null,
+    from: jest.fn((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { id: 'test-user', display_name: 'Test User' },
+                  error: null,
+                }),
+            }),
+            in: () =>
+              Promise.resolve({
+                data: [{ id: 'test-user', display_name: 'Test User' }],
+                error: null,
+              }),
           }),
-        })),
-        maybeSingle: jest
-          .fn()
-          .mockResolvedValue(
-            table === 'households'
-              ? { data: { id: 'household-1' }, error: null }
-              : { data: null, error: null },
-          ),
-      })),
-    })),
+        };
+      }
+      if (table === 'households') {
+        return {
+          select: () => ({
+            maybeSingle: () => Promise.resolve({ data: { id: 'household-1' }, error: null }),
+          }),
+        };
+      }
+      // household_membership
+      return {
+        select: () => ({
+          eq: () => Promise.resolve({ data: [{ user_id: 'test-user' }], error: null }),
+        }),
+      };
+    }),
   },
 }));
 //
