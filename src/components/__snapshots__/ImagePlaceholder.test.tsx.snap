@@ -1,0 +1,22 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ImagePlaceholder matches its snapshot 1`] = `
+<View
+  accessibilityLabel="No photo"
+  accessible={true}
+  style={
+    [
+      {
+        "backgroundColor": "#F5F5F5",
+        "borderColor": "#E0E0E0",
+        "borderRadius": 12,
+        "borderWidth": 1,
+      },
+      {
+        "height": 64,
+        "width": 64,
+      },
+    ]
+  }
+/>
+`;

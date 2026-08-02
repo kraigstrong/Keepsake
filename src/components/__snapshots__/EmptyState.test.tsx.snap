@@ -1,0 +1,41 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`EmptyState matches its snapshot 1`] = `
+<View
+  style={
+    {
+      "alignItems": "center",
+      "gap": 4,
+      "justifyContent": "center",
+      "padding": 32,
+    }
+  }
+>
+  <Text
+    style={
+      {
+        "color": "#1A1A1A",
+        "fontSize": 20,
+        "fontWeight": "600",
+        "lineHeight": 26,
+        "textAlign": "center",
+      }
+    }
+  >
+    Nothing planned yet
+  </Text>
+  <Text
+    style={
+      {
+        "color": "#5C5C5C",
+        "fontSize": 16,
+        "fontWeight": "400",
+        "lineHeight": 22,
+        "textAlign": "center",
+      }
+    }
+  >
+    Add a recipe to get started.
+  </Text>
+</View>
+`;

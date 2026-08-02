@@ -1,0 +1,30 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`OfflineState matches its snapshot 1`] = `
+<View
+  accessible={true}
+  role="status"
+  style={
+    {
+      "backgroundColor": "#F5F5F5",
+      "borderRadius": 6,
+      "paddingHorizontal": 16,
+      "paddingVertical": 8,
+    }
+  }
+>
+  <Text
+    style={
+      {
+        "color": "#5C5C5C",
+        "fontSize": 13,
+        "fontWeight": "400",
+        "lineHeight": 18,
+        "textAlign": "center",
+      }
+    }
+  >
+    You're offline. Some features need a connection.
+  </Text>
+</View>
+`;
