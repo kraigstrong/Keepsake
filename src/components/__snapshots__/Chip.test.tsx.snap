@@ -1,0 +1,66 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Chip matches its snapshot 1`] = `
+<View
+  accessibilityRole="button"
+  accessibilityState={
+    {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": undefined,
+      "expanded": undefined,
+      "selected": false,
+    }
+  }
+  accessibilityValue={
+    {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onBlur={[Function]}
+  onClick={[Function]}
+  onFocus={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    [
+      {
+        "backgroundColor": "#F5F5F5",
+        "borderColor": "#E0E0E0",
+        "borderRadius": 999,
+        "borderWidth": 1,
+        "paddingHorizontal": 8,
+        "paddingVertical": 4,
+      },
+      false,
+      false,
+    ]
+  }
+>
+  <Text
+    style={
+      [
+        {
+          "color": "#1A1A1A",
+          "fontSize": 13,
+          "fontWeight": "400",
+          "lineHeight": 18,
+        },
+        false,
+      ]
+    }
+  >
+    Smart
+  </Text>
+</View>
+`;
