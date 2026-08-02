@@ -1,11 +1,18 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-// Library — recipe collection browsing (prd.md §14). Empty-state UI lands
-// once the shared primitives exist; this is route-shell scaffolding only.
+import { EmptyState } from '../../src/components/EmptyState';
+
+// Library — recipe collection browsing (prd.md §14). No data model
+// exists yet (Phase 4+), so this is the empty state; sorted rows land
+// once there's something to show.
 export default function LibraryScreen() {
   return (
     <View style={styles.container}>
-      <Text testID="library-placeholder">Library</Text>
+      <EmptyState
+        title="No recipes yet"
+        message="Recipes you save will show up here."
+        testID="library-placeholder"
+      />
     </View>
   );
 }
