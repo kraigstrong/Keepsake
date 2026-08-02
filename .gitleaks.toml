@@ -12,3 +12,13 @@ paths = [
   '''node_modules/''',
   '''coverage/''',
 ]
+
+# Exact-literal allowlist (not a path/pattern exemption) for fabricated test
+# fixtures that happen to look high-entropy enough to trip generic-api-key.
+# Each entry must be the literal fixture value, never a broad pattern — a
+# regex here would blind the scanner to real secrets, not just this fixture.
+regexes = [
+  # src/deepLinks/parseInvitationLink.test.ts — fake invitation token used
+  # to test link-parsing/rejection logic, not a real credential.
+  '''abcDEF123456_-xyzQRS789''',
+]
