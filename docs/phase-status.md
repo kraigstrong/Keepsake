@@ -8,6 +8,7 @@ The single source of truth for "where are we." Update this at the start and end 
 - **Status:** Not started
 - **Branch:** _(none yet)_
 - **Next action:** Run the `start-phase` skill for Phase 3. Build scope: email authentication, profiles, household creation, memberships, invitations, deep-link acceptance, household settings, RLS helpers, database and Storage policies, session restoration, abuse controls. Exit gate: two users can share one household, and a non-member cannot access it through any tested path.
+- **After this phase:** Phase 3.5 — Design Direction and Visual Iteration (added 2026-08-02, see execution-plan.md). The developer will iterate on real visual direction (colors, typography, imagery, iconography) outside this environment using Claude's design mode, then bring it back here to update `src/theme/tokens.ts` and re-skin the Phase 2 primitives before Phase 4 builds real recipe content on top.
 - **Blocked on:** Nothing yet, but Phase 3 is the first phase that needs real Supabase Auth + staging connectivity decisions (carried forward from Phase 0/2, see below) — expect that to surface early in the `start-phase` run.
 
 ## History
