@@ -6,9 +6,11 @@ exports[`OfflineState matches its snapshot 1`] = `
   role="status"
   style={
     {
-      "backgroundColor": "#F5F5F5",
-      "borderRadius": 6,
-      "paddingHorizontal": 16,
+      "backgroundColor": "#F1EBDF",
+      "borderColor": "rgba(33, 29, 24, 0.12)",
+      "borderRadius": 8,
+      "borderWidth": 1,
+      "paddingHorizontal": 14,
       "paddingVertical": 8,
     }
   }
@@ -16,10 +18,10 @@ exports[`OfflineState matches its snapshot 1`] = `
   <Text
     style={
       {
-        "color": "#5C5C5C",
+        "color": "rgba(33, 29, 24, 0.55)",
         "fontSize": 13,
         "fontWeight": "400",
-        "lineHeight": 18,
+        "lineHeight": 19,
         "textAlign": "center",
       }
     }

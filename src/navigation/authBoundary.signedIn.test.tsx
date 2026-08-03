@@ -54,11 +54,14 @@ jest.mock('../supabase/instance', () => ({
 }));
 
 describe('authenticated route boundary — signed in', () => {
+  // Explicit timeout — see navigation.test.tsx for why (CI-only flakiness
+  // against the 5000ms default, jest.config.js's testTimeout isn't
+  // honored per-project here).
   it('shows This Week instead of sign-in', async () => {
     renderRouter('./app', { initialUrl: '/' });
     await act(async () => {});
     await waitFor(() => {
       expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();
     });
-  });
+  }, 20000);
 });

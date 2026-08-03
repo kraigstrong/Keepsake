@@ -38,11 +38,11 @@ exports[`Button matches its snapshot 1`] = `
         "alignItems": "center",
         "borderRadius": 12,
         "justifyContent": "center",
-        "paddingHorizontal": 16,
+        "paddingHorizontal": 14,
         "paddingVertical": 8,
       },
       {
-        "backgroundColor": "#2E7D5B",
+        "backgroundColor": "#B5502E",
       },
       false,
       undefined,
@@ -56,7 +56,7 @@ exports[`Button matches its snapshot 1`] = `
           "color": "#FFFFFF",
           "fontSize": 16,
           "fontWeight": "600",
-          "lineHeight": 22,
+          "lineHeight": 27,
         },
         false,
       ]

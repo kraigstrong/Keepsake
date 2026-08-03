@@ -5,7 +5,7 @@ exports[`ErrorState matches its snapshot 1`] = `
   style={
     {
       "alignItems": "center",
-      "gap": 4,
+      "gap": 6,
       "justifyContent": "center",
       "padding": 32,
     }
@@ -18,9 +18,10 @@ exports[`ErrorState matches its snapshot 1`] = `
     <Text
       style={
         {
-          "color": "#B3261E",
+          "color": "#9B3A26",
           "fontSize": 20,
           "fontWeight": "600",
+          "letterSpacing": -0.2,
           "lineHeight": 26,
           "textAlign": "center",
         }
@@ -31,10 +32,10 @@ exports[`ErrorState matches its snapshot 1`] = `
     <Text
       style={
         {
-          "color": "#5C5C5C",
+          "color": "rgba(33, 29, 24, 0.55)",
           "fontSize": 16,
           "fontWeight": "400",
-          "lineHeight": 22,
+          "lineHeight": 27,
           "textAlign": "center",
         }
       }

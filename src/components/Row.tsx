@@ -48,6 +48,11 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.body,
+    // Row titles read slightly heavier than paragraph body text in this
+    // direction (16px/500 vs body's 400) — a local override rather than
+    // its own token since nothing else needs this exact weight yet.
+    fontWeight: '500',
+    letterSpacing: -0.16,
     color: colors.textPrimary,
   },
 });

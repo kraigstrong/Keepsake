@@ -90,6 +90,9 @@ const styles = StyleSheet.create({
   },
   text: {
     ...typography.body,
-    color: '#FFFFFF',
+    // Ink-filled elements use paper-colored content, not pure white, in
+    // this direction (matches the handoff's Done Cooking button/wordmark
+    // tile treatment).
+    color: colors.background,
   },
 });
