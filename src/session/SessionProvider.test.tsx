@@ -12,6 +12,8 @@ jest.mock('../supabase/instance', () => ({
       onAuthStateChange: jest.fn(),
       signInWithOtp: jest.fn(),
       verifyOtp: jest.fn(),
+      updateUser: jest.fn(),
+      signInWithPassword: jest.fn(),
       signOut: jest.fn(),
       startAutoRefresh: jest.fn(),
       stopAutoRefresh: jest.fn(),
@@ -125,6 +127,72 @@ describe('SessionProvider / useSession', () => {
       type: 'email',
     });
     expect(outcome).toEqual({ error: null });
+  });
+
+  it('setPassword calls updateUser and reports no error on success', async () => {
+    mockedAuth.updateUser.mockResolvedValue({ data: {}, error: null } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.setPassword('correct-horse-battery');
+    });
+
+    expect(mockedAuth.updateUser).toHaveBeenCalledWith({ password: 'correct-horse-battery' });
+    expect(outcome).toEqual({ error: null });
+  });
+
+  it('setPassword surfaces the Supabase error message', async () => {
+    mockedAuth.updateUser.mockResolvedValue({
+      data: {},
+      error: { message: 'Password should be at least 8 characters' },
+    } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.setPassword('short');
+    });
+
+    expect(outcome).toEqual({ error: 'Password should be at least 8 characters' });
+  });
+
+  it('signInWithPassword calls signInWithPassword and reports no error on success', async () => {
+    mockedAuth.signInWithPassword.mockResolvedValue({ data: {}, error: null } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.signInWithPassword(
+        'user@example.test',
+        'correct-horse-battery',
+      );
+    });
+
+    expect(mockedAuth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'user@example.test',
+      password: 'correct-horse-battery',
+    });
+    expect(outcome).toEqual({ error: null });
+  });
+
+  it('signInWithPassword surfaces the Supabase error message', async () => {
+    mockedAuth.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { message: 'Invalid login credentials' },
+    } as never);
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome: { error: string | null } | undefined;
+    await act(async () => {
+      outcome = await result.current.signInWithPassword('user@example.test', 'wrong');
+    });
+
+    expect(outcome).toEqual({ error: 'Invalid login credentials' });
   });
 
   it('signOut calls supabase.auth.signOut', async () => {
