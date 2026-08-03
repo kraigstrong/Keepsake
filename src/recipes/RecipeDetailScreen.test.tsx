@@ -22,6 +22,7 @@ const push = jest.fn();
 
 const recipe: api.Recipe = {
   id: 'recipe-1',
+  version: 1,
   title: 'Herb Roast Chicken',
   heroImagePath: 'household-1/existing.jpg',
   activeTimeMinutes: 20,
@@ -78,6 +79,16 @@ it('navigates to the edit screen', async () => {
   await fireEvent.press(screen.getByTestId('recipe-detail-edit-button'));
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit');
+});
+
+it('navigates to the history screen', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+
+  await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
+
+  expect(push).toHaveBeenCalledWith('/recipe/recipe-1/history');
 });
 
 it('opens the source url in the browser', async () => {

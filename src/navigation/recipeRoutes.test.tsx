@@ -8,13 +8,17 @@ import { act } from 'react';
 import { router } from 'expo-router';
 import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
-// Phase 4 end-to-end coverage: the manual-recipe routes (app/recipe/)
-// are reachable through the real authenticated route boundary, not
-// just as isolated component tests — this is what would have caught
-// app/_layout.tsx missing a `<Stack.Screen name="recipe" />` entry
-// alongside "(tabs)" and "settings" (found while writing this suite:
-// the route existed on disk but wasn't registered under the
-// Stack.Protected guard, so it was unreachable in the real app).
+// End-to-end coverage: the recipe routes (app/recipe/) are reachable
+// through the real authenticated route boundary, not just as isolated
+// component tests — this is what would have caught app/_layout.tsx
+// missing a `<Stack.Screen name="recipe" />` entry alongside "(tabs)"
+// and "settings" (found in Phase 4 while writing this suite: the route
+// existed on disk but wasn't registered under the Stack.Protected
+// guard, so it was unreachable in the real app). Phase 5's history
+// route needed no equivalent fix — it lives under app/recipe/_layout.tsx,
+// which auto-discovers every file in app/recipe/ rather than
+// enumerating Stack.Screen children the way the root layout does — but
+// it's tested here rather than assumed, for the same reason.
 jest.mock('../supabase/instance', () => ({
   supabase: {
     auth: {
@@ -131,6 +135,13 @@ describe('recipe routes', () => {
     act(() => router.push('/recipe/recipe-1/edit'));
     await waitFor(() => {
       expect(screen.getByTestId('recipe-editor-loading')).toBeOnTheScreen();
+    });
+  });
+
+  it('reaches the history screen at /recipe/[id]/history', async () => {
+    act(() => router.push('/recipe/recipe-1/history'));
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-history-loading')).toBeOnTheScreen();
     });
   });
 

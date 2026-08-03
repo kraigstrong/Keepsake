@@ -1,14 +1,18 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   type Category,
   type CategoryGroup,
   fetchCategories,
+  fetchDraft,
   fetchRecipe,
+  isRecipeConflictError,
+  type RecipeDraftPayload,
   type RecipeSavePayload,
   type RecipeSection,
+  saveDraft,
   saveRecipe,
 } from './api';
 import {
@@ -53,6 +57,12 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasConflict, setHasConflict] = useState(false);
+  const [baseVersion, setBaseVersion] = useState<number | null>(null);
+  // Skips the autosave effect's very first post-load firing, which
+  // would otherwise write the just-loaded, unedited content back as a
+  // "draft" before the user has actually changed anything.
+  const skipNextAutosave = useRef(true);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [title, setTitle] = useState('');
@@ -70,6 +80,25 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
   const [ingredientSections, setIngredientSections] = useState<RecipeSection[]>(EMPTY_SECTIONS);
   const [instructionSections, setInstructionSections] = useState<RecipeSection[]>(EMPTY_SECTIONS);
 
+  function applyFormFields(fields: RecipeDraftPayload) {
+    setTitle(fields.title);
+    setHeroImagePath(fields.heroImagePath ?? null);
+    setActiveTimeMinutes(fields.activeTimeMinutes?.toString() ?? '');
+    setTotalTimeMinutes(fields.totalTimeMinutes?.toString() ?? '');
+    setYieldText(fields.yieldText ?? '');
+    setPermanentNotes(fields.permanentNotes ?? '');
+    setSourceUrl(fields.sourceUrl ?? '');
+    setSourceAttribution(fields.sourceAttribution ?? '');
+    setTags(fields.tags);
+    setCategoryIds(fields.categoryIds);
+    setIngredientSections(
+      fields.ingredientSections.length > 0 ? fields.ingredientSections : EMPTY_SECTIONS,
+    );
+    setInstructionSections(
+      fields.instructionSections.length > 0 ? fields.instructionSections : EMPTY_SECTIONS,
+    );
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -82,33 +111,39 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         // shouldn't block the rest of the form from loading/working.
       });
 
+    function loadHeroPreview(path: string) {
+      getHeroImageUrl(path).then((url) => {
+        if (!cancelled && url) setHeroPreviewUri(url);
+      });
+    }
+
+    // A draft always wins over the server copy if one exists — it's
+    // the user's own more-recent, unsaved work. Loaded after the
+    // recipe (when editing) so baseVersion still reflects the real
+    // server state the conflict check needs, even though the visible
+    // form fields come from the draft.
+    function loadDraft() {
+      fetchDraft(recipeId ?? null)
+        .then((draft) => {
+          if (cancelled || !draft) return;
+          applyFormFields(draft);
+          if (draft.heroImagePath) loadHeroPreview(draft.heroImagePath);
+        })
+        .catch(() => {
+          // No draft, or the fetch failed — starting from the server
+          // copy (or blank, for a new recipe) either way.
+        });
+    }
+
     if (recipeId) {
       fetchRecipe(recipeId)
         .then((recipe) => {
           if (cancelled) return;
-          setTitle(recipe.title);
-          setHeroImagePath(recipe.heroImagePath);
-          setActiveTimeMinutes(recipe.activeTimeMinutes?.toString() ?? '');
-          setTotalTimeMinutes(recipe.totalTimeMinutes?.toString() ?? '');
-          setYieldText(recipe.yieldText ?? '');
-          setPermanentNotes(recipe.permanentNotes ?? '');
-          setSourceUrl(recipe.sourceUrl ?? '');
-          setSourceAttribution(recipe.sourceAttribution ?? '');
-          setTags(recipe.tags);
-          setCategoryIds(recipe.categoryIds);
-          setIngredientSections(
-            recipe.ingredientSections.length > 0 ? recipe.ingredientSections : EMPTY_SECTIONS,
-          );
-          setInstructionSections(
-            recipe.instructionSections.length > 0 ? recipe.instructionSections : EMPTY_SECTIONS,
-          );
+          applyFormFields(recipe);
+          setBaseVersion(recipe.version);
           setIsLoading(false);
-
-          if (recipe.heroImagePath) {
-            getHeroImageUrl(recipe.heroImagePath).then((url) => {
-              if (!cancelled && url) setHeroPreviewUri(url);
-            });
-          }
+          if (recipe.heroImagePath) loadHeroPreview(recipe.heroImagePath);
+          loadDraft();
         })
         .catch(() => {
           if (!cancelled) {
@@ -116,6 +151,8 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
             setIsLoading(false);
           }
         });
+    } else {
+      loadDraft();
     }
 
     return () => {
@@ -124,6 +161,53 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
     // Deliberately runs once per recipeId — re-running on every render
     // would clobber in-progress edits with the server copy.
   }, [recipeId]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (skipNextAutosave.current) {
+      skipNextAutosave.current = false;
+      return;
+    }
+
+    const draftPayload: RecipeDraftPayload = {
+      title,
+      heroImagePath,
+      activeTimeMinutes: parseMinutes(activeTimeMinutes),
+      totalTimeMinutes: parseMinutes(totalTimeMinutes),
+      yieldText: yieldText.trim() || null,
+      permanentNotes: permanentNotes.trim() || null,
+      sourceUrl: sourceUrl.trim() || null,
+      sourceAttribution: sourceAttribution.trim() || null,
+      tags,
+      categoryIds,
+      ingredientSections,
+      instructionSections,
+    };
+
+    const timeoutId = setTimeout(() => {
+      saveDraft(recipeId ?? null, draftPayload).catch(() => {
+        // Best-effort — a failed autosave isn't worth interrupting the
+        // user over. Explicit Save is still the real save path.
+      });
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    isLoading,
+    recipeId,
+    title,
+    heroImagePath,
+    activeTimeMinutes,
+    totalTimeMinutes,
+    yieldText,
+    permanentNotes,
+    sourceUrl,
+    sourceAttribution,
+    tags,
+    categoryIds,
+    ingredientSections,
+    instructionSections,
+  ]);
 
   async function handlePickImage() {
     const picked = await pickHeroImage();
@@ -170,6 +254,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
 
   async function handleSave() {
     setSaveError(null);
+    setHasConflict(false);
     if (title.trim().length === 0) {
       setSaveError('Title is required.');
       return;
@@ -179,6 +264,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
     try {
       const payload: RecipeSavePayload = {
         id: recipeId,
+        baseVersion: baseVersion ?? undefined,
         title: title.trim(),
         heroImagePath,
         activeTimeMinutes: parseMinutes(activeTimeMinutes),
@@ -194,10 +280,39 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
       };
       const { id } = await saveRecipe(payload);
       router.replace(`/recipe/${id}`);
-    } catch {
-      setSaveError('Could not save this recipe. Try again.');
+    } catch (err) {
+      if (isRecipeConflictError(err)) {
+        setHasConflict(true);
+      } else {
+        setSaveError('Could not save this recipe. Try again.');
+      }
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  // The user's own in-progress edits stay in their draft either way —
+  // reloading only replaces what's on screen with the fresh server
+  // copy, it doesn't discard anything they've typed from storage. If
+  // they keep editing after this, autosave naturally supersedes the
+  // draft with their new changes against the now-current baseVersion.
+  async function handleReloadLatest() {
+    if (!recipeId) return;
+    setHasConflict(false);
+    setIsLoading(true);
+    try {
+      const recipe = await fetchRecipe(recipeId);
+      applyFormFields(recipe);
+      setBaseVersion(recipe.version);
+      setHeroPreviewUri(null);
+      if (recipe.heroImagePath) {
+        const url = await getHeroImageUrl(recipe.heroImagePath);
+        if (url) setHeroPreviewUri(url);
+      }
+    } catch {
+      setSaveError('Could not reload the latest version. Try again.');
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -404,16 +519,31 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         onChangeText={setSourceAttribution}
       />
 
-      {saveError && (
-        <Text style={styles.error} testID="recipe-editor-error" accessibilityRole="alert">
-          {saveError}
-        </Text>
+      {hasConflict ? (
+        <View style={styles.conflictBox} testID="recipe-editor-conflict">
+          <Text style={styles.error} accessibilityRole="alert">
+            This recipe was changed by someone else. Reload to see the latest version, then redo
+            your changes.
+          </Text>
+          <Button
+            title="Reload latest version"
+            variant="secondary"
+            onPress={handleReloadLatest}
+            testID="recipe-editor-reload-button"
+          />
+        </View>
+      ) : (
+        saveError && (
+          <Text style={styles.error} testID="recipe-editor-error" accessibilityRole="alert">
+            {saveError}
+          </Text>
+        )
       )}
 
       <Button
         title={isSaving ? 'Saving…' : 'Save'}
         onPress={handleSave}
-        disabled={isSaving}
+        disabled={isSaving || hasConflict}
         testID="recipe-save-button"
       />
     </ScrollView>
@@ -633,5 +763,8 @@ const styles = StyleSheet.create({
   error: {
     ...typography.body,
     color: colors.danger,
+  },
+  conflictBox: {
+    gap: spacing.xs,
   },
 });

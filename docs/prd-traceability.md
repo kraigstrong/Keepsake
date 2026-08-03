@@ -23,7 +23,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | REC-05 | Cooking history, separate from permanent notes | 15 | Not Started |
 | REC-06 | Source URL and attribution | 4 / 8 | Done (tested) |
 | REC-07 | Structured categories and tags on the recipe | 4 | Done (tested) |
-| REC-08 | Version history | 5 | Not Started |
+| REC-08 | Version history | 5 | Done (tested) |
 | REC-09 | No recipe description field exists | 4 | Done (tested) |
 
 ## Import (IMP)
@@ -176,10 +176,10 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| VER-01 | A version is created only on explicit save | 5 | Not Started |
-| VER-02 | Autosaves remain temporary drafts | 5 | Not Started |
-| VER-03 | Restore a previous version | 5 | Not Started |
-| VER-04 | Restoring creates a new version; later history is preserved | 5 | Not Started |
+| VER-01 | A version is created only on explicit save | 5 | Done (tested) |
+| VER-02 | Autosaves remain temporary drafts | 5 | Done (tested) |
+| VER-03 | Restore a previous version | 5 | Done (tested) |
+| VER-04 | Restoring creates a new version; later history is preserved | 5 | Done (tested) |
 
 ## Security (SEC)
 
