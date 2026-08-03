@@ -898,6 +898,11 @@ Physical device required (Share Extension behavior is not fully representative o
 
 Support non-web recipes while preserving the original source photo.
 
+Hero replace/crop/remove already exists (`src/recipes/heroImage.ts`, built in Phase 4 for
+manual creation — IMG-04) — reuse it for the photo-import hero rather than rebuilding it. This
+phase's own image work is the *source* photo: capture/pick, upload-before-processing, metadata
+stripping, and retaining the original separately from whatever becomes the hero.
+
 ## Build scope
 
 - Camera
@@ -910,7 +915,7 @@ Support non-web recipes while preserving the original source photo.
 - Partial recipes
 - Uncertainty
 - View Original Photo
-- Hero replace/remove
+- Hero replace/remove (reuse Phase 4's `heroImage.ts`)
 
 ## Validation
 
@@ -935,6 +940,20 @@ Physical device required for live camera capture (Simulator has no camera) — s
 ## Objective
 
 Adjust recipes without losing source fidelity or making unsafe conversions.
+
+This phase retrofits structure onto data Phase 4 deliberately left unstructured, not a
+greenfield build — see ADR-0010. Two concrete migrations to design here, not assume:
+
+- `recipe_ingredients.line_text` is plain text (e.g. "2 lb baby potatoes, halved"). Quantity
+  representation and fraction/range parsing mean parsing this existing text into structured
+  fields (with the original text preserved as fallback/display), not building a fresh
+  structured-input form.
+- `recipes.yield_text` is free text (e.g. "Serves 4", "Makes one 9x13 pan"), not a numeric
+  servings count. prd.md §11's "Recipes with servings may also choose any serving count" and
+  §15's "Choose servings" planning step both imply a numeric serving count exists for at least
+  some recipes — this phase needs to decide whether that's parsed out of `yield_text` or
+  becomes its own nullable structured field (recipes whose yield genuinely isn't a serving
+  count, like "makes one loaf," would leave it null and skip arbitrary-serving scaling).
 
 ## Build scope
 

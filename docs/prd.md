@@ -316,7 +316,7 @@ Searches:
 - Title
 - Ingredients
 - Notes
-- Author
+- Source attribution
 - Source
 - Categories
 - Tags
