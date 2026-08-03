@@ -1,13 +1,18 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
+import { OfflineState } from '../src/components/OfflineState';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
-import { initObservability } from '../src/observability';
+import { initObservability, logError } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
-import { colors } from '../src/theme/tokens';
+import { syncHousehold } from '../src/sync/syncEngine';
+import { colors, spacing } from '../src/theme/tokens';
 
 // Runs once, at module-evaluation time — before RootLayout's first
 // render — because Sentry wants init() to run as early as possible so
@@ -25,12 +30,58 @@ export default function RootLayout() {
         <DeepLinkProvider>
           <SessionProvider>
             <HouseholdProvider>
-              <AuthenticatedRouteBoundary />
+              <ConnectivityAwareApp />
             </HouseholdProvider>
           </SessionProvider>
         </DeepLinkProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// Wraps the whole app (not just the signed-in branch) so the offline
+// banner is visible even on sign-in — connectivity matters there too
+// (email OTP needs a connection). household is null until onboarding
+// completes; sync is a no-op until then (ADR-0013 — Phase 6 is
+// read-only offline support, nothing to sync before a household exists).
+function ConnectivityAwareApp() {
+  const { household } = useHousehold();
+  const householdId = household?.id ?? null;
+
+  return (
+    <ConnectivityProvider onReconnect={() => triggerHouseholdSync(householdId)}>
+      <HouseholdSyncOnMount householdId={householdId} />
+      <View style={{ flex: 1 }}>
+        <OfflineBanner />
+        <AuthenticatedRouteBoundary />
+      </View>
+    </ConnectivityProvider>
+  );
+}
+
+function triggerHouseholdSync(householdId: string | null): void {
+  if (!householdId) return;
+  syncHousehold(householdId).catch((error) => logError(error, { context: 'householdSync' }));
+}
+
+// Initial sync once the household is known (cold launch, per
+// execution-plan.md's Phase 6 validation) — separate from
+// ConnectivityProvider's onReconnect, which only covers the
+// offline -> online transition, not first mount.
+function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
+  useEffect(() => {
+    triggerHouseholdSync(householdId);
+  }, [householdId]);
+  return null;
+}
+
+function OfflineBanner() {
+  const { isOnline } = useConnectivity();
+  if (isOnline) return null;
+  return (
+    <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
+      <OfflineState testID="global-offline-banner" />
+    </View>
   );
 }
 
