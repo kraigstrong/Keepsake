@@ -166,7 +166,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| OFF-01 | Offline browsing | 6 | Not Started |
+| OFF-01 | Offline browsing | 6 | Done (tested) |
 | OFF-02 | Offline searching | 6 / 7 | Not Started |
 | OFF-03 | Offline cooking | 15 | Not Started |
 | OFF-04 | Imports, editing, planning, and grocery export require connectivity | 6 (boundary), enforced per feature phase | Not Started |

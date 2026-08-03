@@ -43,6 +43,23 @@ Phase 6 is scoped to **read-only** offline support (OFF-01 browsing, OFF-02 sear
 - **`expo-network` instead of `@react-native-community/netinfo`:** considered — `expo-network` covers one-shot state but historically has weaker continuous change-event support than `netinfo`, and offline UI needs the live transition (online → offline mid-session), not just a snapshot at launch.
 - **No storage cap / cap by image count instead of bytes:** rejected — a photo-heavy household could otherwise grow the cache unboundedly; a byte budget is the more direct match for "storage limits" in the phase's own build scope.
 
+## Backup implications (execution-plan.md §2.6 security checklist)
+
+`expo-sqlite`'s default database location is inside the app's Documents-directory-equivalent
+(`SQLiteModule.swift`'s `defaultDatabaseDirectory`), which iOS includes in device/iCloud backups
+by default — unlike the cache directory hero images are correctly stored in (`Paths.cache`,
+inherently excluded). This means the local recipe mirror currently *does* get backed up.
+
+Judged low-severity and not blocking: it's a read-only mirror of data the household already
+stores on the server (no credentials — session tokens live in `expo-secure-store`, untouched by
+this ADR), and losing/restoring it from a backup just means the next sync repopulates it, which
+is the same recovery path as losing the cache to low-disk-space eviction. `expo-sqlite`'s
+`openDatabaseAsync` does accept a custom `directory` argument that could redirect the file into
+`Paths.cache` instead — not applied here because `Directory.uri` returns a `file://`-prefixed
+string while `defaultDatabaseDirectory` returns a plain path, and getting that mismatch wrong is
+a real, silent-until-a-real-device risk not worth taking without on-device verification. Tracked
+as a Phase 6 follow-up in `phase-status.md`, not attempted blind.
+
 ## Consequences
 
 - Adds two new dependencies: `@react-native-community/netinfo` and `expo-file-system`, both needing `pod install` + a fresh device/Simulator build before they link correctly (same category of follow-up already tracked for prior native additions).
