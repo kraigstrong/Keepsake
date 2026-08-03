@@ -1,0 +1,227 @@
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
+import { getHeroImageUrl } from './heroImage';
+import { Chip } from '../components/Chip';
+import { ErrorState } from '../components/ErrorState';
+import { ImagePlaceholder } from '../components/ImagePlaceholder';
+import { LoadingState } from '../components/LoadingState';
+import { colors, radii, spacing, typography } from '../theme/tokens';
+
+export interface RecipeDetailScreenProps {
+  recipeId: string;
+}
+
+/**
+ * Read-only view of a saved recipe — editing happens on a separate
+ * screen (/recipe/[id]/edit) reached via the Edit action below, rather
+ * than an inline-editable detail view, matching REC-09's "no clutter"
+ * shape (nothing here but what's meant to be read while cooking).
+ */
+export function RecipeDetailScreen({ recipeId }: RecipeDetailScreenProps) {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([fetchRecipe(recipeId), fetchCategories()])
+      .then(([fetchedRecipe, fetchedCategories]) => {
+        if (cancelled) return;
+        setRecipe(fetchedRecipe);
+        setCategories(fetchedCategories);
+        setIsLoading(false);
+
+        if (fetchedRecipe.heroImagePath) {
+          getHeroImageUrl(fetchedRecipe.heroImagePath).then((url) => {
+            if (!cancelled && url) setHeroImageUrl(url);
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError(true);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recipeId]);
+
+  if (isLoading) {
+    return <LoadingState label="Loading recipe…" testID="recipe-detail-loading" />;
+  }
+
+  if (loadError || !recipe) {
+    return (
+      <ErrorState
+        title="Couldn't load this recipe"
+        message="Check your connection and try again."
+        testID="recipe-detail-load-error"
+      />
+    );
+  }
+
+  const categoryValues = recipe.categoryIds
+    .map((id) => categories.find((category) => category.id === id)?.value)
+    .filter((value): value is string => value != null);
+
+  const timingParts = [
+    recipe.activeTimeMinutes != null ? `Active ${recipe.activeTimeMinutes} min` : null,
+    recipe.totalTimeMinutes != null ? `Total ${recipe.totalTimeMinutes} min` : null,
+    recipe.yieldText,
+  ].filter((part): part is string => part != null);
+
+  return (
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      testID="recipe-detail-screen"
+    >
+      {heroImageUrl ? (
+        <Image source={{ uri: heroImageUrl }} style={styles.heroImage} testID="recipe-hero" />
+      ) : (
+        <ImagePlaceholder size={200} testID="recipe-hero-placeholder" />
+      )}
+
+      <Text style={styles.title}>{recipe.title}</Text>
+
+      {timingParts.length > 0 && <Text style={styles.timing}>{timingParts.join(' · ')}</Text>}
+
+      {(categoryValues.length > 0 || recipe.tags.length > 0) && (
+        <View style={styles.chipRow}>
+          {categoryValues.map((value) => (
+            <Chip key={value} label={value} testID={`recipe-detail-category-${value}`} />
+          ))}
+          {recipe.tags.map((tag) => (
+            <Chip key={tag} label={tag} testID={`recipe-detail-tag-${tag}`} />
+          ))}
+        </View>
+      )}
+
+      {recipe.ingredientSections.map((section, sectionIndex) => (
+        <View key={sectionIndex} style={styles.section}>
+          <Text style={styles.sectionHeading}>{section.title ?? 'Ingredients'}</Text>
+          {section.lines.map((line, lineIndex) => (
+            <Text key={lineIndex} style={styles.line}>
+              {'•'} {line}
+            </Text>
+          ))}
+        </View>
+      ))}
+
+      {recipe.instructionSections.map((section, sectionIndex) => (
+        <View key={sectionIndex} style={styles.section}>
+          <Text style={styles.sectionHeading}>{section.title ?? 'Instructions'}</Text>
+          {section.lines.map((line, lineIndex) => (
+            <Text key={lineIndex} style={styles.line}>
+              {lineIndex + 1}. {line}
+            </Text>
+          ))}
+        </View>
+      ))}
+
+      {recipe.permanentNotes && (
+        <View style={styles.section}>
+          <Text style={styles.sectionHeading}>Notes</Text>
+          <Text style={styles.line}>{recipe.permanentNotes}</Text>
+        </View>
+      )}
+
+      {(recipe.sourceUrl ?? recipe.sourceAttribution) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionHeading}>Source</Text>
+          {recipe.sourceAttribution && <Text style={styles.line}>{recipe.sourceAttribution}</Text>}
+          {recipe.sourceUrl && (
+            <Pressable
+              onPress={() => openExternalUrl(recipe.sourceUrl)}
+              testID="recipe-detail-source-url"
+            >
+              <Text style={[styles.line, styles.link]}>{recipe.sourceUrl}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      <Pressable
+        style={styles.editButton}
+        accessibilityRole="button"
+        onPress={() => router.push(`/recipe/${recipeId}/edit`)}
+        testID="recipe-detail-edit-button"
+      >
+        <Text style={styles.editButtonLabel}>Edit</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+function openExternalUrl(url: string | null) {
+  if (!url || !/^https?:\/\//i.test(url)) return;
+  Linking.openURL(url);
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  heroImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: radii.md,
+  },
+  title: {
+    ...typography.title,
+    color: colors.textPrimary,
+  },
+  timing: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  section: {
+    gap: spacing.xs,
+  },
+  sectionHeading: {
+    ...typography.heading,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  line: {
+    ...typography.body,
+    color: colors.textPrimary,
+  },
+  link: {
+    color: colors.accent,
+  },
+  editButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editButtonLabel: {
+    ...typography.body,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+});
