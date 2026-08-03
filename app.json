@@ -12,7 +12,9 @@
       "supportsTablet": false,
       "appleTeamId": "MKACSCQ588",
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.kraigstrong.keepsake"]
+        "com.apple.security.application-groups": [
+          "group.com.kraigstrong.keepsake"
+        ]
       }
     },
     "web": {
@@ -37,7 +39,8 @@
       ],
       "@bacons/apple-targets",
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset"
     ]
   }
 }
