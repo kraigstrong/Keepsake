@@ -10,7 +10,8 @@ create or replace function public.accept_invitation(raw_token text)
 returns public.households
 language plpgsql
 security definer
-set search_path = public
+-- extensions: digest() (pgcrypto) lives there on Supabase, not in public.
+set search_path = public, extensions
 as $$
 declare
   computed_hash text := encode(digest(raw_token, 'sha256'), 'hex');
