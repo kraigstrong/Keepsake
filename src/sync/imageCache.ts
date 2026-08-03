@@ -25,6 +25,10 @@ export interface ImageStore {
   ensureDirectory(): void;
   downloadTo(url: string, fileName: string): Promise<{ uri: string; byteSize: number }>;
   deleteFile(uri: string): void;
+  // Removes the whole cache directory and everything in it in one call —
+  // used by the sign-out wipe (ADR-0013), which clears the entire local
+  // cache rather than deleting tracked files one row at a time.
+  deleteDirectory(): void;
 }
 
 class ExpoImageStore implements ImageStore {
@@ -48,6 +52,16 @@ class ExpoImageStore implements ImageStore {
     } catch {
       // Already gone or inaccessible — eviction proceeds regardless; the
       // cached_images row is the source of truth for what's tracked.
+    }
+  }
+
+  deleteDirectory(): void {
+    try {
+      if (this.directory.exists) {
+        this.directory.delete();
+      }
+    } catch {
+      // Already gone — a sign-out wipe with nothing cached yet is fine.
     }
   }
 }

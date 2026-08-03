@@ -16,13 +16,15 @@ function createMockDb(overrides: Partial<LocalDb> = {}): LocalDb & { runAsync: j
 function createMockImageStore(overrides: Partial<ImageStore> = {}): ImageStore & {
   downloadTo: jest.Mock;
   deleteFile: jest.Mock;
+  deleteDirectory: jest.Mock;
 } {
   return {
     ensureDirectory: jest.fn(),
     downloadTo: jest.fn(async () => ({ uri: 'file:///cache/hero-images/h1_r1.jpg', byteSize: 1000 })),
     deleteFile: jest.fn(),
+    deleteDirectory: jest.fn(),
     ...overrides,
-  } as ImageStore & { downloadTo: jest.Mock; deleteFile: jest.Mock };
+  } as ImageStore & { downloadTo: jest.Mock; deleteFile: jest.Mock; deleteDirectory: jest.Mock };
 }
 
 describe('ensureImageCached', () => {

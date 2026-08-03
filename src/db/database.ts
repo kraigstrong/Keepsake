@@ -1,4 +1,4 @@
-import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import { deleteDatabaseAsync, openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
 
@@ -58,9 +58,19 @@ export function getDatabase(): Promise<SQLiteDatabase> {
   return dbPromise;
 }
 
-// Sign-out wipe (ADR-0013) deletes the underlying database file, then
-// needs the next getDatabase() call to open a fresh handle rather than
-// reuse the promise for the now-deleted file.
-export function resetDatabaseHandle(): void {
+// Sign-out wipe (ADR-0013): the whole database file, not a per-household
+// filtered delete — MVP is one household per user (ADR-0004), so there's
+// never a second household's cache to preserve. Closes the open
+// connection first (if any) so the file delete doesn't race a still-open
+// native handle; the next getDatabase() call opens (and migrates) a
+// fresh file.
+export async function wipeDatabase(): Promise<void> {
+  if (dbPromise) {
+    const db = await dbPromise.catch(() => null);
+    await db?.closeAsync();
+  }
   dbPromise = null;
+  await deleteDatabaseAsync(DATABASE_NAME).catch(() => {
+    // Nothing to delete — e.g. signing out before any sync ever ran.
+  });
 }

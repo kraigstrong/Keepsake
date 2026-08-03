@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { SessionProvider, useSession } from './SessionProvider';
 import { supabase } from '../supabase/instance';
+import { wipeOfflineData } from '../sync/wipeOfflineData';
 
 jest.mock('../supabase/instance', () => ({
   supabase: {
@@ -20,8 +21,10 @@ jest.mock('../supabase/instance', () => ({
     },
   },
 }));
+jest.mock('../sync/wipeOfflineData', () => ({ wipeOfflineData: jest.fn() }));
 
 const mockedAuth = supabase.auth as jest.Mocked<typeof supabase.auth>;
+const mockedWipeOfflineData = wipeOfflineData as jest.Mock;
 
 const fakeSession = { user: { id: 'user-123' } } as unknown as Session;
 
@@ -50,6 +53,7 @@ beforeEach(() => {
     appStateHandler = handler as (state: string) => void;
     return { remove: removeAppStateListener } as never;
   });
+  mockedWipeOfflineData.mockResolvedValue(undefined);
 });
 
 describe('SessionProvider / useSession', () => {
@@ -195,7 +199,7 @@ describe('SessionProvider / useSession', () => {
     expect(outcome).toEqual({ error: 'Invalid login credentials' });
   });
 
-  it('signOut calls supabase.auth.signOut', async () => {
+  it('signOut calls supabase.auth.signOut and wipes the local offline cache', async () => {
     mockedAuth.signOut.mockResolvedValue({ error: null } as never);
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -205,6 +209,20 @@ describe('SessionProvider / useSession', () => {
     });
 
     expect(mockedAuth.signOut).toHaveBeenCalled();
+    expect(mockedWipeOfflineData).toHaveBeenCalled();
+  });
+
+  it('signOut does not throw when the cache wipe fails', async () => {
+    mockedAuth.signOut.mockResolvedValue({ error: null } as never);
+    mockedWipeOfflineData.mockRejectedValue(new Error('disk error'));
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await expect(
+      act(async () => {
+        await result.current.signOut();
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('unsubscribes from auth state changes and the AppState listener on unmount', async () => {
