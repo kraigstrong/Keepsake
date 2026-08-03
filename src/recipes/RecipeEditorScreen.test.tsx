@@ -30,6 +30,8 @@ beforeEach(() => {
     { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
     { id: 'cat-dish-soup', groupName: 'dish_type', value: 'Soup' },
   ]);
+  mockedApi.fetchDraft.mockResolvedValue(null);
+  mockedApi.saveDraft.mockResolvedValue(undefined);
 });
 
 describe('RecipeEditorScreen — create mode', () => {
@@ -126,6 +128,22 @@ describe('RecipeEditorScreen — create mode', () => {
       expect.objectContaining({ heroImagePath: 'household-1/abc.jpg' }),
     );
   }, 15000);
+
+  it('autosaves a debounced draft after an edit, without saving the recipe itself', async () => {
+    await render(<RecipeEditorScreen />);
+
+    await fireEvent.changeText(screen.getByTestId('recipe-title-input'), 'Weeknight Tacos');
+
+    await waitFor(
+      () =>
+        expect(mockedApi.saveDraft).toHaveBeenCalledWith(
+          null,
+          expect.objectContaining({ title: 'Weeknight Tacos' }),
+        ),
+      { timeout: 5000 },
+    );
+    expect(mockedApi.saveRecipe).not.toHaveBeenCalled();
+  }, 15000);
 });
 
 describe('RecipeEditorScreen — edit mode', () => {
@@ -172,7 +190,7 @@ describe('RecipeEditorScreen — edit mode', () => {
     expect(screen.getByTestId('recipe-editor-load-error')).toBeTruthy();
   }, 15000);
 
-  it('saves edits with the existing recipe id', async () => {
+  it('saves edits with the existing recipe id and its loaded baseVersion', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
     mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
 
@@ -181,8 +199,57 @@ describe('RecipeEditorScreen — edit mode', () => {
     await fireEvent.press(screen.getByTestId('recipe-save-button'));
 
     expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'recipe-1', title: 'Herb Roast Chicken' }),
+      expect.objectContaining({ id: 'recipe-1', baseVersion: 1, title: 'Herb Roast Chicken' }),
     );
     expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
+  }, 15000);
+
+  it('prefers an existing draft over the server copy', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
+    mockedApi.fetchDraft.mockResolvedValue({
+      title: 'Herb Roast Chicken (mid-edit)',
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [{ title: null, lines: ['1 whole chicken'] }],
+      instructionSections: [{ title: null, lines: ['Roast it.'] }],
+    });
+
+    await render(<RecipeEditorScreen recipeId="recipe-1" />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('recipe-title-input')).toHaveProp(
+        'value',
+        'Herb Roast Chicken (mid-edit)',
+      ),
+    );
+    expect(mockedApi.fetchDraft).toHaveBeenCalledWith('recipe-1');
+  }, 15000);
+
+  it('shows a conflict state when saving is rejected for a stale version, with a working reload', async () => {
+    mockedApi.fetchRecipe.mockResolvedValueOnce(existingRecipe);
+    mockedApi.saveRecipe.mockRejectedValue(new Error('recipe has changed since it was loaded'));
+    mockedApi.isRecipeConflictError.mockReturnValue(true);
+
+    await render(<RecipeEditorScreen recipeId="recipe-1" />);
+
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(screen.getByTestId('recipe-editor-conflict')).toBeTruthy();
+    expect(screen.getByTestId('recipe-save-button')).toHaveProp('accessibilityState', {
+      disabled: true,
+    });
+
+    const reloadedRecipe = { ...existingRecipe, version: 2, title: 'Herb Roast Chicken v2' };
+    mockedApi.fetchRecipe.mockResolvedValueOnce(reloadedRecipe);
+
+    await fireEvent.press(screen.getByTestId('recipe-editor-reload-button'));
+
+    expect(screen.queryByTestId('recipe-editor-conflict')).toBeNull();
+    expect(screen.getByTestId('recipe-title-input')).toHaveProp('value', 'Herb Roast Chicken v2');
+
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(expect.objectContaining({ baseVersion: 2 }));
   }, 15000);
 });
