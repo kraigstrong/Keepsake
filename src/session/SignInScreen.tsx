@@ -65,6 +65,9 @@ export function SignInScreen() {
 
       {step === 'email' ? (
         <>
+          <Text style={styles.subtitle}>
+            New here? Entering your email creates your account — no separate sign-up needed.
+          </Text>
           <TextInput
             testID="sign-in-email-input"
             style={styles.input}
