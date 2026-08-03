@@ -1,4 +1,7 @@
 import { getDatabase } from '../db/database';
+import { logError } from '../observability';
+import { getHeroImageUrl } from '../recipes/heroImage';
+import { ensureImageCached } from './imageCache';
 import {
   deleteRecipes,
   readSyncState,
@@ -11,6 +14,9 @@ import { syncHousehold } from './syncEngine';
 import { EMPTY_CURSOR, SYNC_PAGE_SIZE, type DeletedRecipeTombstone, type SyncedRecipe } from './types';
 
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
+jest.mock('../observability', () => ({ logError: jest.fn() }));
+jest.mock('../recipes/heroImage', () => ({ getHeroImageUrl: jest.fn() }));
+jest.mock('./imageCache', () => ({ ensureImageCached: jest.fn() }));
 jest.mock('./local', () => ({
   readSyncState: jest.fn(),
   writeSyncState: jest.fn(),
@@ -35,14 +41,17 @@ const mockedUpsertRecipes = upsertRecipes as jest.Mock;
 const mockedDeleteRecipes = deleteRecipes as jest.Mock;
 const mockedReplaceCategories = replaceCategories as jest.Mock;
 const mockedWriteSyncState = writeSyncState as jest.Mock;
+const mockedGetHeroImageUrl = getHeroImageUrl as jest.Mock;
+const mockedEnsureImageCached = ensureImageCached as jest.Mock;
+const mockedLogError = logError as jest.Mock;
 
-function makeRecipe(id: string, updatedAt: string): SyncedRecipe {
+function makeRecipe(id: string, updatedAt: string, heroImagePath: string | null = null): SyncedRecipe {
   return {
     id,
     householdId: 'h1',
     version: 1,
     title: id,
-    heroImagePath: null,
+    heroImagePath,
     activeTimeMinutes: null,
     totalTimeMinutes: null,
     yieldText: null,
@@ -68,6 +77,7 @@ beforeEach(() => {
   mockedFetchChangedRecipes.mockResolvedValue([]);
   mockedFetchDeletedRecipes.mockResolvedValue([]);
   mockedFetchAllCategories.mockResolvedValue([]);
+  mockedGetHeroImageUrl.mockResolvedValue('https://signed.example/hero.jpg');
 });
 
 describe('syncHousehold', () => {
@@ -139,6 +149,52 @@ describe('syncHousehold', () => {
     await syncHousehold('h1');
 
     expect(mockedDeleteRecipes).toHaveBeenCalledWith(FAKE_DB, ['gone1']);
+  });
+
+  it('pre-caches hero images for changed recipes that have one, skipping those that do not', async () => {
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([
+        makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg'),
+        makeRecipe('r2', '2026-08-05T00:00:00.000Z'), // no hero image
+      ])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+
+    expect(mockedGetHeroImageUrl).toHaveBeenCalledTimes(1);
+    expect(mockedGetHeroImageUrl).toHaveBeenCalledWith('h1/r1.jpg');
+    expect(mockedEnsureImageCached).toHaveBeenCalledWith(
+      FAKE_DB,
+      'h1/r1.jpg',
+      'https://signed.example/hero.jpg',
+    );
+  });
+
+  it('does not cache anything when the signed URL cannot be resolved', async () => {
+    mockedGetHeroImageUrl.mockResolvedValue(null);
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg')])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+
+    expect(mockedEnsureImageCached).not.toHaveBeenCalled();
+  });
+
+  it('logs and continues when caching one image fails, without blocking the rest of the sync', async () => {
+    mockedEnsureImageCached.mockRejectedValueOnce(new Error('disk full'));
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg')])
+      .mockResolvedValueOnce([]);
+
+    await expect(syncHousehold('h1')).resolves.toBeUndefined();
+
+    expect(mockedLogError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ recipeId: 'r1' }),
+    );
+    // The recipe's own data still synced despite the image failure.
+    expect(mockedUpsertRecipes).toHaveBeenCalled();
   });
 
   it('always refreshes categories, even with nothing else to sync', async () => {

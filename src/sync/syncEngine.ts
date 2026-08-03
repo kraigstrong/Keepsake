@@ -1,4 +1,7 @@
 import { getDatabase } from '../db/database';
+import { logError } from '../observability';
+import { getHeroImageUrl } from '../recipes/heroImage';
+import { ensureImageCached } from './imageCache';
 import {
   deleteRecipes,
   readSyncState,
@@ -8,7 +11,26 @@ import {
   type LocalDb,
 } from './local';
 import { fetchAllCategories, fetchChangedRecipes, fetchDeletedRecipes } from './remote';
-import { SYNC_PAGE_SIZE, type SyncCursor } from './types';
+import { SYNC_PAGE_SIZE, type SyncCursor, type SyncedRecipe } from './types';
+
+// Best-effort, per image — a failed download shouldn't block the
+// recipe's own data from syncing (execution-plan.md's "cached images"
+// is additive, not sync-blocking). Pre-caches while online (sync only
+// runs when reachable) so the image is already local by the time the
+// user might open this recipe offline.
+async function cacheHeroImages(db: LocalDb, recipes: SyncedRecipe[]): Promise<void> {
+  for (const recipe of recipes) {
+    if (!recipe.heroImagePath) continue;
+    try {
+      const signedUrl = await getHeroImageUrl(recipe.heroImagePath);
+      if (signedUrl) {
+        await ensureImageCached(db, recipe.heroImagePath, signedUrl);
+      }
+    } catch (error) {
+      logError(error, { context: 'cacheHeroImage', recipeId: recipe.id });
+    }
+  }
+}
 
 /**
  * Cursor is written after every page, not just at the end — an
@@ -28,6 +50,7 @@ async function syncChangedRecipes(
     if (page.length === 0) break;
 
     await upsertRecipes(db, page);
+    await cacheHeroImages(db, page);
     const last = page[page.length - 1]!; // just checked page.length > 0 above
     current = { ...current, recipesCursorUpdatedAt: last.updatedAt, recipesCursorId: last.id };
     await writeSyncState(db, householdId, current);
