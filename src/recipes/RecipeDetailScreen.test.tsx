@@ -81,6 +81,16 @@ it('navigates to the edit screen', async () => {
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit');
 });
 
+it('navigates to the history screen', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+
+  await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
+
+  expect(push).toHaveBeenCalledWith('/recipe/recipe-1/history');
+});
+
 it('opens the source url in the browser', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 

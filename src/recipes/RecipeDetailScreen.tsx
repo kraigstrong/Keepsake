@@ -151,14 +151,24 @@ export function RecipeDetailScreen({ recipeId }: RecipeDetailScreenProps) {
         </View>
       )}
 
-      <Pressable
-        style={styles.editButton}
-        accessibilityRole="button"
-        onPress={() => router.push(`/recipe/${recipeId}/edit`)}
-        testID="recipe-detail-edit-button"
-      >
-        <Text style={styles.editButtonLabel}>Edit</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          style={styles.editButton}
+          accessibilityRole="button"
+          onPress={() => router.push(`/recipe/${recipeId}/edit`)}
+          testID="recipe-detail-edit-button"
+        >
+          <Text style={styles.editButtonLabel}>Edit</Text>
+        </Pressable>
+        <Pressable
+          style={styles.editButton}
+          accessibilityRole="button"
+          onPress={() => router.push(`/recipe/${recipeId}/history`)}
+          testID="recipe-detail-history-button"
+        >
+          <Text style={styles.editButtonLabel}>History</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -209,6 +219,10 @@ const styles = StyleSheet.create({
   },
   link: {
     color: colors.accent,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   editButton: {
     alignSelf: 'flex-start',
