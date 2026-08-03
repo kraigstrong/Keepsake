@@ -8,6 +8,7 @@ import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
+import { readCachedImageUri, readLocalCategories, readLocalRecipe } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface RecipeDetailScreenProps {
@@ -31,25 +32,59 @@ export function RecipeDetailScreen({ recipeId }: RecipeDetailScreenProps) {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([fetchRecipe(recipeId), fetchCategories()])
-      .then(([fetchedRecipe, fetchedCategories]) => {
-        if (cancelled) return;
-        setRecipe(fetchedRecipe);
-        setCategories(fetchedCategories);
-        setIsLoading(false);
+    // Local-first (ADR-0013 / OFF-01): a cache hit shows instantly and
+    // works offline. A live fetch always runs alongside/after it too —
+    // covers a recipe not yet synced to this device, and refreshes
+    // stale local data when online. The live fetch's failure only
+    // becomes a visible error if the local read had nothing to show;
+    // otherwise it's silently offline and the local data stands.
+    async function loadHeroImage(heroImagePath: string | null) {
+      if (!heroImagePath || cancelled) return;
+      const cachedUri = await readCachedImageUri(heroImagePath).catch(() => null);
+      if (cancelled) return;
+      if (cachedUri) {
+        setHeroImageUrl(cachedUri);
+        return;
+      }
+      const signedUrl = await getHeroImageUrl(heroImagePath).catch(() => null);
+      if (!cancelled && signedUrl) setHeroImageUrl(signedUrl);
+    }
 
-        if (fetchedRecipe.heroImagePath) {
-          getHeroImageUrl(fetchedRecipe.heroImagePath).then((url) => {
-            if (!cancelled && url) setHeroImageUrl(url);
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLoadError(true);
-          setIsLoading(false);
-        }
-      });
+    async function load() {
+      let haveData = false;
+
+      const [localRecipe, localCategories] = await Promise.all([
+        readLocalRecipe(recipeId).catch(() => null),
+        readLocalCategories().catch(() => [] as Category[]),
+      ]);
+      if (cancelled) return;
+      if (localRecipe) {
+        haveData = true;
+        setRecipe(localRecipe);
+        setCategories(localCategories);
+        setIsLoading(false);
+        loadHeroImage(localRecipe.heroImagePath);
+      }
+
+      try {
+        const [freshRecipe, freshCategories] = await Promise.all([
+          fetchRecipe(recipeId),
+          fetchCategories(),
+        ]);
+        if (cancelled) return;
+        setRecipe(freshRecipe);
+        setCategories(freshCategories);
+        setIsLoading(false);
+        setLoadError(false);
+        loadHeroImage(freshRecipe.heroImagePath);
+      } catch {
+        if (cancelled || haveData) return;
+        setLoadError(true);
+        setIsLoading(false);
+      }
+    }
+
+    load();
 
     return () => {
       cancelled = true;

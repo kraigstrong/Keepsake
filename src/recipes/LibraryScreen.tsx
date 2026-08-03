@@ -2,21 +2,28 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
-import { fetchRecipes, type RecipeSummary } from './api';
+import type { RecipeSummary } from './api';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
+import { useHousehold } from '../household/HouseholdProvider';
+import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
+import { syncHousehold } from '../sync/syncEngine';
 import { colors, spacing, typography } from '../theme/tokens';
 
 /**
- * Refetches on focus (rather than a plain mount-only effect) so
- * returning from creating/editing a recipe shows the change — tabs
- * stay mounted across switches in this app's navigator, so a
- * mount-only fetch would go stale after the first visit.
+ * Local-first (ADR-0013 / OFF-01): reads from the local SQLite mirror,
+ * which works offline and shows instantly. On focus, also best-effort
+ * syncs and re-reads so returning from creating/editing a recipe (or
+ * regaining connectivity) shows the latest — but a failed sync never
+ * surfaces as an error, since the local read already succeeded and
+ * that's what offline browsing means. loadError now means the local
+ * read itself failed, not "no network."
  */
 export function LibraryScreen() {
   const router = useRouter();
+  const { household } = useHousehold();
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -24,11 +31,21 @@ export function LibraryScreen() {
     useCallback(() => {
       let cancelled = false;
 
-      fetchRecipes()
-        .then((fetched) => {
+      readLocalRecipeSummaries()
+        .then(async (local) => {
           if (cancelled) return;
-          setRecipes(fetched);
+          setRecipes(local);
           setLoadError(false);
+
+          if (!household) return;
+          await syncHousehold(household.id).catch(() => {
+            // Offline or a transient failure — the list stays at
+            // whatever was already cached locally.
+          });
+          if (cancelled) return;
+
+          const refreshed = await readLocalRecipeSummaries().catch(() => null);
+          if (!cancelled && refreshed) setRecipes(refreshed);
         })
         .catch(() => {
           if (!cancelled) setLoadError(true);
@@ -37,7 +54,7 @@ export function LibraryScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [household]),
   );
 
   return (
@@ -47,7 +64,7 @@ export function LibraryScreen() {
         {loadError ? (
           <ErrorState
             title="Couldn't load your recipes"
-            message="Check your connection and try again."
+            message="Something went wrong. Try again."
             testID="library-load-error"
           />
         ) : recipes === null ? (
