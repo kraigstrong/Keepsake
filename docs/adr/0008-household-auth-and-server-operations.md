@@ -4,6 +4,11 @@
 - **Date:** 2026-08-02
 - **Phase:** 3
 
+> **Amended 2026-08-04 (ADR-0012):** email OTP remains the default and only *required* sign-in
+> method — the "password-based auth: rejected" line below still holds for the household as a
+> whole. ADR-0012 adds an opt-in password as an alternative for whoever wants one, without
+> changing anything for anyone who doesn't.
+
 ## Context
 
 Phase 3's build scope (execution-plan.md) names "real auth wiring" and "household creation/invitation acceptance operations" but doesn't specify a mechanism for either — neither does the PRD. Two decisions are needed before schema or client code can be written:
