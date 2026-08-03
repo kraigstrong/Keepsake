@@ -1,4 +1,4 @@
-import { Link, Tabs } from 'expo-router';
+import { Link, Tabs, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,9 +13,9 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 // Settings is deliberately not a tab — "Settings is secondary and does
 // not require a permanent bottom tab" — reached via the header action
 // below instead. The global add action (per the IA, reachable from both
-// tabs) lives in the header too, opening a Sheet — real import options
-// (URL, camera, existing photo) are Phase 8/9/10's job; this proves the
-// affordance and the Sheet mechanism, not the import flow itself.
+// tabs) lives in the header too, opening a Sheet — manual creation
+// (Phase 4) is wired below; real import options (URL, camera, existing
+// photo) are Phase 8/9/10's job and still show as coming soon.
 //
 // Native header title is hidden (headerTitle: () => null) rather than
 // removed outright (headerShown: false) — each screen renders its own
@@ -23,6 +23,7 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 // keeping the native header bar around still gets safe-area handling
 // and the left/right action slots for free instead of hand-rolling them.
 export default function TabsLayout() {
+  const router = useRouter();
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -89,7 +90,15 @@ export default function TabsLayout() {
         testID="add-recipe-sheet"
       >
         <View style={{ gap: spacing.md }}>
-          <Text>Importing recipes is coming soon.</Text>
+          <Button
+            title="Create manually"
+            onPress={() => {
+              setAddSheetVisible(false);
+              router.push('/recipe/new');
+            }}
+            testID="add-recipe-manual"
+          />
+          <Text>Importing from a URL, camera, or photo is coming soon.</Text>
           <Button title="Close" onPress={() => setAddSheetVisible(false)} variant="secondary" />
         </View>
       </Sheet>
