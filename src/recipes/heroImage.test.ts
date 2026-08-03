@@ -1,7 +1,12 @@
 import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-import { pickHeroImage, stripMetadataAndResize, uploadHeroImage } from './heroImage';
+import {
+  getHeroImageUrl,
+  pickHeroImage,
+  stripMetadataAndResize,
+  uploadHeroImage,
+} from './heroImage';
 import { supabase } from '../supabase/instance';
 
 jest.mock('expo-image-picker', () => ({
@@ -108,5 +113,25 @@ describe('uploadHeroImage', () => {
     await expect(uploadHeroImage('household-1', 'file:///hero.jpg')).rejects.toThrow(
       'storage full',
     );
+  });
+});
+
+describe('getHeroImageUrl', () => {
+  it('returns a signed url', async () => {
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValue({ data: { signedUrl: 'https://example.com/signed' }, error: null });
+    mockedStorageFrom.mockReturnValue({ createSignedUrl });
+
+    expect(await getHeroImageUrl('household-1/abc.jpg')).toBe('https://example.com/signed');
+    expect(createSignedUrl).toHaveBeenCalledWith('household-1/abc.jpg', 3600);
+  });
+
+  it('returns null on a Supabase error instead of throwing', async () => {
+    mockedStorageFrom.mockReturnValue({
+      createSignedUrl: () => Promise.resolve({ data: null, error: new Error('not found') }),
+    });
+
+    expect(await getHeroImageUrl('household-1/missing.jpg')).toBeNull();
   });
 });

@@ -84,3 +84,17 @@ export async function uploadHeroImage(householdId: string, localUri: string): Pr
   if (error) throw error;
   return path;
 }
+
+/**
+ * The recipe-images bucket is private (Phase 3, ADR-0008) — a plain
+ * public URL won't load, so display needs a short-lived signed URL
+ * instead. Returns null on failure rather than throwing, so callers can
+ * fall back to a placeholder instead of failing the whole screen over
+ * a missing/stale image.
+ */
+export async function getHeroImageUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
+
+  if (error) return null;
+  return data.signedUrl;
+}
