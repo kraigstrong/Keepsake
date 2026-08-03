@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(17);
 
 insert into auth.users (id, email)
 values
@@ -70,10 +70,24 @@ select is(
   'create: the category link was inserted'
 );
 
+select is(
+  (select version from alice_recipe),
+  1,
+  'create: version starts at 1'
+);
+
+select is(
+  (select count(*)::int from public.recipe_versions
+     where recipe_id = (select id from alice_recipe) and version_number = 1),
+  1,
+  'create: a version-1 snapshot was recorded'
+);
+
 select lives_ok(
   $$ select public.save_recipe(
        jsonb_build_object(
          'id', (select id from alice_recipe),
+         'baseVersion', 1,
          'title', 'Herb Roast Chicken (updated)',
          'tags', jsonb_build_array('updated'),
          'categoryIds', jsonb_build_array(),
@@ -82,7 +96,7 @@ select lives_ok(
          'instructionSections', jsonb_build_array()
        )
      ) $$,
-  'edit: alice can save an update to her own recipe'
+  'edit: alice can save an update against the version she loaded'
 );
 
 select is(
@@ -99,6 +113,44 @@ select results_eq(
   'edit: old ingredient lines were replaced, not accumulated'
 );
 
+select is(
+  (select version from public.recipes where id = (select id from alice_recipe)),
+  2,
+  'edit: version incremented to 2'
+);
+
+select is(
+  (select count(*)::int from public.recipe_versions where recipe_id = (select id from alice_recipe)),
+  2,
+  'edit: a second snapshot was recorded alongside the first'
+);
+
+select throws_ok(
+  $$ select public.save_recipe(
+       jsonb_build_object(
+         'id', (select id from alice_recipe),
+         'baseVersion', 1,
+         'title', 'Stale edit'
+       )
+     ) $$,
+  'recipe has changed since it was loaded',
+  'conflict: editing against a stale baseVersion is rejected'
+);
+
+select is(
+  (select version from public.recipes where id = (select id from alice_recipe)),
+  2,
+  'conflict check: the rejected stale edit did not touch the version'
+);
+
+select throws_ok(
+  $$ select public.save_recipe(
+       jsonb_build_object('id', (select id from alice_recipe), 'title', 'Missing base version')
+     ) $$,
+  'baseVersion is required when editing an existing recipe',
+  'edit: omitting baseVersion entirely is rejected, not silently allowed'
+);
+
 select set_config(
   'request.jwt.claims',
   json_build_object('sub', '33333333-3333-3333-3333-333333333333', 'role', 'authenticated')::text,
@@ -107,7 +159,7 @@ select set_config(
 
 select throws_ok(
   $$ select public.save_recipe(
-       jsonb_build_object('id', (select id from alice_recipe), 'title', 'Hijacked')
+       jsonb_build_object('id', (select id from alice_recipe), 'baseVersion', 2, 'title', 'Hijacked')
      ) $$,
   'recipe not found',
   'a different household cannot edit alice''s recipe'
