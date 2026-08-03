@@ -57,6 +57,7 @@ function AuthenticatedRouteBoundary() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={isOnboarded}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="recipe" />
         <Stack.Screen
           name="settings"
           options={{

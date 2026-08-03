@@ -1,0 +1,100 @@
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
+
+import { supabase } from '../supabase/instance';
+
+export interface PickedHeroImage {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+const MAX_DIMENSION = 1200;
+const JPEG_QUALITY = 0.85;
+
+/**
+ * Square crop via the native OS crop UI (IMG-04) — deliberately
+ * separate from src/photoImport/photoImport.ts's pickExistingPhoto(),
+ * which preserves the original, uncropped image for Phase 10's
+ * photo-import flow (IMG-02/IMG-03 require the original stay viewable).
+ * A recipe's hero image has no such requirement.
+ */
+export async function pickHeroImage(): Promise<PickedHeroImage | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return null;
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    quality: 1,
+    allowsEditing: true,
+    aspect: [1, 1],
+  });
+
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (!asset) return null;
+  return { uri: asset.uri, width: asset.width, height: asset.height };
+}
+
+/**
+ * Caps the image's dimensions and re-saves it as a fresh JPEG — this
+ * strips EXIF metadata (location, device info) as a side effect of the
+ * re-encode, per Phase 4's security checklist. Deliberately an explicit
+ * step rather than relying on the picker's own crop output already
+ * being metadata-free, since that would be leaning on an OS
+ * implementation detail rather than something this code guarantees.
+ */
+export async function stripMetadataAndResize(uri: string): Promise<string> {
+  const image = await ImageManipulator.manipulate(uri)
+    .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION })
+    .renderAsync();
+  const result = await image.saveAsync({ compress: JPEG_QUALITY, format: SaveFormat.JPEG });
+  return result.uri;
+}
+
+// RFC 4122 v4 UUID from crypto.getRandomValues (already polyfilled for
+// the RN runtime by react-native-get-random-values, per
+// src/supabase/secureStore.ts) — avoids a whole new dependency for
+// something this small.
+function randomId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Uploads to the recipe-images bucket (Phase 3, ADR-0008) under its
+ * established "<household_id>/..." path convention, keyed by a random
+ * id rather than the recipe's own id — a hero image can be picked
+ * before a brand-new recipe has been saved (and so has no id yet), and
+ * hero_image_path is just wherever the file lives, not required to
+ * structurally match the recipe it belongs to.
+ */
+export async function uploadHeroImage(householdId: string, localUri: string): Promise<string> {
+  const path = `${householdId}/${randomId()}.jpg`;
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('recipe-images')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw error;
+  return path;
+}
+
+/**
+ * The recipe-images bucket is private (Phase 3, ADR-0008) — a plain
+ * public URL won't load, so display needs a short-lived signed URL
+ * instead. Returns null on failure rather than throwing, so callers can
+ * fall back to a placeholder instead of failing the whole screen over
+ * a missing/stale image.
+ */
+export async function getHeroImageUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
+
+  if (error) return null;
+  return data.signedUrl;
+}

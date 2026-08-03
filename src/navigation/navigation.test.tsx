@@ -54,6 +54,15 @@ jest.mock('../supabase/instance', () => ({
           }),
         };
       }
+      if (table === 'recipes') {
+        // Library now fetches real recipes (Phase 4) — empty list keeps
+        // this suite's Library assertion at its original empty-state shape.
+        return {
+          select: () => ({
+            order: () => Promise.resolve({ data: [], error: null }),
+          }),
+        };
+      }
       // household_membership
       return {
         select: () => ({
@@ -101,8 +110,12 @@ describe('app navigation shell', () => {
 
   it('renders the Library tab on navigation', async () => {
     act(() => router.navigate('/library'));
+    // Library now fetches real recipes on focus (Phase 4) — this test is
+    // about tab routing, not that data round-trip, so it checks the
+    // loading state that renders synchronously on mount rather than
+    // racing the fetch to a loaded/empty state.
     await waitFor(() => {
-      expect(screen.getByTestId('library-placeholder')).toBeOnTheScreen();
+      expect(screen.getByTestId('library-loading')).toBeOnTheScreen();
     });
   });
 
