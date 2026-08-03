@@ -11,7 +11,12 @@ import {
 } from './local';
 import { fetchAllCategories, fetchChangedRecipes, fetchDeletedRecipes } from './remote';
 import { syncHousehold } from './syncEngine';
-import { EMPTY_CURSOR, SYNC_PAGE_SIZE, type DeletedRecipeTombstone, type SyncedRecipe } from './types';
+import {
+  EMPTY_CURSOR,
+  SYNC_PAGE_SIZE,
+  type DeletedRecipeTombstone,
+  type SyncedRecipe,
+} from './types';
 
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
 jest.mock('../observability', () => ({ logError: jest.fn() }));
@@ -45,7 +50,11 @@ const mockedGetHeroImageUrl = getHeroImageUrl as jest.Mock;
 const mockedEnsureImageCached = ensureImageCached as jest.Mock;
 const mockedLogError = logError as jest.Mock;
 
-function makeRecipe(id: string, updatedAt: string, heroImagePath: string | null = null): SyncedRecipe {
+function makeRecipe(
+  id: string,
+  updatedAt: string,
+  heroImagePath: string | null = null,
+): SyncedRecipe {
   return {
     id,
     householdId: 'h1',
@@ -198,7 +207,9 @@ describe('syncHousehold', () => {
   });
 
   it('always refreshes categories, even with nothing else to sync', async () => {
-    mockedFetchAllCategories.mockResolvedValue([{ id: 'c1', groupName: 'protein', value: 'Chicken' }]);
+    mockedFetchAllCategories.mockResolvedValue([
+      { id: 'c1', groupName: 'protein', value: 'Chicken' },
+    ]);
 
     await syncHousehold('h1');
 

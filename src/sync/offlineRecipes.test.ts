@@ -106,9 +106,7 @@ describe('readCachedImageUri', () => {
     });
     mockedGetDatabase.mockResolvedValue(db);
 
-    await expect(readCachedImageUri('h1/r1.jpg')).resolves.toBe(
-      'file:///cache/hero-images/r1.jpg',
-    );
+    await expect(readCachedImageUri('h1/r1.jpg')).resolves.toBe('file:///cache/hero-images/r1.jpg');
   });
 
   it('returns null when the image has not been cached yet', async () => {

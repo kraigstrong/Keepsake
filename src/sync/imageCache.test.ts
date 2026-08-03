@@ -3,8 +3,8 @@ import type { LocalDb } from './local';
 
 function createMockDb(overrides: Partial<LocalDb> = {}): LocalDb & { runAsync: jest.Mock } {
   return {
-    getFirstAsync: async <T,>() => null as T | null,
-    getAllAsync: async <T,>() => [] as T[],
+    getFirstAsync: async <T>() => null as T | null,
+    getAllAsync: async <T>() => [] as T[],
     runAsync: jest.fn(async () => undefined),
     withTransactionAsync: async (task) => {
       await task();
@@ -20,7 +20,10 @@ function createMockImageStore(overrides: Partial<ImageStore> = {}): ImageStore &
 } {
   return {
     ensureDirectory: jest.fn(),
-    downloadTo: jest.fn(async () => ({ uri: 'file:///cache/hero-images/h1_r1.jpg', byteSize: 1000 })),
+    downloadTo: jest.fn(async () => ({
+      uri: 'file:///cache/hero-images/h1_r1.jpg',
+      byteSize: 1000,
+    })),
     deleteFile: jest.fn(),
     deleteDirectory: jest.fn(),
     ...overrides,
@@ -32,10 +35,18 @@ describe('ensureImageCached', () => {
     const db = createMockDb();
     const imageStore = createMockImageStore();
 
-    const uri = await ensureImageCached(db, 'h1/r1.jpg', 'https://signed.example/r1.jpg', imageStore);
+    const uri = await ensureImageCached(
+      db,
+      'h1/r1.jpg',
+      'https://signed.example/r1.jpg',
+      imageStore,
+    );
 
     expect(imageStore.ensureDirectory).toHaveBeenCalled();
-    expect(imageStore.downloadTo).toHaveBeenCalledWith('https://signed.example/r1.jpg', 'h1_r1.jpg');
+    expect(imageStore.downloadTo).toHaveBeenCalledWith(
+      'https://signed.example/r1.jpg',
+      'h1_r1.jpg',
+    );
     expect(uri).toBe('file:///cache/hero-images/h1_r1.jpg');
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('insert into cached_images'),
@@ -48,7 +59,7 @@ describe('ensureImageCached', () => {
 
   it('returns the existing local file and just bumps last_accessed_at on a cache hit', async () => {
     const db = createMockDb({
-      getFirstAsync: async <T,>() =>
+      getFirstAsync: async <T>() =>
         ({
           path: 'h1/r1.jpg',
           local_uri: 'file:///cache/hero-images/h1_r1.jpg',
@@ -58,7 +69,12 @@ describe('ensureImageCached', () => {
     });
     const imageStore = createMockImageStore();
 
-    const uri = await ensureImageCached(db, 'h1/r1.jpg', 'https://signed.example/r1.jpg', imageStore);
+    const uri = await ensureImageCached(
+      db,
+      'h1/r1.jpg',
+      'https://signed.example/r1.jpg',
+      imageStore,
+    );
 
     expect(imageStore.downloadTo).not.toHaveBeenCalled();
     expect(uri).toBe('file:///cache/hero-images/h1_r1.jpg');
@@ -73,12 +89,22 @@ describe('ensureImageCached', () => {
     // getAllAsync reflects post-insert state, as a real DB read would —
     // this fixture's total (MAX + 500) already exceeds budget on its own.
     const existingRows = [
-      { path: 'old', local_uri: 'file:///old.jpg', byte_size: MAX_CACHE_BYTES - 500, last_accessed_at: '2026-08-01T00:00:00.000Z' },
-      { path: 'newer', local_uri: 'file:///newer.jpg', byte_size: 1000, last_accessed_at: '2026-08-02T00:00:00.000Z' },
+      {
+        path: 'old',
+        local_uri: 'file:///old.jpg',
+        byte_size: MAX_CACHE_BYTES - 500,
+        last_accessed_at: '2026-08-01T00:00:00.000Z',
+      },
+      {
+        path: 'newer',
+        local_uri: 'file:///newer.jpg',
+        byte_size: 1000,
+        last_accessed_at: '2026-08-02T00:00:00.000Z',
+      },
     ];
     const db = createMockDb({
-      getFirstAsync: async <T,>() => null as T | null,
-      getAllAsync: async <T,>() => existingRows as T[],
+      getFirstAsync: async <T>() => null as T | null,
+      getAllAsync: async <T>() => existingRows as T[],
     });
     const imageStore = createMockImageStore({
       downloadTo: jest.fn(async () => ({ uri: 'file:///newer.jpg', byteSize: 1000 })),
@@ -90,17 +116,21 @@ describe('ensureImageCached', () => {
     // evicted first — that alone brings it back under budget.
     expect(imageStore.deleteFile).toHaveBeenCalledTimes(1);
     expect(imageStore.deleteFile).toHaveBeenCalledWith('file:///old.jpg');
-    expect(db.runAsync).toHaveBeenCalledWith(
-      'delete from cached_images where path = ?',
-      'old',
-    );
+    expect(db.runAsync).toHaveBeenCalledWith('delete from cached_images where path = ?', 'old');
     expect(imageStore.deleteFile).not.toHaveBeenCalledWith('file:///newer.jpg');
   });
 
   it('does not evict anything when under budget', async () => {
     const db = createMockDb({
-      getAllAsync: async <T,>() =>
-        [{ path: 'r1', local_uri: 'file:///r1.jpg', byte_size: 500, last_accessed_at: '2026-08-01T00:00:00.000Z' }] as T[],
+      getAllAsync: async <T>() =>
+        [
+          {
+            path: 'r1',
+            local_uri: 'file:///r1.jpg',
+            byte_size: 500,
+            last_accessed_at: '2026-08-01T00:00:00.000Z',
+          },
+        ] as T[],
     });
     const imageStore = createMockImageStore();
 

@@ -11,7 +11,9 @@ const ConnectivityContext = createContext<ConnectivityContextValue | null>(null)
 // treated as reachable rather than offline, so a brand-new app launch
 // doesn't flash an incorrect offline banner before NetInfo's first real
 // reading arrives.
-function isOnlineFromState(state: Pick<NetInfoState, 'isConnected' | 'isInternetReachable'>): boolean {
+function isOnlineFromState(
+  state: Pick<NetInfoState, 'isConnected' | 'isInternetReachable'>,
+): boolean {
   return state.isConnected !== false && state.isInternetReachable !== false;
 }
 

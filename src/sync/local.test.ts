@@ -50,7 +50,7 @@ describe('readSyncState', () => {
 
   it('maps a persisted row back to a SyncCursor', async () => {
     const db = createMockDb({
-      getFirstAsync: async <T,>() =>
+      getFirstAsync: async <T>() =>
         ({
           recipes_cursor_updated_at: '2026-08-05T00:00:00.000Z',
           recipes_cursor_id: 'r1',

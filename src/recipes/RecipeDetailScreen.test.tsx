@@ -115,7 +115,9 @@ it('shows the recipe from the local cache immediately, even when the live fetch 
   mockedOfflineRecipes.readLocalCategories.mockResolvedValue([
     { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
   ]);
-  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue('file:///cache/hero-images/existing.jpg');
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(
+    'file:///cache/hero-images/existing.jpg',
+  );
   // Never resolves — simulates offline; the local read alone should be
   // enough to show the recipe with no loading state or error.
   mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));

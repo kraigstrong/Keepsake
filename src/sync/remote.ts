@@ -79,15 +79,13 @@ export async function fetchChangedRecipes(
   cursorId: string | null,
   limit: number = SYNC_PAGE_SIZE,
 ): Promise<SyncedRecipe[]> {
-  let query = supabase
-    .from('recipes')
-    .select(
-      `id, household_id, version, title, hero_image_path, active_time_minutes, total_time_minutes,
+  let query = supabase.from('recipes').select(
+    `id, household_id, version, title, hero_image_path, active_time_minutes, total_time_minutes,
        yield_text, permanent_notes, source_url, source_attribution, tags, updated_at,
        recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
        recipe_categories ( category_id )`,
-    );
+  );
 
   const filter = afterCursorFilter('updated_at', cursorUpdatedAt, cursorId);
   if (filter) query = query.or(filter);

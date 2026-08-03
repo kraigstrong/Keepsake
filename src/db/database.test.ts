@@ -1,6 +1,12 @@
 import { deleteDatabaseAsync, openDatabaseAsync } from 'expo-sqlite';
 
-import { DATABASE_NAME, getDatabase, runMigrations, wipeDatabase, type MigratableDatabase } from './database';
+import {
+  DATABASE_NAME,
+  getDatabase,
+  runMigrations,
+  wipeDatabase,
+  type MigratableDatabase,
+} from './database';
 import { SCHEMA_VERSION } from './schema';
 
 jest.mock('expo-sqlite', () => ({
@@ -23,7 +29,7 @@ function createMockDb(initialUserVersion: number): MigratableDatabase & { execAs
 
   return {
     execAsync,
-    getFirstAsync: async <T,>() => ({ user_version: userVersion }) as T,
+    getFirstAsync: async <T>() => ({ user_version: userVersion }) as T,
     withTransactionAsync: async (task) => {
       await task();
     },
@@ -41,7 +47,9 @@ describe('runMigrations', () => {
     );
     expect(finalVersionCall?.[0]).toBe(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     expect(
-      db.execAsync.mock.calls.some(([source]) => /create table if not exists recipes/i.test(source)),
+      db.execAsync.mock.calls.some(([source]) =>
+        /create table if not exists recipes/i.test(source),
+      ),
     ).toBe(true);
   });
 
@@ -64,9 +72,9 @@ describe('runMigrations', () => {
   it('throws rather than silently skipping a gap in the migration table', async () => {
     const db = createMockDb(0);
 
-    await expect(runMigrations(db, { 1: ['create table if not exists x (id text)'] }, 2)).rejects.toThrow(
-      'Missing local migration for schema version 2',
-    );
+    await expect(
+      runMigrations(db, { 1: ['create table if not exists x (id text)'] }, 2),
+    ).rejects.toThrow('Missing local migration for schema version 2');
   });
 });
 
@@ -74,7 +82,7 @@ describe('getDatabase / wipeDatabase', () => {
   function mockOpenedDb() {
     return {
       closeAsync: jest.fn(async () => undefined),
-      getFirstAsync: async <T,>() => ({ user_version: SCHEMA_VERSION }) as T,
+      getFirstAsync: async <T>() => ({ user_version: SCHEMA_VERSION }) as T,
       execAsync: jest.fn(),
       withTransactionAsync: async (task: () => Promise<void>) => task(),
     };
