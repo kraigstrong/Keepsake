@@ -5,10 +5,16 @@ The single source of truth for "where are we." Update this at the start and end 
 ## Current
 
 - **Phase:** 5 — Drafts, Version History, and Edit Conflicts
-- **Status:** Not started
-- **Branch:** _(none yet)_
-- **Next action:** Push `phase-4-manual-recipe` and open its PR (see Open questions for the exact command and description), then run the `start-phase` skill for Phase 5 once it's merged. Build scope per execution-plan.md: user-specific drafts, base-version numbers, draft persistence, explicit save transaction, immutable snapshots, version history, restore, conflict handling.
-- **Blocked on:** Nothing technical for starting Phase 5's design/schema work, but land Phase 4's PR first — Phase 5 builds directly on `save_recipe` and the editor's draft shell.
+- **Status:** Build scope complete, exit review not yet run
+- **Branch:** `phase-5-drafts-versions-conflicts` (based on `main`, after Phase 4's PR merged)
+- **Next action:** Run the `exit-phase` skill and get a Pass/Conditional Pass/Fail decision from the developer before starting Phase 6.
+- **Blocked on:** Nothing technical. Same category of gap as Phase 4: no live Simulator demonstration, and the new migrations/pgTAP have never executed anywhere in this sandbox (no Docker) — both need real CI or the developer's own machine to close out.
+
+## Phase 5 summary (for reference — see History below once the exit record lands)
+
+12 commits on `phase-5-drafts-versions-conflicts`. ADR-0011 resolved two design questions before writing any schema: drafts are server-synced and scoped to the owning user, not the household (prd.md's "user-specific" wording, distinct from cooking-checklist progress's explicit "device-specific"); conflict resolution is block-and-reload, not merge (nothing in prd.md or execution-plan.md describes a diff/merge UI, and "conflict prevention" is the plan's own phrase). `recipes.version` plus an immutable `recipe_versions` snapshot table (one jsonb blob per explicit save, not a parallel normalized schema — nothing needs to query inside old versions, only list and restore them). `save_recipe` now requires a `baseVersion` on every edit, checked against the row's current version before any write; a stale value fails the whole call atomically, and a missing one is rejected outright rather than silently allowed. `restore_recipe_version` reapplies a snapshot through `save_recipe`'s own atomic path rather than duplicating its write logic, supplying the recipe's current version as its own baseVersion so it succeeds by construction instead of needing a bypass flag. `recipe_drafts` (owner-only RLS, two partial unique indexes since Postgres treats every null `recipe_id` as distinct) with `upsert_draft`/`delete_draft` RPCs — the first table in this schema where the write boundary is per-user ownership rather than household membership, still RPC-only so `household_id` stays caller-derived rather than client-supplied. `RecipeEditorScreen` now prefers an existing draft over the server copy on load, autosaves a debounced draft on every change (skipping its first post-load firing so unedited content isn't written back as a "draft"), and shows a distinct conflict state with a reload action when a save is rejected for a stale version — the user's own draft is left alone either way, since reload only replaces what's on screen. New `RecipeVersionHistoryScreen` at `/recipe/[id]/history`, reached from the detail screen's new History button, lists every save with a restore action (disabled on the newest, since restoring the version already showing isn't meaningful).
+
+REC-08, VER-01/02/03/04 → `Done (tested)`. 43 suites, 219 passed, 1 skipped; typecheck/lint/format clean. Same evidence gaps as Phase 4 (see Blocked-on above) — no Simulator/device verification, migrations/pgTAP unexecuted until real CI runs them.
 
 ## Phase 4 Conditional Pass follow-ups (tracked until closed)
 
@@ -69,10 +75,6 @@ ADR-0008 (email OTP auth, not passwords; SECURITY DEFINER RPCs, not Edge Functio
 
 ## Open questions for the developer
 
-- Phase 4's PR isn't opened yet — push `phase-4-manual-recipe` and open a PR against `main` using `.github/PULL_REQUEST_TEMPLATE.md` when ready:
-  ```bash
-  git push -u origin phase-4-manual-recipe
-  ```
-  PR title: "Phase 4: Manual Recipe Vertical Slice". Body should cover the same ground as the Phase Completion Report from this session's exit review (product increment, PRD IDs, automated evidence, the two Conditional Pass follow-ups, known limitations).
-- `expo-image-manipulator` (this phase) joins `react-native-svg` (Phase 3.5) as native dependencies added since the last real device build — a fresh `pod install` is needed before either shows up correctly in a real build.
-- Staging Supabase connectivity is the one Phase 3 Conditional Pass follow-up still genuinely open — nothing in this environment can reach a real staging project, and per this session's Phase 4 exit discussion, the credentials likely already exist (Phase 0 provisioning) — the gap is a verification pass on your own machine, not new setup. Worth doing before too many more phases stack on top of unverified auth/email delivery.
+- Phase 5's exit decision and PR — pending the `exit-phase` skill run.
+- `expo-image-manipulator` (Phase 4) and `react-native-svg` (Phase 3.5) are native dependencies added since the last real device build — a fresh `pod install` is needed before either shows up correctly in a real build.
+- Staging Supabase connectivity is the one Phase 3 Conditional Pass follow-up still genuinely open — nothing in this environment can reach a real staging project, and per the Phase 4 exit discussion, the credentials likely already exist (Phase 0 provisioning) — the gap is a verification pass on your own machine, not new setup. Worth doing before too many more phases stack on top of unverified auth/email delivery.
