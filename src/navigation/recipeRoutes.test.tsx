@@ -1,0 +1,138 @@
+// See navigation.test.tsx for why this file uses one shared render,
+// navigated between with the imperative `router` API, rather than one
+// renderRouter() call per test.
+import '@testing-library/react-native/dont-cleanup-after-each';
+
+import { act } from 'react';
+
+import { router } from 'expo-router';
+import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+
+// Phase 4 end-to-end coverage: the manual-recipe routes (app/recipe/)
+// are reachable through the real authenticated route boundary, not
+// just as isolated component tests — this is what would have caught
+// app/_layout.tsx missing a `<Stack.Screen name="recipe" />` entry
+// alongside "(tabs)" and "settings" (found while writing this suite:
+// the route existed on disk but wasn't registered under the
+// Stack.Protected guard, so it was unreachable in the real app).
+jest.mock('../supabase/instance', () => ({
+  supabase: {
+    auth: {
+      getSession: jest
+        .fn()
+        .mockResolvedValue({ data: { session: { user: { id: 'test-user' } } }, error: null }),
+      onAuthStateChange: jest
+        .fn()
+        .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+    },
+    from: jest.fn((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { id: 'test-user', display_name: 'Test User' },
+                  error: null,
+                }),
+            }),
+            in: () =>
+              Promise.resolve({
+                data: [{ id: 'test-user', display_name: 'Test User' }],
+                error: null,
+              }),
+          }),
+        };
+      }
+      if (table === 'households') {
+        return {
+          select: () => ({
+            maybeSingle: () => Promise.resolve({ data: { id: 'household-1' }, error: null }),
+          }),
+        };
+      }
+      if (table === 'categories') {
+        return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
+      }
+      if (table === 'recipes') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () =>
+                Promise.resolve({
+                  data: {
+                    id: 'recipe-1',
+                    title: 'Herb Roast Chicken',
+                    hero_image_path: null,
+                    active_time_minutes: null,
+                    total_time_minutes: null,
+                    yield_text: null,
+                    permanent_notes: null,
+                    source_url: null,
+                    source_attribution: null,
+                    tags: [],
+                    recipe_ingredient_sections: [],
+                    recipe_instruction_sections: [],
+                    recipe_categories: [],
+                  },
+                  error: null,
+                }),
+            }),
+          }),
+        };
+      }
+      // household_membership
+      return {
+        select: () => ({
+          eq: () => Promise.resolve({ data: [{ user_id: 'test-user' }], error: null }),
+        }),
+      };
+    }),
+  },
+}));
+
+jest.mock('expo-linking', () => ({
+  getInitialURL: jest.fn().mockResolvedValue(null),
+  addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+}));
+
+describe('recipe routes', () => {
+  beforeAll(async () => {
+    renderRouter('./app', { initialUrl: '/' });
+    await act(async () => {});
+    await waitFor(() => {
+      expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();
+    });
+  }, 20000);
+
+  it('reaches the create screen at /recipe/new', async () => {
+    act(() => router.push('/recipe/new'));
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-editor-screen')).toBeOnTheScreen();
+    });
+    expect(screen.getByTestId('recipe-title-input')).toHaveProp('value', '');
+  });
+
+  // These two check the screen's loading state rather than its fully
+  // loaded content — the fetch/render round-trip itself is already
+  // covered by RecipeDetailScreen.test.tsx and RecipeEditorScreen.test.tsx
+  // in isolation. What this suite adds on top is proof the routes are
+  // registered and reachable at all with the right dynamic segment
+  // (recipe-detail-loading only renders once useLocalSearchParams and the
+  // route match succeed).
+  it('reaches the detail screen at /recipe/[id]', async () => {
+    act(() => router.push('/recipe/recipe-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-detail-loading')).toBeOnTheScreen();
+    });
+  });
+
+  it('reaches the edit screen at /recipe/[id]/edit', async () => {
+    act(() => router.push('/recipe/recipe-1/edit'));
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-editor-loading')).toBeOnTheScreen();
+    });
+  });
+
+  afterAll(() => cleanup());
+});
