@@ -7,7 +7,9 @@ create or replace function public.create_invitation()
 returns table (id uuid, token text, expires_at timestamptz)
 language plpgsql
 security definer
-set search_path = public
+-- extensions: gen_random_bytes()/digest() (pgcrypto) live there on
+-- Supabase, not in public.
+set search_path = public, extensions
 as $$
 declare
   caller_household_id uuid;
@@ -19,11 +21,15 @@ begin
     raise exception 'caller does not belong to a household' using errcode = 'P0001';
   end if;
 
+  -- invitations.expires_at is qualified with the table name below —
+  -- this function's own RETURNS TABLE column of the same name would
+  -- otherwise make the bare reference ambiguous ("column reference
+  -- \"expires_at\" is ambiguous").
   if (
     select count(*) from public.invitations
-    where household_id = caller_household_id
-      and accepted_at is null
-      and expires_at > now()
+    where invitations.household_id = caller_household_id
+      and invitations.accepted_at is null
+      and invitations.expires_at > now()
   ) >= 5 then
     raise exception 'too many pending invitations for this household' using errcode = 'P0001';
   end if;

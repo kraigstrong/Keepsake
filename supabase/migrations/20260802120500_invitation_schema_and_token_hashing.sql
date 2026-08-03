@@ -39,7 +39,9 @@ create or replace function public.create_invitation()
 returns table (id uuid, token text, expires_at timestamptz)
 language plpgsql
 security definer
-set search_path = public
+-- extensions: gen_random_bytes()/digest() (pgcrypto) live there on
+-- Supabase, not in public.
+set search_path = public, extensions
 as $$
 declare
   caller_household_id uuid;

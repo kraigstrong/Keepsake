@@ -21,4 +21,10 @@ regexes = [
   # src/deepLinks/parseInvitationLink.test.ts — fake invitation token used
   # to test link-parsing/rejection logic, not a real credential.
   '''abcDEF123456_-xyzQRS789''',
+  # src/deepLinks/DeepLinkProvider.test.tsx, src/navigation/
+  # onboarding.acceptingInvite.test.tsx — fake pending-invitation tokens
+  # used to test deep-link capture and the onboarding gate, not real
+  # credentials.
+  '''abcdefghijklmnopqrstuvwxyz012345''',
+  '''zyxwvutsrqponmlkjihgfedcba098765''',
 ]
