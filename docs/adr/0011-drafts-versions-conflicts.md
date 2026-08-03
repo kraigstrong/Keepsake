@@ -31,11 +31,13 @@ questions needed resolving before writing any migration:
 **Drafts are server-synced, scoped to the owning user, not the household.** A `recipe_drafts`
 table (`id`, `recipe_id` nullable — null means a draft for a not-yet-created recipe —, `user_id`,
 `household_id` denormalized for RLS, `draft_payload jsonb`, `updated_at`), with RLS restricted to
-`auth.uid() = user_id`. Unlike every other recipe table, this is genuinely single-owner data with
-a trivial ownership check (no household-membership derivation needed), so it's the one place a
-direct RLS-enforced client write is appropriate instead of routing through a SECURITY DEFINER RPC
-— Supabase's own idiom for owner-scoped rows, and simpler than adding another RPC for no
-authorization benefit.
+`auth.uid() = user_id`. Ownership itself is a trivial check with no household-membership
+derivation needed, but writes still go through `upsert_draft`/`delete_draft` RPCs rather than raw
+client inserts — a direct insert would need the client to supply `household_id` itself, which is
+exactly the "never trust a client-supplied household_id" principle ADR-0008 established for every
+other write in this schema. The RPCs re-derive both `user_id` (`auth.uid()`) and `household_id`
+(`my_household_id()`) from the caller, the same pattern as `save_recipe`, so this table doesn't
+introduce a second write pattern into the schema for the sake of one table.
 
 **Version history is one JSONB snapshot per explicit save, not a fully normalized versioned
 schema.** `recipes` gets a `version integer not null default 1` column. `recipe_versions`
