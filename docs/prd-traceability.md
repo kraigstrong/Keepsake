@@ -16,15 +16,15 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| REC-01 | Title, hero image, active/total time, yield | 4 | Not Started |
-| REC-02 | Ingredient sections | 4 | Not Started |
-| REC-03 | Instruction sections | 4 | Not Started |
-| REC-04 | Permanent notes | 4 | Not Started |
+| REC-01 | Title, hero image, active/total time, yield | 4 | Done (tested) |
+| REC-02 | Ingredient sections | 4 | Done (tested) |
+| REC-03 | Instruction sections | 4 | Done (tested) |
+| REC-04 | Permanent notes | 4 | Done (tested) |
 | REC-05 | Cooking history, separate from permanent notes | 15 | Not Started |
-| REC-06 | Source URL and attribution | 4 / 8 | Not Started |
-| REC-07 | Structured categories and tags on the recipe | 4 | Not Started |
+| REC-06 | Source URL and attribution | 4 / 8 | Done (tested) |
+| REC-07 | Structured categories and tags on the recipe | 4 | Done (tested) |
 | REC-08 | Version history | 5 | Not Started |
-| REC-09 | No recipe description field exists | 4 | Not Started |
+| REC-09 | No recipe description field exists | 4 | Done (tested) |
 
 ## Import (IMP)
 
@@ -35,7 +35,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | IMP-03 | Bulk URL import | 9 | Not Started |
 | IMP-04 | Camera import | 10 | Not Started |
 | IMP-05 | Existing photo import | 10 | Not Started |
-| IMP-06 | Manual creation | 4 | Not Started |
+| IMP-06 | Manual creation | 4 | Done (tested) |
 | IMP-07 | No mandatory review step after import | 8 | Not Started |
 
 ## AI Responsibilities (AI)
@@ -58,7 +58,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | IMG-01 | Website recipe images stored locally, never hotlinked | 8 | Not Started |
 | IMG-02 | Photo import preserves the original image | 10 | Not Started |
 | IMG-03 | Original photo viewable later | 10 | Not Started |
-| IMG-04 | Replace / crop-square / remove image | 4 / 10 | Not Started |
+| IMG-04 | Replace / crop-square / remove image | 4 / 10 | Done (tested) |
 
 ## Units and Scaling (UNIT)
 
@@ -75,9 +75,9 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4 | Not Started |
-| ORG-02 | Multiple category selections allowed | 4 | Not Started |
-| ORG-03 | Free-form tags supported | 4 | Not Started |
+| ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4 | Done (tested) |
+| ORG-02 | Multiple category selections allowed | 4 | Done (tested) |
+| ORG-03 | Free-form tags supported | 4 | Done (tested) |
 | ORG-04 | AI suggests categories and tags | 8 | Not Started |
 
 ## Search (SRCH)
@@ -136,7 +136,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | NOTE-01 | Short note capture after cooking | 15 | Not Started |
 | NOTE-02 | Chronological note history | 15 | Not Started |
 | NOTE-03 | Newest note preview near top | 15 | Not Started |
-| NOTE-04 | Permanent recipe notes remain a separate concept | 4 / 15 | Not Started |
+| NOTE-04 | Permanent recipe notes remain a separate concept | 4 / 15 | In Progress |
 
 ## Grocery Export (GRO)
 
