@@ -9,6 +9,11 @@ interface SessionContextValue {
   isLoading: boolean;
   sendOtp: (email: string) => Promise<{ error: string | null }>;
   verifyOtp: (email: string, code: string) => Promise<{ error: string | null }>;
+  // ADR-0012: opt-in alternative to the OTP flow above — sets a password
+  // on the caller's own already-authenticated account, doesn't affect
+  // anyone else's sign-in method.
+  setPassword: (password: string) => Promise<{ error: string | null }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -61,12 +66,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   };
 
+  const setPassword = async (password: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error: error?.message ?? null };
+  };
+
+  const signInWithPassword = async (
+    email: string,
+    password: string,
+  ): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message ?? null };
+  };
+
   const signOut = async (): Promise<void> => {
     await supabase.auth.signOut();
   };
 
   return (
-    <SessionContext.Provider value={{ session, isLoading, sendOtp, verifyOtp, signOut }}>
+    <SessionContext.Provider
+      value={{
+        session,
+        isLoading,
+        sendOtp,
+        verifyOtp,
+        setPassword,
+        signInWithPassword,
+        signOut,
+      }}
+    >
       {children}
     </SessionContext.Provider>
   );
