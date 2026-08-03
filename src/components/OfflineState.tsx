@@ -25,6 +25,8 @@ export function OfflineState({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,

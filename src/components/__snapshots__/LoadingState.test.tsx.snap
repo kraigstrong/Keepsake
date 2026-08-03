@@ -13,16 +13,16 @@ exports[`LoadingState matches its snapshot 1`] = `
 >
   <ActivityIndicator
     accessible={true}
-    color="#2E7D5B"
+    color="#B5502E"
     role="progressbar"
   />
   <Text
     style={
       {
-        "color": "#5C5C5C",
+        "color": "rgba(33, 29, 24, 0.55)",
         "fontSize": 16,
         "fontWeight": "400",
-        "lineHeight": 22,
+        "lineHeight": 27,
       }
     }
   >

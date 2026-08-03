@@ -35,12 +35,12 @@ exports[`Chip matches its snapshot 1`] = `
   style={
     [
       {
-        "backgroundColor": "#F5F5F5",
-        "borderColor": "#E0E0E0",
+        "backgroundColor": "#F1EBDF",
+        "borderColor": "rgba(33, 29, 24, 0.12)",
         "borderRadius": 999,
         "borderWidth": 1,
         "paddingHorizontal": 8,
-        "paddingVertical": 4,
+        "paddingVertical": 6,
       },
       false,
       false,
@@ -51,10 +51,10 @@ exports[`Chip matches its snapshot 1`] = `
     style={
       [
         {
-          "color": "#1A1A1A",
+          "color": "#211D18",
           "fontSize": 13,
           "fontWeight": "400",
-          "lineHeight": 18,
+          "lineHeight": 19,
         },
         false,
       ]
