@@ -82,13 +82,18 @@ jest.mock('../supabase/instance', () => ({
 // late, not to anything in this file. All assertions pass and check real
 // rendered content, not a swallowed failure.
 describe('app navigation shell', () => {
+  // Explicit timeout (not jest.config.js's testTimeout, which CI has shown
+  // isn't honored per-project in this multi-project setup) — CI's slower/
+  // more variable runners need real headroom beyond the 5000ms default for
+  // renderRouter()'s full settle, especially with the tab bar now doing
+  // real SVG rendering work (Phase 3.5).
   beforeAll(async () => {
     renderRouter('./app', { initialUrl: '/' });
     await act(async () => {});
     await waitFor(() => {
       expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();
     });
-  });
+  }, 20000);
 
   it('renders This Week as the default screen', () => {
     expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();

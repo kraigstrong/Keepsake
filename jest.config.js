@@ -21,14 +21,6 @@ module.exports = {
       // tests live under src/navigation/ instead, and use renderRouter's
       // context param to point back at app/.
       testMatch: ['<rootDir>/src/**/*.test.{ts,tsx}'],
-      // Default 5000ms is too tight for renderRouter()-based navigation
-      // tests under CI's slower/more variable runners — consistently fine
-      // locally, but flaky-timed-out in CI once the tab bar started doing
-      // real SVG rendering work (Phase 3.5). These tests wait on real
-      // async settling (see the extensive comments in
-      // src/navigation/navigation.test.tsx), not a fixed busy-loop, so a
-      // bigger ceiling is the right fix, not a smaller one.
-      testTimeout: 20000,
     },
     {
       ...jestExpoPreset,

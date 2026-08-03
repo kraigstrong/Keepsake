@@ -48,6 +48,9 @@ jest.mock('../deepLinks/DeepLinkProvider', () => ({
 }));
 
 describe('onboarding gate — has a profile, needs a household, has a pending invitation', () => {
+  // Explicit timeout — see navigation.test.tsx for why (CI-only flakiness
+  // against the 5000ms default, jest.config.js's testTimeout isn't
+  // honored per-project here).
   it('auto-accepts instead of showing the create-a-household button', async () => {
     renderRouter('./app', { initialUrl: '/' });
     await act(async () => {});
@@ -55,5 +58,5 @@ describe('onboarding gate — has a profile, needs a household, has a pending in
       expect(screen.getByTestId('onboarding-accepting-invitation')).toBeOnTheScreen();
     });
     expect(screen.queryByTestId('onboarding-create-household-button')).toBeNull();
-  });
+  }, 20000);
 });
