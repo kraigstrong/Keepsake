@@ -33,6 +33,11 @@ beforeEach(() => {
 });
 
 describe('RecipeEditorScreen — create mode', () => {
+  // Explicit per-test timeouts, not jest.config.js's testTimeout (CI has
+  // shown that isn't honored per-project in this multi-project setup) —
+  // CI's slower/more variable runners need more headroom than the 5000ms
+  // default for a render() plus several fireEvent calls, each of which is
+  // async and wraps its own act() in this RNTL version.
   it('requires a title before saving', async () => {
     await render(<RecipeEditorScreen />);
 
@@ -40,7 +45,7 @@ describe('RecipeEditorScreen — create mode', () => {
 
     expect(screen.getByTestId('recipe-editor-error')).toHaveTextContent('Title is required.');
     expect(mockedApi.saveRecipe).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('saves a filled-out recipe and navigates to its detail page', async () => {
     mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
@@ -69,7 +74,7 @@ describe('RecipeEditorScreen — create mode', () => {
       }),
     );
     expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
-  });
+  }, 15000);
 
   it('shows an error and does not navigate when saving fails', async () => {
     mockedApi.saveRecipe.mockRejectedValue(new Error('network down'));
@@ -82,7 +87,7 @@ describe('RecipeEditorScreen — create mode', () => {
       'Could not save this recipe. Try again.',
     );
     expect(replace).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('adds and removes ingredient lines', async () => {
     await render(<RecipeEditorScreen />);
@@ -92,7 +97,7 @@ describe('RecipeEditorScreen — create mode', () => {
 
     await fireEvent.press(screen.getByTestId('recipe-ingredients-remove-line-0-1'));
     expect(screen.queryByTestId('recipe-ingredients-line-0-1')).toBeNull();
-  });
+  }, 15000);
 
   it('picks, strips, and uploads a hero photo', async () => {
     mockedHeroImage.pickHeroImage.mockResolvedValue({
@@ -120,7 +125,7 @@ describe('RecipeEditorScreen — create mode', () => {
     expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
       expect.objectContaining({ heroImagePath: 'household-1/abc.jpg' }),
     );
-  });
+  }, 15000);
 });
 
 describe('RecipeEditorScreen — edit mode', () => {
@@ -156,7 +161,7 @@ describe('RecipeEditorScreen — edit mode', () => {
       expect.objectContaining({ selected: true }),
     );
     await waitFor(() => expect(screen.getByTestId('recipe-hero-image')).toBeTruthy());
-  });
+  }, 15000);
 
   it('shows an error state when the recipe fails to load', async () => {
     mockedApi.fetchRecipe.mockRejectedValue(new Error('not found'));
@@ -164,7 +169,7 @@ describe('RecipeEditorScreen — edit mode', () => {
     await render(<RecipeEditorScreen recipeId="missing" />);
 
     expect(screen.getByTestId('recipe-editor-load-error')).toBeTruthy();
-  });
+  }, 15000);
 
   it('saves edits with the existing recipe id', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
@@ -178,5 +183,5 @@ describe('RecipeEditorScreen — edit mode', () => {
       expect.objectContaining({ id: 'recipe-1', title: 'Herb Roast Chicken' }),
     );
     expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
-  });
+  }, 15000);
 });
