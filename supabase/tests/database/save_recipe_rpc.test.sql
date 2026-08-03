@@ -138,6 +138,7 @@ select throws_ok(
          'categoryIds', jsonb_build_array('00000000-0000-0000-0000-000000000000')
        )
      ) $$,
+  '23503',
   'atomicity: an invalid category id rolls back the whole save, not just the categories insert'
 );
 
