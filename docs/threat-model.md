@@ -57,6 +57,7 @@ What's worth protecting, roughly in order of how bad it is if compromised:
 | T8 | Dependency supply-chain compromise (malicious/compromised npm package) | Dependabot + `npm audit --omit=dev --audit-level=high` in CI (runtime app/server dependencies only — build-tooling-only devDependencies are documented separately, see ci.yml); lockfile committed, not regenerated ad hoc | 0 |
 | T9 | Sensitive household content (recipe text, cooking notes) leaks via error/analytics telemetry | logError/trackEvent abstraction (ADR-0006) is the only path to Sentry/PostHog; Sentry `beforeSend` redaction and PostHog's event allowlist are both enforced at that single choke point | 0 (abstraction), 2 (enforcement wiring) |
 | T10 | A removed household member's session/token keeps working after removal | Session/membership check happens server-side per request, not cached client-side indefinitely | 3 |
+| T11 | Password guessing / credential stuffing against the opt-in password sign-in path (ADR-0012) | Already covered by Supabase Auth's existing per-IP rate limit on sign-in requests (`config.toml`'s `[auth.rate_limit] sign_in_sign_ups`), not a new mechanism; `signInWithPassword`'s error message is generic regardless of whether the email exists or the password is wrong, so it isn't a user-enumeration oracle; `minimum_password_length` raised to 8 | 3 (rate limit), — (opt-in addition) |
 
 ## 5. Explicitly out of scope for MVP
 
