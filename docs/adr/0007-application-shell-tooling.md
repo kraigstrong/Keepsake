@@ -27,3 +27,7 @@ Phase 2 build scope names Expo Router explicitly but leaves three things undecid
 - Later phases nesting into `app/(tabs)/` and the auth boundary don't need this ADR revisited unless the IA itself changes (a new permanent tab, for instance) — that would need a PRD change first, not just a code change.
 - `expo-secure-store` requires no new credential or account — it's a local Keychain wrapper, nothing server-side, no 1Password involvement.
 - The stubbed session shape Phase 2 builds is a real interface commitment: Phase 3 needs to satisfy it with actual Supabase Auth data (user id, household id, whatever `useSession()` exposes), not redesign it — worth Phase 3 re-reading this ADR before starting.
+
+## Amendment (Phase 3, 2026-08-02)
+
+Wiring real Supabase Auth (`supabase-js`) surfaced a real constraint this ADR didn't anticipate: a Supabase session (access + refresh JWT, user metadata) can exceed `expo-secure-store`'s ~2KB per-value Keychain limit. The fix (Supabase's own documented pattern for Expo) is `src/supabase/secureStore.ts`'s `LargeSecureStore`: the session itself lives in `@react-native-async-storage/async-storage`, AES-CTR encrypted with a key that lives in `expo-secure-store` (always 32 bytes, always under the limit). This isn't a reversal of "AsyncStorage is unencrypted and explicitly unsuitable" above — AsyncStorage here never holds plaintext, only ciphertext, so the property that made AsyncStorage unsuitable (readable by anything with filesystem access) doesn't apply to what's actually stored there.

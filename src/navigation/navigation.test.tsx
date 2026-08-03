@@ -8,22 +8,61 @@ import { act } from 'react';
 
 import { router } from 'expo-router';
 import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-library';
-import * as SecureStore from 'expo-secure-store';
 
 // Deliberately lives outside app/ — Expo Router's context scanner treats
 // every file under app/ as a candidate route, so a colocated test file
 // would corrupt the real route tree it's trying to test.
 //
 // This suite exercises tab/header navigation, which only exists behind
-// the authenticated route boundary — a signed-in session is mocked here
-// so the boundary itself isn't what's under test. See
-// authBoundary.test.tsx for the signed-in/signed-out redirect behavior.
-jest.mock('expo-secure-store', () => ({
-  getItemAsync: jest.fn(),
-  setItemAsync: jest.fn(),
-  deleteItemAsync: jest.fn(),
+// the authenticated route boundary — a signed-in, onboarded session is
+// mocked here (real profile/household rows, not null) so neither the
+// auth boundary nor the onboarding gate is what's under test. See
+// authBoundary.signedIn/signedOut.test.tsx for the redirect behavior.
+jest.mock('../supabase/instance', () => ({
+  supabase: {
+    auth: {
+      getSession: jest
+        .fn()
+        .mockResolvedValue({ data: { session: { user: { id: 'test-user' } } }, error: null }),
+      onAuthStateChange: jest
+        .fn()
+        .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+    },
+    from: jest.fn((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { id: 'test-user', display_name: 'Test User' },
+                  error: null,
+                }),
+            }),
+            in: () =>
+              Promise.resolve({
+                data: [{ id: 'test-user', display_name: 'Test User' }],
+                error: null,
+              }),
+          }),
+        };
+      }
+      if (table === 'households') {
+        return {
+          select: () => ({
+            maybeSingle: () => Promise.resolve({ data: { id: 'household-1' }, error: null }),
+          }),
+        };
+      }
+      // household_membership
+      return {
+        select: () => ({
+          eq: () => Promise.resolve({ data: [{ user_id: 'test-user' }], error: null }),
+        }),
+      };
+    }),
+  },
 }));
-(SecureStore.getItemAsync as jest.Mock).mockResolvedValue('{"userId":"test-user"}');
 //
 // One renderRouter() call for the whole file, navigated with the plain
 // imperative `router` API and asserted through waitFor rather than a

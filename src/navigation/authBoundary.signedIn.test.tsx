@@ -1,15 +1,57 @@
 import { act } from 'react';
 
 import { renderRouter, screen, waitFor } from 'expo-router/testing-library';
-import * as SecureStore from 'expo-secure-store';
 
 // See authBoundary.signedOut.test.tsx for why this is a separate file.
-jest.mock('expo-secure-store', () => ({
-  getItemAsync: jest.fn(),
-  setItemAsync: jest.fn(),
-  deleteItemAsync: jest.fn(),
+// This suite's whole point is "signed in AND onboarded shows the main
+// app", so the profiles/households query mocks below return a real
+// row each rather than null — otherwise HouseholdProvider would (rightly)
+// route to onboarding instead of (tabs).
+jest.mock('../supabase/instance', () => ({
+  supabase: {
+    auth: {
+      getSession: jest
+        .fn()
+        .mockResolvedValue({ data: { session: { user: { id: 'test-user' } } }, error: null }),
+      onAuthStateChange: jest
+        .fn()
+        .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+    },
+    from: jest.fn((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { id: 'test-user', display_name: 'Test User' },
+                  error: null,
+                }),
+            }),
+            in: () =>
+              Promise.resolve({
+                data: [{ id: 'test-user', display_name: 'Test User' }],
+                error: null,
+              }),
+          }),
+        };
+      }
+      if (table === 'households') {
+        return {
+          select: () => ({
+            maybeSingle: () => Promise.resolve({ data: { id: 'household-1' }, error: null }),
+          }),
+        };
+      }
+      // household_membership
+      return {
+        select: () => ({
+          eq: () => Promise.resolve({ data: [{ user_id: 'test-user' }], error: null }),
+        }),
+      };
+    }),
+  },
 }));
-(SecureStore.getItemAsync as jest.Mock).mockResolvedValue('{"userId":"test-user"}');
 
 describe('authenticated route boundary — signed in', () => {
   it('shows This Week instead of sign-in', async () => {
