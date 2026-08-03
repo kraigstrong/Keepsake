@@ -20,6 +20,7 @@ export interface Category {
 
 export interface Recipe {
   id: string;
+  version: number;
   title: string;
   heroImagePath: string | null;
   activeTimeMinutes: number | null;
@@ -36,6 +37,7 @@ export interface Recipe {
 
 export interface RecipeSavePayload {
   id?: string;
+  baseVersion?: number;
   title: string;
   heroImagePath?: string | null;
   activeTimeMinutes?: number | null;
@@ -48,6 +50,29 @@ export interface RecipeSavePayload {
   categoryIds: string[];
   ingredientSections: RecipeSection[];
   instructionSections: RecipeSection[];
+}
+
+// Everything an in-progress edit needs to persist as a draft — same
+// shape as a save, minus the two fields that only make sense for an
+// actual save (id is implied by which draft this is; baseVersion has
+// no meaning for a draft that was never checked against the server).
+export type RecipeDraftPayload = Omit<RecipeSavePayload, 'id' | 'baseVersion'>;
+
+export interface RecipeVersionSummary {
+  id: string;
+  versionNumber: number;
+  createdAt: string;
+}
+
+// save_recipe raises this exact message (errcode P0001) when the
+// caller's baseVersion no longer matches the row's current version —
+// the one error saveRecipe() needs callers to be able to distinguish
+// from every other failure, since it's the trigger for conflict UI
+// rather than a generic error state.
+const CONFLICT_MESSAGE = 'recipe has changed since it was loaded';
+
+export function isRecipeConflictError(error: unknown): boolean {
+  return error instanceof Error && error.message === CONFLICT_MESSAGE;
 }
 
 export async function fetchRecipes(): Promise<RecipeSummary[]> {
@@ -89,6 +114,7 @@ interface FetchedLine {
 }
 interface FetchedRecipeRow {
   id: string;
+  version: number;
   title: string;
   hero_image_path: string | null;
   active_time_minutes: number | null;
@@ -111,7 +137,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      `id, title, hero_image_path, active_time_minutes, total_time_minutes, yield_text,
+      `id, version, title, hero_image_path, active_time_minutes, total_time_minutes, yield_text,
        permanent_notes, source_url, source_attribution, tags,
        recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
@@ -125,6 +151,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
 
   return {
     id: row.id,
+    version: row.version,
     title: row.title,
     heroImagePath: row.hero_image_path,
     activeTimeMinutes: row.active_time_minutes,
@@ -151,6 +178,7 @@ export async function saveRecipe(payload: RecipeSavePayload): Promise<{ id: stri
     .rpc('save_recipe', {
       payload: {
         id: payload.id ?? null,
+        baseVersion: payload.baseVersion ?? null,
         title: payload.title,
         heroImagePath: payload.heroImagePath ?? null,
         activeTimeMinutes: payload.activeTimeMinutes ?? null,
@@ -169,4 +197,53 @@ export async function saveRecipe(payload: RecipeSavePayload): Promise<{ id: stri
 
   if (error) throw error;
   return { id: (data as { id: string }).id };
+}
+
+export async function fetchRecipeVersions(recipeId: string): Promise<RecipeVersionSummary[]> {
+  const { data, error } = await supabase
+    .from('recipe_versions')
+    .select('id, version_number, created_at')
+    .eq('recipe_id', recipeId)
+    .order('version_number', { ascending: false });
+
+  if (error) throw error;
+  return (data as { id: string; version_number: number; created_at: string }[]).map((row) => ({
+    id: row.id,
+    versionNumber: row.version_number,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function restoreRecipeVersion(versionId: string): Promise<{ id: string }> {
+  const { data, error } = await supabase
+    .rpc('restore_recipe_version', { target_version_id: versionId })
+    .single();
+
+  if (error) throw error;
+  return { id: (data as { id: string }).id };
+}
+
+export async function fetchDraft(recipeId: string | null): Promise<RecipeDraftPayload | null> {
+  let query = supabase.from('recipe_drafts').select('draft_payload');
+  query = recipeId ? query.eq('recipe_id', recipeId) : query.is('recipe_id', null);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return (data as { draft_payload: RecipeDraftPayload } | null)?.draft_payload ?? null;
+}
+
+export async function saveDraft(
+  recipeId: string | null,
+  payload: RecipeDraftPayload,
+): Promise<void> {
+  const { error } = await supabase.rpc('upsert_draft', {
+    recipe_id_param: recipeId,
+    draft_payload_param: payload,
+  });
+  if (error) throw error;
+}
+
+export async function deleteDraft(recipeId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('delete_draft', { recipe_id_param: recipeId });
+  if (error) throw error;
 }

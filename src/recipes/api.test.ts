@@ -1,4 +1,14 @@
-import { fetchCategories, fetchRecipe, fetchRecipes, saveRecipe } from './api';
+import {
+  deleteDraft,
+  fetchCategories,
+  fetchDraft,
+  fetchRecipe,
+  fetchRecipeVersions,
+  fetchRecipes,
+  restoreRecipeVersion,
+  saveDraft,
+  saveRecipe,
+} from './api';
 import { supabase } from '../supabase/instance';
 
 jest.mock('../supabase/instance', () => ({
@@ -71,6 +81,7 @@ describe('fetchRecipe', () => {
             Promise.resolve({
               data: {
                 id: 'r1',
+                version: 3,
                 title: 'Herb Roast Chicken',
                 hero_image_path: null,
                 active_time_minutes: 20,
@@ -107,6 +118,7 @@ describe('fetchRecipe', () => {
 
     await expect(fetchRecipe('r1')).resolves.toEqual({
       id: 'r1',
+      version: 3,
       title: 'Herb Roast Chicken',
       heroImagePath: null,
       activeTimeMinutes: 20,
@@ -141,6 +153,7 @@ describe('saveRecipe', () => {
     expect(mockedRpc).toHaveBeenCalledWith('save_recipe', {
       payload: {
         id: null,
+        baseVersion: null,
         title: 'Herb Roast Chicken',
         heroImagePath: null,
         activeTimeMinutes: null,
@@ -155,6 +168,26 @@ describe('saveRecipe', () => {
         instructionSections: [],
       },
     });
+  });
+
+  it('sends baseVersion when editing', async () => {
+    const single = jest.fn().mockResolvedValue({ data: { id: 'r1' }, error: null });
+    mockedRpc.mockReturnValue({ single });
+
+    await saveRecipe({
+      id: 'r1',
+      baseVersion: 2,
+      title: 'Herb Roast Chicken',
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [],
+      instructionSections: [],
+    });
+
+    expect(mockedRpc).toHaveBeenCalledWith(
+      'save_recipe',
+      expect.objectContaining({ payload: expect.objectContaining({ id: 'r1', baseVersion: 2 }) }),
+    );
   });
 
   it('throws on a Supabase error (e.g. cross-household edit)', async () => {
@@ -172,5 +205,93 @@ describe('saveRecipe', () => {
         instructionSections: [],
       }),
     ).rejects.toThrow('recipe not found');
+  });
+});
+
+describe('fetchRecipeVersions', () => {
+  it('returns versions newest-first', async () => {
+    mockedFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          order: () =>
+            Promise.resolve({
+              data: [
+                { id: 'v2', version_number: 2, created_at: '2026-08-02T00:00:00Z' },
+                { id: 'v1', version_number: 1, created_at: '2026-08-01T00:00:00Z' },
+              ],
+              error: null,
+            }),
+        }),
+      }),
+    });
+
+    await expect(fetchRecipeVersions('r1')).resolves.toEqual([
+      { id: 'v2', versionNumber: 2, createdAt: '2026-08-02T00:00:00Z' },
+      { id: 'v1', versionNumber: 1, createdAt: '2026-08-01T00:00:00Z' },
+    ]);
+    expect(mockedFrom).toHaveBeenCalledWith('recipe_versions');
+  });
+});
+
+describe('restoreRecipeVersion', () => {
+  it('calls the restore_recipe_version RPC', async () => {
+    const single = jest.fn().mockResolvedValue({ data: { id: 'r1' }, error: null });
+    mockedRpc.mockReturnValue({ single });
+
+    await expect(restoreRecipeVersion('v1')).resolves.toEqual({ id: 'r1' });
+    expect(mockedRpc).toHaveBeenCalledWith('restore_recipe_version', { target_version_id: 'v1' });
+  });
+});
+
+describe('drafts', () => {
+  it('fetchDraft queries by recipe id when editing', async () => {
+    const maybeSingle = jest
+      .fn()
+      .mockResolvedValue({ data: { draft_payload: { title: 'Draft' } }, error: null });
+    const eq = jest.fn(() => ({ maybeSingle }));
+    mockedFrom.mockReturnValue({ select: () => ({ eq, is: jest.fn() }) });
+
+    await expect(fetchDraft('r1')).resolves.toEqual({ title: 'Draft' });
+    expect(eq).toHaveBeenCalledWith('recipe_id', 'r1');
+  });
+
+  it('fetchDraft queries for a null recipe id when creating', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const is = jest.fn(() => ({ maybeSingle }));
+    mockedFrom.mockReturnValue({ select: () => ({ eq: jest.fn(), is }) });
+
+    await expect(fetchDraft(null)).resolves.toBeNull();
+    expect(is).toHaveBeenCalledWith('recipe_id', null);
+  });
+
+  it('saveDraft calls upsert_draft', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await saveDraft('r1', {
+      title: 'Draft',
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [],
+      instructionSections: [],
+    });
+
+    expect(mockedRpc).toHaveBeenCalledWith('upsert_draft', {
+      recipe_id_param: 'r1',
+      draft_payload_param: {
+        title: 'Draft',
+        tags: [],
+        categoryIds: [],
+        ingredientSections: [],
+        instructionSections: [],
+      },
+    });
+  });
+
+  it('deleteDraft calls delete_draft', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await deleteDraft(null);
+
+    expect(mockedRpc).toHaveBeenCalledWith('delete_draft', { recipe_id_param: null });
   });
 });

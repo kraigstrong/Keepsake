@@ -22,6 +22,7 @@ const push = jest.fn();
 
 const recipe: api.Recipe = {
   id: 'recipe-1',
+  version: 1,
   title: 'Herb Roast Chicken',
   heroImagePath: 'household-1/existing.jpg',
   activeTimeMinutes: 20,
