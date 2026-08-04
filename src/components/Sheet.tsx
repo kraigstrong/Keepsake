@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { useReducedMotion } from '../accessibility/useReducedMotion';
@@ -34,6 +34,22 @@ export interface SheetProps {
  * `visible` prop — broke after exactly one open on a real device
  * (worked once, then every subsequent press did nothing), never caught
  * by Jest since RTL doesn't exercise a real native Modal's lifecycle.
+ *
+ * The open animation starts from Modal's `onShow` callback, not a plain
+ * effect keyed on `visible` — starting it immediately races the native
+ * modal's own presentation (a separate native window on iOS), and the
+ * 250ms JS animation can finish before the modal is even attached to
+ * the screen, so all you see is the end state. `onShow` fires only
+ * once the native modal has actually finished presenting.
+ *
+ * Closing resets `progress` instantly instead of animating it: Modal
+ * can remove its children as soon as `visible` goes false (immediately
+ * in tests; on a real device it may linger briefly for its own native
+ * dismiss transition, but that's not guaranteed), and starting a new
+ * native-driven `Animated.timing` on a view that's already gone crashes
+ * ("unable to find node on an unmounted component"). A plain
+ * `setValue` never touches the native view connection, so it's safe
+ * regardless of whether Modal has already torn the view down.
  */
 export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
   const reducedMotion = useReducedMotion();
@@ -44,20 +60,23 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
   // react-hooks/refs even though this exact pattern is correct here.
   const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
 
-  useEffect(() => {
+  const openAnimated = useCallback(() => {
     if (reducedMotion) {
-      progress.setValue(visible ? 1 : 0);
+      progress.setValue(1);
       return;
     }
-
-    const animation = Animated.timing(progress, {
-      toValue: visible ? 1 : 0,
+    Animated.timing(progress, {
+      toValue: 1,
       duration: ANIMATION_DURATION_MS,
       useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [visible, reducedMotion, progress]);
+    }).start();
+  }, [reducedMotion, progress]);
+
+  useEffect(() => {
+    // Opening is triggered by onShow below instead — see the comment
+    // above for why starting it here doesn't work.
+    if (!visible) progress.setValue(0);
+  }, [visible, progress]);
 
   const backdropOpacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] });
   const sheetTranslateY = progress.interpolate({
@@ -70,6 +89,7 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
       visible={visible}
       transparent
       animationType="none"
+      onShow={openAnimated}
       onRequestClose={onDismiss}
       testID={testID}
     >

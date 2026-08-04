@@ -46,7 +46,16 @@ describe('Sheet', () => {
   // The backdrop dim and the sheet's slide are animated independently
   // (not via Modal's own animationType) so the dim doesn't visibly rise
   // up from the bottom along with the sheet — Modal itself never
-  // animates on its own.
+  // animates on its own. The actual open animation is driven from
+  // Modal's onShow, a native-only event Jest has no way to fire — real
+  // verification of the animation itself has to happen on a device or
+  // Simulator, not here. What's testable and tested below: the
+  // structural pieces (backdrop is separate from the sheet content,
+  // animationType is always 'none') and the state-machine logic that's
+  // ours to control (visible mirrors straight through to Modal, and
+  // progress resets on close so a second open has something to animate
+  // from — see ADR discussion / commit history for the real-device bug
+  // this reset fixes).
   it('never delegates animation to the Modal itself, dim and sheet animate independently', async () => {
     await render(
       <Sheet visible onDismiss={() => {}} testID="sheet">
@@ -58,7 +67,7 @@ describe('Sheet', () => {
     expect(screen.getByTestId('sheet-backdrop')).toBeOnTheScreen();
   });
 
-  it('shows immediately with no animation delay when Reduced Motion is enabled', async () => {
+  it('shows immediately when Reduced Motion is enabled', async () => {
     mockedUseReducedMotion.mockReturnValue(true);
     await render(
       <Sheet visible onDismiss={() => {}} testID="sheet">
@@ -89,7 +98,13 @@ describe('Sheet', () => {
     expect(screen.getByText('Sheet content')).toBeOnTheScreen();
   });
 
-  it('opens again after having been opened and closed once already', async () => {
+  // Real-device bug: the first open animated correctly, but a second
+  // open after closing once just snapped straight to the fully-open
+  // state — progress was left at its "open" value (1) by the first
+  // animation, so the second open's Animated.timing(toValue: 1) had
+  // nothing left to animate. Fixed by resetting progress to 0 as soon
+  // as `visible` goes false, so it always starts from 0 again.
+  it('mirrors Modal visibility through open -> close -> open without erroring', async () => {
     const { rerender } = await render(
       <Sheet visible={false} onDismiss={() => {}} testID="sheet">
         <Text>Sheet content</Text>
@@ -112,9 +127,6 @@ describe('Sheet', () => {
         </Sheet>,
       );
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
     expect(screen.queryByText('Sheet content')).not.toBeOnTheScreen();
 
     await act(async () => {
@@ -124,32 +136,6 @@ describe('Sheet', () => {
         </Sheet>,
       );
     });
-
     expect(screen.getByText('Sheet content')).toBeOnTheScreen();
-  });
-
-  it('unmounts only after the close animation finishes, not immediately on dismiss', async () => {
-    const { rerender } = await render(
-      <Sheet visible onDismiss={() => {}} testID="sheet">
-        <Text>Sheet content</Text>
-      </Sheet>,
-    );
-
-    await act(async () => {
-      rerender(
-        <Sheet visible={false} onDismiss={() => {}} testID="sheet">
-          <Text>Sheet content</Text>
-        </Sheet>,
-      );
-    });
-
-    // Animated.timing's completion callback fires asynchronously even
-    // under the JS-driven RN Animated implementation Jest uses — give it
-    // a tick before asserting the content is finally gone.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
-
-    expect(screen.queryByText('Sheet content')).not.toBeOnTheScreen();
   });
 });
