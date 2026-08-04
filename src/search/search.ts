@@ -7,6 +7,7 @@ import {
   mergeTiers,
   type SearchRow,
 } from './buildSearchQuery';
+import { trackEvent } from '../observability';
 
 export interface SearchResult {
   id: string;
@@ -25,17 +26,24 @@ function toResults(rows: SearchRow[]): SearchResult[] {
  * trigram-overlap ranking is much looser than bm25 and would surface
  * worse results first if used for every query.
  *
- * Not unit-tested here — this is a thin, mechanical wrapper around the
- * fully unit-tested query builders in buildSearchQuery.ts, plus the real
- * expo-sqlite native module, which Jest can't meaningfully exercise (see
- * docs/risk-spikes/sqlite-fts.md — why that's a real platform question,
- * not a logic one). Integration-verified via the dev client during the
- * Phase 1 spike and again this phase.
+ * The orchestration (tiering, fallback, telemetry) is unit tested with a
+ * mocked database (search.test.ts) — the query SQL itself is fully unit
+ * tested in buildSearchQuery.ts, and real FTS5 behavior against the
+ * actual expo-sqlite native module, which Jest can't meaningfully
+ * exercise, is verified via the dev client (docs/risk-spikes/sqlite-fts.md
+ * and again this phase) plus a node:sqlite benchmark at realistic scale
+ * (src/search/searchPerformance.bench.ts).
+ *
+ * Emits a search_performed timing event (duration + result count only —
+ * never the raw query text, per this phase's "raw search terms excluded
+ * from analytics by default" privacy requirement) so a real regression
+ * at real-world library sizes is observable in production.
  */
 export async function searchRecipes(query: string, limit = 20): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (trimmed.length === 0) return [];
 
+  const startedAt = Date.now();
   const db = await getDatabase();
 
   const title = buildTitleMatchQuery(trimmed, limit);
@@ -49,9 +57,18 @@ export async function searchRecipes(query: string, limit = 20): Promise<SearchRe
   ]);
 
   const merged = mergeTiers([titleRows, ingredientRows, everythingRows], limit);
-  if (merged.length > 0) return toResults(merged);
+  let results: SearchResult[];
+  if (merged.length > 0) {
+    results = toResults(merged);
+  } else {
+    const fuzzy = buildFuzzyMatchQuery(trimmed, limit);
+    const fuzzyRows = await db.getAllAsync<SearchRow>(fuzzy.sql, fuzzy.params);
+    results = toResults(fuzzyRows);
+  }
 
-  const fuzzy = buildFuzzyMatchQuery(trimmed, limit);
-  const fuzzyRows = await db.getAllAsync<SearchRow>(fuzzy.sql, fuzzy.params);
-  return toResults(fuzzyRows);
+  trackEvent('search_performed', {
+    durationMs: Date.now() - startedAt,
+    resultCount: results.length,
+  });
+  return results;
 }
