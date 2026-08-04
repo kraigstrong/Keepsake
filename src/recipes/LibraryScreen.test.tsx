@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { LibraryScreen } from './LibraryScreen';
+import { useAddSheet } from '../components/AddSheetContext';
 import { useHousehold } from '../household/HouseholdProvider';
 import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
@@ -9,6 +10,7 @@ import { syncHousehold } from '../sync/syncEngine';
 jest.mock('../sync/offlineRecipes');
 jest.mock('../sync/syncEngine');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
+jest.mock('../components/AddSheetContext', () => ({ useAddSheet: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
   // useFocusEffect normally only re-runs on navigation focus events —
@@ -26,8 +28,10 @@ const mockedSyncHousehold = syncHousehold as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
 const mockedUseFocusEffect = useFocusEffect as jest.Mock;
+const mockedUseAddSheet = useAddSheet as jest.Mock;
 
 const push = jest.fn();
+const openAddSheet = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -35,9 +39,10 @@ beforeEach(() => {
   mockedUseFocusEffect.mockImplementation((effect: () => void) => effect());
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
   mockedSyncHousehold.mockResolvedValue(undefined);
+  mockedUseAddSheet.mockReturnValue({ open: openAddSheet, close: jest.fn(), isVisible: false });
 });
 
-it('shows an empty state with an add action when there are no local recipes', async () => {
+it('shows an empty state whose add action opens the shared add sheet, not manual create directly', async () => {
   mockedReadLocalRecipeSummaries.mockResolvedValue([]);
 
   await render(<LibraryScreen />);
@@ -45,7 +50,8 @@ it('shows an empty state with an add action when there are no local recipes', as
   await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
 
   await fireEvent.press(screen.getByText('Add a recipe'));
-  expect(push).toHaveBeenCalledWith('/recipe/new');
+  expect(openAddSheet).toHaveBeenCalled();
+  expect(push).not.toHaveBeenCalledWith('/recipe/new');
 });
 
 it('lists recipes from the local cache and navigates to a recipe on press', async () => {

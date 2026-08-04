@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import type { RecipeSummary } from './api';
+import { useAddSheet } from '../components/AddSheetContext';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
@@ -23,6 +24,7 @@ import { colors, spacing, typography } from '../theme/tokens';
  */
 export function LibraryScreen() {
   const router = useRouter();
+  const { open: openAddSheet } = useAddSheet();
   const { household } = useHousehold();
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -74,7 +76,7 @@ export function LibraryScreen() {
             title="No recipes yet"
             message="Recipes you save will show up here."
             actionLabel="Add a recipe"
-            onAction={() => router.push('/recipe/new')}
+            onAction={openAddSheet}
             testID="library-placeholder"
           />
         ) : (
