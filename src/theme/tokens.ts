@@ -57,6 +57,12 @@ export const typography = {
   heading: { fontSize: 20, lineHeight: 26, fontWeight: '600', letterSpacing: -0.2 },
   body: { fontSize: 16, lineHeight: 27, fontWeight: '400' },
   caption: { fontSize: 13, lineHeight: 19, fontWeight: '400' },
+  // body's roomy 27pt lineHeight (tuned for paragraph text) clips
+  // descenders (g, y, p) at the bottom on iOS single-line TextInputs —
+  // the native field doesn't grow to fit an RN lineHeight taller than
+  // its own font-metric height the way multiline Text does. Every
+  // TextInput in the app should use this instead of body.
+  input: { fontSize: 16, lineHeight: 20, fontWeight: '400' },
 } as const;
 
 // Thumbnails/buttons 10–12px, hero images 16px, pills fully round, list
