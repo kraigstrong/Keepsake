@@ -2,14 +2,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
-import type { RecipeSummary } from './api';
 import { useAddSheet } from '../components/AddSheetContext';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
 import { useHousehold } from '../household/HouseholdProvider';
-import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
+import { readLocalLibraryRecipes, type LibraryRecipe } from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
 import { colors, spacing, typography } from '../theme/tokens';
 
@@ -26,14 +25,14 @@ export function LibraryScreen() {
   const router = useRouter();
   const { open: openAddSheet } = useAddSheet();
   const { household } = useHousehold();
-  const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
+  const [recipes, setRecipes] = useState<LibraryRecipe[] | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
 
-      readLocalRecipeSummaries()
+      readLocalLibraryRecipes()
         .then(async (local) => {
           if (cancelled) return;
           setRecipes(local);
@@ -46,7 +45,7 @@ export function LibraryScreen() {
           });
           if (cancelled) return;
 
-          const refreshed = await readLocalRecipeSummaries().catch(() => null);
+          const refreshed = await readLocalLibraryRecipes().catch(() => null);
           if (!cancelled && refreshed) setRecipes(refreshed);
         })
         .catch(() => {

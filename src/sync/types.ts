@@ -19,6 +19,7 @@ export interface SyncedRecipe {
   categoryIds: string[];
   ingredientSections: RecipeSection[];
   instructionSections: RecipeSection[];
+  createdAt: string;
   updatedAt: string;
 }
 

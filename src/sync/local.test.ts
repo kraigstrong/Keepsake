@@ -39,6 +39,7 @@ const recipe: SyncedRecipe = {
   categoryIds: ['c1'],
   ingredientSections: [{ title: null, lines: ['1 lb beef'] }],
   instructionSections: [{ title: null, lines: ['Brown the beef.'] }],
+  createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-05T00:00:00.000Z',
 };
 
@@ -124,6 +125,7 @@ describe('upsertRecipes', () => {
       JSON.stringify(recipe.categoryIds),
       JSON.stringify(recipe.ingredientSections),
       JSON.stringify(recipe.instructionSections),
+      recipe.createdAt,
       recipe.updatedAt,
       expect.any(String),
     );

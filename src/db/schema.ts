@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -87,5 +87,19 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
       title,
       tokenize = 'trigram'
     )`,
+  ],
+  // Smart sort's "Recently Added (<2wk)" tier (Phase 7, LIB-01/LIB-02)
+  // needs when a recipe was *created*, distinct from updated_at (an edit
+  // shouldn't make a recipe look newly-added). Schema v1 shipped without
+  // it. Existing local rows have no value to backfill from locally — the
+  // recipes_cursor reset below forces every already-synced recipe to be
+  // refetched on the next syncHousehold() call, which is the only place
+  // created_at actually exists (the server row). This is the first real
+  // exercise of the "add a column, backfill via resync" migration path
+  // (Phase 6 flagged only the v0→v1 case had ever run). deletes_cursor is
+  // untouched — nothing about tombstones changed.
+  3: [
+    `alter table recipes add column created_at text`,
+    `update sync_state set recipes_cursor_updated_at = null, recipes_cursor_id = null`,
   ],
 };

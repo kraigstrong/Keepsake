@@ -71,6 +71,7 @@ function makeRecipe(
     categoryIds: [],
     ingredientSections: [],
     instructionSections: [],
+    createdAt: updatedAt,
     updatedAt,
   };
 }

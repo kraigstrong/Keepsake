@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { LibraryScreen } from './LibraryScreen';
 import { useAddSheet } from '../components/AddSheetContext';
 import { useHousehold } from '../household/HouseholdProvider';
-import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
+import { readLocalLibraryRecipes } from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
 
 jest.mock('../sync/offlineRecipes');
@@ -23,7 +23,7 @@ jest.mock('expo-router', () => ({
 // missing-env-var throw or touch native modules.
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
-const mockedReadLocalRecipeSummaries = readLocalRecipeSummaries as jest.Mock;
+const mockedReadLocalRecipeSummaries = readLocalLibraryRecipes as jest.Mock;
 const mockedSyncHousehold = syncHousehold as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
