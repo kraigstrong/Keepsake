@@ -1,4 +1,5 @@
 import type { Category } from '../recipes/api';
+import { flattenRecipeForSearch } from '../search/indexRecipe';
 import { EMPTY_CURSOR, type SyncCursor, type SyncedRecipe } from './types';
 
 /**
@@ -60,10 +61,53 @@ export async function writeSyncState(
   );
 }
 
+// FTS5 tables aren't external-content against `recipes` (ADR-0014 —
+// recipes.id is a text UUID, and relying on SQLite's implicit rowid for
+// external-content linking isn't VACUUM-stable). Maintained explicitly
+// here instead of via SQL triggers: delete-then-reinsert on every
+// upsert, matching FTS5's own recommended pattern for content changes.
+async function indexRecipeForSearch(
+  db: LocalDb,
+  recipe: SyncedRecipe,
+  categoryLabelsById: ReadonlyMap<string, string>,
+): Promise<void> {
+  await deindexRecipeForSearch(db, recipe.id);
+  const row = flattenRecipeForSearch(recipe, categoryLabelsById);
+  await db.runAsync(
+    `insert into recipe_fts
+       (recipe_id, title, ingredients, notes, source_attribution, source_url, categories, tags)
+     values (?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.recipeId,
+    row.title,
+    row.ingredients,
+    row.notes,
+    row.sourceAttribution,
+    row.sourceUrl,
+    row.categories,
+    row.tags,
+  );
+  await db.runAsync(
+    'insert into recipe_trigram (recipe_id, title) values (?, ?)',
+    row.recipeId,
+    row.title,
+  );
+}
+
+async function deindexRecipeForSearch(db: LocalDb, recipeId: string): Promise<void> {
+  await db.runAsync('delete from recipe_fts where recipe_id = ?', recipeId);
+  await db.runAsync('delete from recipe_trigram where recipe_id = ?', recipeId);
+}
+
 // Transactional: every recipe in the page is written atomically, so an
 // interrupted sync never leaves a page half-applied (execution-plan.md's
-// "transactional writes" requirement).
-export async function upsertRecipes(db: LocalDb, recipes: SyncedRecipe[]): Promise<void> {
+// "transactional writes" requirement). categoryLabelsById comes from the
+// same sync pass's fresh category fetch (syncEngine.ts), not a read of
+// the local categories table, so indexing never lags a same-sync rename.
+export async function upsertRecipes(
+  db: LocalDb,
+  recipes: SyncedRecipe[],
+  categoryLabelsById: ReadonlyMap<string, string>,
+): Promise<void> {
   if (recipes.length === 0) return;
 
   await db.withTransactionAsync(async () => {
@@ -109,6 +153,7 @@ export async function upsertRecipes(db: LocalDb, recipes: SyncedRecipe[]): Promi
         recipe.updatedAt,
         new Date().toISOString(),
       );
+      await indexRecipeForSearch(db, recipe, categoryLabelsById);
     }
   });
 }
@@ -119,6 +164,7 @@ export async function deleteRecipes(db: LocalDb, ids: string[]): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const id of ids) {
       await db.runAsync('delete from recipes where id = ?', id);
+      await deindexRecipeForSearch(db, id);
     }
   });
 }

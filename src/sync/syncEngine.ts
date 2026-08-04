@@ -42,6 +42,7 @@ async function syncChangedRecipes(
   db: LocalDb,
   householdId: string,
   cursor: SyncCursor,
+  categoryLabelsById: ReadonlyMap<string, string>,
 ): Promise<SyncCursor> {
   let current = cursor;
 
@@ -49,7 +50,7 @@ async function syncChangedRecipes(
     const page = await fetchChangedRecipes(current.recipesCursorUpdatedAt, current.recipesCursorId);
     if (page.length === 0) break;
 
-    await upsertRecipes(db, page);
+    await upsertRecipes(db, page, categoryLabelsById);
     await cacheHeroImages(db, page);
     const last = page[page.length - 1]!; // just checked page.length > 0 above
     current = { ...current, recipesCursorUpdatedAt: last.updatedAt, recipesCursorId: last.id };
@@ -95,9 +96,16 @@ export async function syncHousehold(householdId: string): Promise<void> {
   const db = await getDatabase();
   const cursor = await readSyncState(db, householdId);
 
-  const afterRecipes = await syncChangedRecipes(db, householdId, cursor);
+  // Fetched once up front, not after recipes: search indexing (inside
+  // syncChangedRecipes) needs category labels for the categories FTS
+  // column, and using this same in-memory fetch keeps that lookup fresh
+  // within a sync pass rather than reading the local table's previous
+  // (possibly stale) contents.
+  const categories = await fetchAllCategories();
+  const categoryLabelsById = new Map(categories.map((category) => [category.id, category.value]));
+
+  const afterRecipes = await syncChangedRecipes(db, householdId, cursor, categoryLabelsById);
   await syncDeletedRecipes(db, householdId, afterRecipes);
 
-  const categories = await fetchAllCategories();
   await replaceCategories(db, categories);
 }
