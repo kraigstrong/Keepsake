@@ -2,7 +2,9 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
+import { logError } from '../observability';
 import { supabase } from '../supabase/instance';
+import { wipeOfflineData } from '../sync/wipeOfflineData';
 
 interface SessionContextValue {
   session: Session | null;
@@ -81,6 +83,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = async (): Promise<void> => {
     await supabase.auth.signOut();
+    // Best-effort (ADR-0013) — sign-out has already succeeded from the
+    // user's perspective; a failed cache wipe shouldn't block it, just
+    // gets logged.
+    await wipeOfflineData().catch((error) => logError(error, { context: 'signOutCacheWipe' }));
   };
 
   return (

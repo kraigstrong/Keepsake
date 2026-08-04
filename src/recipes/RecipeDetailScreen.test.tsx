@@ -5,9 +5,11 @@ import { Linking } from 'react-native';
 import * as api from './api';
 import * as heroImage from './heroImage';
 import { RecipeDetailScreen } from './RecipeDetailScreen';
+import * as offlineRecipes from '../sync/offlineRecipes';
 
 jest.mock('./api');
 jest.mock('./heroImage');
+jest.mock('../sync/offlineRecipes');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
@@ -16,6 +18,7 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
+const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes>;
 const mockedUseRouter = useRouter as jest.Mock;
 
 const push = jest.fn();
@@ -43,6 +46,12 @@ beforeEach(() => {
   mockedApi.fetchCategories.mockResolvedValue([
     { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
   ]);
+  // Defaults to "nothing synced locally yet" so existing tests exercise
+  // the live-fetch fallback exactly as before; local-cache-hit tests
+  // override these explicitly.
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(null);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(null);
   jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
 });
 
@@ -99,6 +108,57 @@ it('opens the source url in the browser', async () => {
   await fireEvent.press(screen.getByTestId('recipe-detail-source-url'));
 
   expect(Linking.openURL).toHaveBeenCalledWith('https://example.com/recipe');
+});
+
+it('shows the recipe from the local cache immediately, even when the live fetch is still pending', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([
+    { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
+  ]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(
+    'file:///cache/hero-images/existing.jpg',
+  );
+  // Never resolves — simulates offline; the local read alone should be
+  // enough to show the recipe with no loading state or error.
+  mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
+  mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
+
+  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.getByTestId('recipe-detail-category-Chicken')).toBeTruthy();
+  await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+  expect(screen.queryByTestId('recipe-detail-load-error')).toBeNull();
+  // Cached locally — no network call needed for the hero image.
+  expect(mockedHeroImage.getHeroImageUrl).not.toHaveBeenCalled();
+});
+
+it('does not show an error when the live refresh fails but local data already loaded', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([
+    { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
+  ]);
+  mockedApi.fetchRecipe.mockRejectedValue(new Error('offline'));
+  mockedApi.fetchCategories.mockRejectedValue(new Error('offline'));
+
+  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.queryByTestId('recipe-detail-load-error')).toBeNull();
+});
+
+it('falls back to a live signed URL when the hero image is not cached locally', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(null);
+  mockedHeroImage.getHeroImageUrl.mockResolvedValue('https://signed.example.com/existing.jpg');
+  mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
+  mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
+
+  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+
+  await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+  expect(mockedHeroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/existing.jpg');
 });
 
 it('omits the timing line and hero image when the recipe has neither', async () => {

@@ -1,8 +1,8 @@
 import { Link, Tabs, useRouter } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AddSheetProvider, useAddSheet } from '../../src/components/AddSheetContext';
 import { Button } from '../../src/components/Button';
 import { LibraryIcon } from '../../src/components/icons/LibraryIcon';
 import { ThisWeekIcon } from '../../src/components/icons/ThisWeekIcon';
@@ -23,8 +23,16 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 // keeping the native header bar around still gets safe-area handling
 // and the left/right action slots for free instead of hand-rolling them.
 export default function TabsLayout() {
+  return (
+    <AddSheetProvider>
+      <TabsLayoutContent />
+    </AddSheetProvider>
+  );
+}
+
+function TabsLayoutContent() {
   const router = useRouter();
-  const [addSheetVisible, setAddSheetVisible] = useState(false);
+  const { isVisible: addSheetVisible, open: openAddSheet, close: closeAddSheet } = useAddSheet();
   const insets = useSafeAreaInsets();
 
   return (
@@ -36,7 +44,7 @@ export default function TabsLayout() {
           headerTitle: () => null,
           headerLeft: () => (
             <Pressable
-              onPress={() => setAddSheetVisible(true)}
+              onPress={openAddSheet}
               accessibilityLabel="Add recipe"
               accessibilityRole="button"
               hitSlop={8}
@@ -84,22 +92,18 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-      <Sheet
-        visible={addSheetVisible}
-        onDismiss={() => setAddSheetVisible(false)}
-        testID="add-recipe-sheet"
-      >
+      <Sheet visible={addSheetVisible} onDismiss={() => closeAddSheet()} testID="add-recipe-sheet">
         <View style={{ gap: spacing.md }}>
           <Button
             title="Create manually"
             onPress={() => {
-              setAddSheetVisible(false);
+              closeAddSheet();
               router.push('/recipe/new');
             }}
             testID="add-recipe-manual"
           />
           <Text>Importing from a URL, camera, or photo is coming soon.</Text>
-          <Button title="Close" onPress={() => setAddSheetVisible(false)} variant="secondary" />
+          <Button title="Close" onPress={() => closeAddSheet()} variant="secondary" />
         </View>
       </Sheet>
     </>

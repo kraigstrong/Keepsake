@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   input: {
-    ...typography.body,
+    ...typography.input,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,

@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   input: {
-    ...typography.body,
+    ...typography.input,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
