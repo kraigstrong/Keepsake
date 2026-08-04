@@ -13,7 +13,7 @@ import { capture } from './posthog';
  * the feature that fires it actually ships, and never carry recipe
  * content, cooking notes, or credentials in `props`.
  */
-export type AnalyticsEvent = 'app_opened';
+export type AnalyticsEvent = 'app_opened' | 'search_performed';
 
 export function trackEvent(
   name: AnalyticsEvent,

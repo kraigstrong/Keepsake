@@ -1,42 +1,117 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { RecipeSummary } from './api';
+import type { Category, CategoryGroup } from './api';
+import {
+  activeFilterCount,
+  EMPTY_FILTERS,
+  filterRecipes,
+  toggleCategoryFilter,
+  toggleTagFilter,
+  uniqueTags,
+  type LibraryFilters,
+} from './libraryFilters';
+import { SORT_MODES, sortRecipes, type SortMode } from './librarySort';
+import { readSortPreference, writeSortPreference } from './sortPreference';
 import { useAddSheet } from '../components/AddSheetContext';
+import { Chip } from '../components/Chip';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
+import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
-import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
+import type { SearchResult } from '../search/search';
+import { searchRecipes } from '../search/search';
+import {
+  readLocalCategories,
+  readLocalLibraryRecipes,
+  type LibraryRecipe,
+} from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
-import { colors, spacing, typography } from '../theme/tokens';
+import { colors, radii, spacing, typography } from '../theme/tokens';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  smart: 'Smart',
+  alphabetical: 'Alphabetical',
+  recentlyAdded: 'Recently Added',
+};
+
+const CATEGORY_GROUP_LABELS: Record<CategoryGroup, string> = {
+  protein: 'Protein',
+  dish_type: 'Dish Type',
+  preparation: 'Preparation',
+};
+const CATEGORY_GROUP_ORDER: CategoryGroup[] = ['protein', 'dish_type', 'preparation'];
+
+// Debounced, not fired on every keystroke — FTS5 queries are sub-1ms even
+// at thousands of recipes (docs/risk-spikes/sqlite-fts.md), so this is
+// purely to avoid running one query per typed character, not a
+// performance necessity of the query itself.
+const SEARCH_DEBOUNCE_MS = 200;
 
 /**
- * Local-first (ADR-0013 / OFF-01): reads from the local SQLite mirror,
- * which works offline and shows instantly. On focus, also best-effort
- * syncs and re-reads so returning from creating/editing a recipe (or
- * regaining connectivity) shows the latest — but a failed sync never
- * surfaces as an error, since the local read already succeeded and
- * that's what offline browsing means. loadError now means the local
- * read itself failed, not "no network."
+ * Local-first (ADR-0013 / OFF-01/OFF-02): reads from the local SQLite
+ * mirror, which works offline and shows instantly. On focus, also
+ * best-effort syncs and re-reads so returning from creating/editing a
+ * recipe (or regaining connectivity) shows the latest — but a failed
+ * sync never surfaces as an error, since the local read already
+ * succeeded and that's what offline browsing means. loadError now means
+ * the local read itself failed, not "no network."
+ *
+ * Search query, sort mode, and active filters live in this component's
+ * own state, untouched by the focus-triggered reload above — returning
+ * to this tab (or an in-place resync) never clears what the user had
+ * typed or selected (the phase's "search-state restoration" scope item).
+ * Sort mode additionally persists across app restarts via AsyncStorage
+ * (sortPreference.ts); query and filters are session-only, matching how
+ * every other screen in this app treats transient UI state.
  */
 export function LibraryScreen() {
   const router = useRouter();
   const { open: openAddSheet } = useAddSheet();
   const { household } = useHousehold();
-  const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
+  const [recipes, setRecipes] = useState<LibraryRecipe[] | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadError, setLoadError] = useState(false);
+
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('smart');
+  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_FILTERS);
+  const [filterSheetVisible, setFilterSheetVisible] = useState(false);
+
+  useEffect(() => {
+    readSortPreference().then(setSortMode);
+  }, []);
+
+  // No early setSearchResults(null) for an empty query: searchResults is
+  // only ever read below while isSearching is true, so a stale value
+  // from a previous query is inert once the query is cleared — no need
+  // to reset it, which would mean calling setState synchronously in the
+  // effect body.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      searchRecipes(trimmed)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [query]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
 
-      readLocalRecipeSummaries()
-        .then(async (local) => {
+      Promise.all([readLocalLibraryRecipes(), readLocalCategories()])
+        .then(async ([local, localCategories]) => {
           if (cancelled) return;
           setRecipes(local);
+          setCategories(localCategories);
           setLoadError(false);
 
           if (!household) return;
@@ -46,8 +121,13 @@ export function LibraryScreen() {
           });
           if (cancelled) return;
 
-          const refreshed = await readLocalRecipeSummaries().catch(() => null);
-          if (!cancelled && refreshed) setRecipes(refreshed);
+          const [refreshed, refreshedCategories] = await Promise.all([
+            readLocalLibraryRecipes().catch(() => null),
+            readLocalCategories().catch(() => null),
+          ]);
+          if (cancelled) return;
+          if (refreshed) setRecipes(refreshed);
+          if (refreshedCategories) setCategories(refreshedCategories);
         })
         .catch(() => {
           if (!cancelled) setLoadError(true);
@@ -59,10 +139,66 @@ export function LibraryScreen() {
     }, [household]),
   );
 
+  function chooseSort(mode: SortMode) {
+    setSortMode(mode);
+    writeSortPreference(mode);
+  }
+
+  const isSearching = query.trim().length > 0;
+  const filterCount = activeFilterCount(filters);
+  const visibleRecipes = isSearching
+    ? (searchResults ?? [])
+    : sortRecipes(filterRecipes(recipes ?? [], filters), sortMode);
+
+  const categoriesByGroup = CATEGORY_GROUP_ORDER.map((group) => ({
+    group,
+    options: categories.filter((c) => c.groupName === group),
+  })).filter((section) => section.options.length > 0);
+  const tagOptions = uniqueTags(recipes ?? []);
+
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Library</Text>
-      <View style={[styles.content, recipes && recipes.length > 0 ? null : styles.centered]}>
+
+      {recipes !== null && recipes.length > 0 && (
+        <>
+          <TextInput
+            testID="library-search-input"
+            style={styles.searchInput}
+            placeholder="Search recipes"
+            placeholderTextColor={colors.textTertiary}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+
+          {!isSearching && (
+            <View style={styles.controlsRow}>
+              <View style={styles.sortRow}>
+                {SORT_MODES.map((mode) => (
+                  <Chip
+                    key={mode}
+                    testID={`library-sort-${mode}`}
+                    label={SORT_LABELS[mode]}
+                    selected={sortMode === mode}
+                    onPress={() => chooseSort(mode)}
+                  />
+                ))}
+              </View>
+              <Chip
+                testID="library-filter-button"
+                label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
+                selected={filterCount > 0}
+                onPress={() => setFilterSheetVisible(true)}
+              />
+            </View>
+          )}
+        </>
+      )}
+
+      <View style={[styles.content, visibleRecipes.length > 0 ? null : styles.centered]}>
         {loadError ? (
           <ErrorState
             title="Couldn't load your recipes"
@@ -79,10 +215,24 @@ export function LibraryScreen() {
             onAction={openAddSheet}
             testID="library-placeholder"
           />
+        ) : isSearching && visibleRecipes.length === 0 ? (
+          <EmptyState
+            title="No matches"
+            message={`Nothing found for "${query.trim()}".`}
+            testID="library-search-empty"
+          />
+        ) : !isSearching && filterCount > 0 && visibleRecipes.length === 0 ? (
+          <EmptyState
+            title="No recipes match"
+            message="Try clearing a filter."
+            actionLabel="Clear filters"
+            onAction={() => setFilters(EMPTY_FILTERS)}
+            testID="library-filtered-empty"
+          />
         ) : (
           <FlatList
             style={styles.list}
-            data={recipes}
+            data={visibleRecipes}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <Row
@@ -95,6 +245,62 @@ export function LibraryScreen() {
           />
         )}
       </View>
+
+      <Sheet
+        visible={filterSheetVisible}
+        onDismiss={() => setFilterSheetVisible(false)}
+        testID="library-filter-sheet"
+      >
+        <ScrollView style={styles.filterSheetScroll}>
+          {categoriesByGroup.map(({ group, options }) => (
+            <View key={group} style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>{CATEGORY_GROUP_LABELS[group]}</Text>
+              <View style={styles.chipWrap}>
+                {options.map((category) => (
+                  <Chip
+                    key={category.id}
+                    testID={`library-filter-category-${category.id}`}
+                    label={category.value}
+                    selected={filters.categoryIds.includes(category.id)}
+                    onPress={() => setFilters(toggleCategoryFilter(filters, category.id))}
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {tagOptions.length > 0 && (
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Tags</Text>
+              <View style={styles.chipWrap}>
+                {tagOptions.map((tag) => (
+                  <Chip
+                    key={tag}
+                    testID={`library-filter-tag-${tag}`}
+                    label={tag}
+                    selected={filters.tags.includes(tag)}
+                    onPress={() => setFilters(toggleTagFilter(filters, tag))}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={styles.filterActions}>
+          <Chip
+            testID="library-filter-clear"
+            label="Clear filters"
+            onPress={() => setFilters(EMPTY_FILTERS)}
+          />
+          <Chip
+            testID="library-filter-done"
+            label="Done"
+            selected
+            onPress={() => setFilterSheetVisible(false)}
+          />
+        </View>
+      </Sheet>
     </View>
   );
 }
@@ -110,6 +316,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
+  searchInput: {
+    ...typography.input,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
   content: {
     flex: 1,
   },
@@ -119,5 +350,26 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  filterSheetScroll: {
+    maxHeight: 400,
+  },
+  filterSection: {
+    marginBottom: spacing.md,
+  },
+  filterSectionTitle: {
+    ...typography.heading,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
   },
 });

@@ -2,13 +2,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { LibraryScreen } from './LibraryScreen';
+import type { LibraryRecipe } from '../sync/offlineRecipes';
 import { useAddSheet } from '../components/AddSheetContext';
 import { useHousehold } from '../household/HouseholdProvider';
-import { readLocalRecipeSummaries } from '../sync/offlineRecipes';
+import { searchRecipes } from '../search/search';
+import { readLocalCategories, readLocalLibraryRecipes } from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
 
 jest.mock('../sync/offlineRecipes');
 jest.mock('../sync/syncEngine');
+jest.mock('../search/search');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../components/AddSheetContext', () => ({ useAddSheet: jest.fn() }));
 jest.mock('expo-router', () => ({
@@ -23,7 +26,20 @@ jest.mock('expo-router', () => ({
 // missing-env-var throw or touch native modules.
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
-const mockedReadLocalRecipeSummaries = readLocalRecipeSummaries as jest.Mock;
+function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
+  return {
+    id: overrides.id ?? 'r1',
+    title: 'Chili',
+    createdAt: '2020-01-01T00:00:00.000Z',
+    categoryIds: [],
+    tags: [],
+    ...overrides,
+  };
+}
+
+const mockedReadLocalLibraryRecipes = readLocalLibraryRecipes as jest.Mock;
+const mockedReadLocalCategories = readLocalCategories as jest.Mock;
+const mockedSearchRecipes = searchRecipes as jest.Mock;
 const mockedSyncHousehold = syncHousehold as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
@@ -40,10 +56,12 @@ beforeEach(() => {
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
   mockedSyncHousehold.mockResolvedValue(undefined);
   mockedUseAddSheet.mockReturnValue({ open: openAddSheet, close: jest.fn(), isVisible: false });
+  mockedReadLocalCategories.mockResolvedValue([]);
+  mockedSearchRecipes.mockResolvedValue([]);
 });
 
 it('shows an empty state whose add action opens the shared add sheet, not manual create directly', async () => {
-  mockedReadLocalRecipeSummaries.mockResolvedValue([]);
+  mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
   await render(<LibraryScreen />);
 
@@ -55,9 +73,9 @@ it('shows an empty state whose add action opens the shared add sheet, not manual
 });
 
 it('lists recipes from the local cache and navigates to a recipe on press', async () => {
-  mockedReadLocalRecipeSummaries.mockResolvedValue([
-    { id: 'r1', title: 'Chili' },
-    { id: 'r2', title: 'Tacos' },
+  mockedReadLocalLibraryRecipes.mockResolvedValue([
+    recipe({ id: 'r1', title: 'Chili' }),
+    recipe({ id: 'r2', title: 'Tacos' }),
   ]);
 
   await render(<LibraryScreen />);
@@ -70,7 +88,7 @@ it('lists recipes from the local cache and navigates to a recipe on press', asyn
 });
 
 it('shows an error state when the local read itself fails', async () => {
-  mockedReadLocalRecipeSummaries.mockRejectedValue(new Error('disk error'));
+  mockedReadLocalLibraryRecipes.mockRejectedValue(new Error('disk error'));
 
   await render(<LibraryScreen />);
 
@@ -78,7 +96,7 @@ it('shows an error state when the local read itself fails', async () => {
 });
 
 it('syncs in the background without surfacing an error when the sync itself fails', async () => {
-  mockedReadLocalRecipeSummaries.mockResolvedValue([{ id: 'r1', title: 'Chili' }]);
+  mockedReadLocalLibraryRecipes.mockResolvedValue([recipe({ id: 'r1', title: 'Chili' })]);
   mockedSyncHousehold.mockRejectedValue(new Error('offline'));
 
   await render(<LibraryScreen />);
@@ -90,10 +108,148 @@ it('syncs in the background without surfacing an error when the sync itself fail
 
 it('does not attempt to sync when there is no household yet', async () => {
   mockedUseHousehold.mockReturnValue({ household: null });
-  mockedReadLocalRecipeSummaries.mockResolvedValue([]);
+  mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
   await render(<LibraryScreen />);
 
   await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
   expect(mockedSyncHousehold).not.toHaveBeenCalled();
+});
+
+describe('sorting', () => {
+  it('defaults to Smart sort and orders recently-added recipes first', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([
+      recipe({ id: 'old', title: 'Aardvark Stew', createdAt: '2020-01-01T00:00:00.000Z' }),
+      recipe({ id: 'new', title: 'Zucchini Bread', createdAt: new Date().toISOString() }),
+    ]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-recipe-list')).toBeTruthy());
+
+    const list = screen.getByTestId('library-recipe-list');
+    expect(list.props.data.map((r: LibraryRecipe) => r.id)).toEqual(['new', 'old']);
+  });
+
+  it('switches to alphabetical ordering when that chip is selected', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([
+      recipe({ id: 'r1', title: 'Tacos' }),
+      recipe({ id: 'r2', title: 'Chili' }),
+    ]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-sort-alphabetical')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('library-sort-alphabetical'));
+
+    const list = screen.getByTestId('library-recipe-list');
+    expect(list.props.data.map((r: LibraryRecipe) => r.id)).toEqual(['r2', 'r1']);
+  });
+});
+
+describe('filters', () => {
+  it('shows the active filter count on the Filters chip and narrows the list', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([
+      recipe({ id: 'chicken', title: 'Chicken Soup', categoryIds: ['cat-chicken'] }),
+      recipe({ id: 'beef', title: 'Beef Stew', categoryIds: ['cat-beef'] }),
+    ]);
+    mockedReadLocalCategories.mockResolvedValue([
+      { id: 'cat-chicken', groupName: 'protein', value: 'Chicken' },
+      { id: 'cat-beef', groupName: 'protein', value: 'Beef' },
+    ]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-filter-button')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('library-filter-button'));
+    await waitFor(() =>
+      expect(screen.getByTestId('library-filter-category-cat-chicken')).toBeTruthy(),
+    );
+    await fireEvent.press(screen.getByTestId('library-filter-category-cat-chicken'));
+
+    expect(screen.getByText('Filters (1)')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('library-filter-done'));
+    const list = screen.getByTestId('library-recipe-list');
+    expect(list.props.data.map((r: LibraryRecipe) => r.id)).toEqual(['chicken']);
+  });
+
+  it('shows a distinct empty state, with a clear action, when filters exclude everything', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([
+      recipe({ id: 'chicken', title: 'Chicken Soup', categoryIds: ['cat-chicken'] }),
+    ]);
+    mockedReadLocalCategories.mockResolvedValue([
+      { id: 'cat-chicken', groupName: 'protein', value: 'Chicken' },
+      { id: 'cat-beef', groupName: 'protein', value: 'Beef' },
+    ]);
+
+    await render(<LibraryScreen />);
+    await fireEvent.press(await screen.findByTestId('library-filter-button'));
+    await fireEvent.press(await screen.findByTestId('library-filter-category-cat-beef'));
+    await fireEvent.press(screen.getByTestId('library-filter-done'));
+
+    await waitFor(() => expect(screen.getByTestId('library-filtered-empty')).toBeTruthy());
+
+    await fireEvent.press(screen.getByText('Clear filters'));
+    await waitFor(() => expect(screen.getByTestId('library-recipe-list')).toBeTruthy());
+  });
+});
+
+describe('search', () => {
+  it('shows search results (title only) instead of the sorted/filtered list once a query is typed', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([recipe({ id: 'r1', title: 'Chili' })]);
+    mockedSearchRecipes.mockResolvedValue([{ id: 'r9', title: 'Chicken Tikka' }]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-search-input')).toBeTruthy());
+
+    fireEvent.changeText(screen.getByTestId('library-search-input'), 'chick');
+
+    await waitFor(() => expect(mockedSearchRecipes).toHaveBeenCalledWith('chick'), {
+      timeout: 2000,
+    });
+    await waitFor(() => expect(screen.getByText('Chicken Tikka')).toBeTruthy(), { timeout: 2000 });
+    expect(screen.queryByText('Chili')).toBeNull();
+  }, 10000);
+
+  it('shows a distinct empty state for a search with no matches', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([recipe({ id: 'r1', title: 'Chili' })]);
+    mockedSearchRecipes.mockResolvedValue([]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-search-input')).toBeTruthy());
+    fireEvent.changeText(screen.getByTestId('library-search-input'), 'nonexistent');
+
+    await waitFor(() => expect(screen.getByTestId('library-search-empty')).toBeTruthy(), {
+      timeout: 2000,
+    });
+  }, 10000);
+
+  it('restores the sorted/filtered list once the search query is cleared', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([recipe({ id: 'r1', title: 'Chili' })]);
+    mockedSearchRecipes.mockResolvedValue([{ id: 'r9', title: 'Chicken Tikka' }]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-search-input')).toBeTruthy());
+    const input = screen.getByTestId('library-search-input');
+
+    fireEvent.changeText(input, 'chick');
+    await waitFor(() => expect(screen.getByText('Chicken Tikka')).toBeTruthy(), { timeout: 2000 });
+
+    fireEvent.changeText(input, '');
+    await waitFor(() => expect(screen.getByText('Chili')).toBeTruthy());
+  }, 10000);
+});
+
+it('preserves search text and filters across a focus-triggered reload (search-state restoration)', async () => {
+  mockedReadLocalLibraryRecipes.mockResolvedValue([recipe({ id: 'r1', title: 'Chili' })]);
+
+  await render(<LibraryScreen />);
+  const input = await screen.findByTestId('library-search-input');
+  fireEvent.changeText(input, 'chicken');
+
+  // Simulate the focus effect firing again (e.g. returning to this tab)
+  // without unmounting — the reload must not clear what was typed.
+  mockedUseFocusEffect.mock.calls[0]![0]();
+
+  await waitFor(() => expect(input.props.value).toBe('chicken'));
 });

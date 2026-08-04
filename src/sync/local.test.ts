@@ -39,6 +39,7 @@ const recipe: SyncedRecipe = {
   categoryIds: ['c1'],
   ingredientSections: [{ title: null, lines: ['1 lb beef'] }],
   instructionSections: [{ title: null, lines: ['Brown the beef.'] }],
+  createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-05T00:00:00.000Z',
 };
 
@@ -97,7 +98,7 @@ describe('upsertRecipes', () => {
     const db = createMockDb();
     const withTransactionAsync = jest.fn();
 
-    await upsertRecipes({ ...db, withTransactionAsync }, []);
+    await upsertRecipes({ ...db, withTransactionAsync }, [], new Map());
 
     expect(withTransactionAsync).not.toHaveBeenCalled();
   });
@@ -105,7 +106,7 @@ describe('upsertRecipes', () => {
   it('serializes JSON columns and writes one row per recipe inside a transaction', async () => {
     const db = createMockDb();
 
-    await upsertRecipes(db, [recipe]);
+    await upsertRecipes(db, [recipe], new Map());
 
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('insert into recipes'),
@@ -124,8 +125,37 @@ describe('upsertRecipes', () => {
       JSON.stringify(recipe.categoryIds),
       JSON.stringify(recipe.ingredientSections),
       JSON.stringify(recipe.instructionSections),
+      recipe.createdAt,
       recipe.updatedAt,
       expect.any(String),
+    );
+  });
+
+  it('indexes the recipe for search: deindex-then-reinsert into recipe_fts and recipe_trigram', async () => {
+    const db = createMockDb();
+
+    await upsertRecipes(db, [recipe], new Map([['c1', 'Beef']]));
+
+    expect(db.runAsync).toHaveBeenCalledWith('delete from recipe_fts where recipe_id = ?', 'r1');
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'delete from recipe_trigram where recipe_id = ?',
+      'r1',
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('insert into recipe_fts'),
+      'r1',
+      'Chili',
+      '1 lb beef',
+      '',
+      '',
+      '',
+      'Beef',
+      'spicy',
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'insert into recipe_trigram (recipe_id, title) values (?, ?)',
+      'r1',
+      'Chili',
     );
   });
 });
@@ -140,13 +170,33 @@ describe('deleteRecipes', () => {
     expect(withTransactionAsync).not.toHaveBeenCalled();
   });
 
-  it('deletes each given id', async () => {
+  it('deletes each given id from recipes and both search index tables', async () => {
     const db = createMockDb();
 
     await deleteRecipes(db, ['r1', 'r2']);
 
     expect(db.runAsync).toHaveBeenNthCalledWith(1, 'delete from recipes where id = ?', 'r1');
-    expect(db.runAsync).toHaveBeenNthCalledWith(2, 'delete from recipes where id = ?', 'r2');
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      2,
+      'delete from recipe_fts where recipe_id = ?',
+      'r1',
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      3,
+      'delete from recipe_trigram where recipe_id = ?',
+      'r1',
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(4, 'delete from recipes where id = ?', 'r2');
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      5,
+      'delete from recipe_fts where recipe_id = ?',
+      'r2',
+    );
+    expect(db.runAsync).toHaveBeenNthCalledWith(
+      6,
+      'delete from recipe_trigram where recipe_id = ?',
+      'r2',
+    );
   });
 });
 

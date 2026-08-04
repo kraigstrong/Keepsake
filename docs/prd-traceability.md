@@ -84,20 +84,20 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| SRCH-01 | Search covers title, ingredients, notes, author, source, categories, tags | 7 | Not Started |
-| SRCH-02 | Priority: title \> ingredients \> everything else | 7 | Not Started |
-| SRCH-03 | Typo tolerance | 7 | Not Started |
-| SRCH-04 | Singular/plural matching | 7 | Not Started |
-| SRCH-05 | Results show titles only | 7 | Not Started |
+| SRCH-01 | Search covers title, ingredients, notes, author, source, categories, tags | 7 | Done (tested) |
+| SRCH-02 | Priority: title \> ingredients \> everything else | 7 | Done (tested) |
+| SRCH-03 | Typo tolerance | 7 | Done (tested) |
+| SRCH-04 | Singular/plural matching | 7 | Done (tested) |
+| SRCH-05 | Results show titles only | 7 | Done (tested) |
 
 ## Library (LIB)
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| LIB-01 | Default sort: Recently Added (\<2wk) \> Frequently Selected \> remaining | 7 | Not Started |
-| LIB-02 | Additional sorts: Smart / Alphabetical / Recently Added / Frequently Selected | 7 | Not Started |
-| LIB-03 | Recipe rows show title only, no metadata clutter | 7 | Not Started |
-| LIB-04 | Filters with active filter count | 7 | Not Started |
+| LIB-01 | Default sort: Recently Added (\<2wk) \> Frequently Selected \> remaining | 7 (Frequently Selected: 12) | In Progress |
+| LIB-02 | Additional sorts: Smart / Alphabetical / Recently Added / Frequently Selected | 7 (Frequently Selected: 12) | In Progress |
+| LIB-03 | Recipe rows show title only, no metadata clutter | 7 | Done (tested) |
+| LIB-04 | Filters with active filter count | 7 | Done (tested) |
 
 ## This Week / Planning (WEEK)
 
@@ -167,7 +167,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | OFF-01 | Offline browsing | 6 | Done (tested) |
-| OFF-02 | Offline searching | 6 / 7 | Not Started |
+| OFF-02 | Offline searching | 6 / 7 | Done (tested) |
 | OFF-03 | Offline cooking | 15 | Not Started |
 | OFF-04 | Imports, editing, planning, and grocery export require connectivity | 6 (boundary), enforced per feature phase | Not Started |
 | OFF-05 | Cooking completion queues locally and syncs on reconnect | 15 | Not Started |

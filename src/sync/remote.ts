@@ -29,6 +29,7 @@ interface FetchedRecipeRow {
   source_url: string | null;
   source_attribution: string | null;
   tags: string[];
+  created_at: string;
   updated_at: string;
   recipe_ingredient_sections: FetchedSection<FetchedLine>[];
   recipe_instruction_sections: FetchedSection<FetchedLine>[];
@@ -62,6 +63,7 @@ function toSyncedRecipe(row: FetchedRecipeRow): SyncedRecipe {
       title: section.title,
       lines: bySortOrder(section.recipe_instructions ?? []).map((line) => line.line_text),
     })),
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
@@ -81,7 +83,7 @@ export async function fetchChangedRecipes(
 ): Promise<SyncedRecipe[]> {
   let query = supabase.from('recipes').select(
     `id, household_id, version, title, hero_image_path, active_time_minutes, total_time_minutes,
-       yield_text, permanent_notes, source_url, source_attribution, tags, updated_at,
+       yield_text, permanent_notes, source_url, source_attribution, tags, created_at, updated_at,
        recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
        recipe_categories ( category_id )`,

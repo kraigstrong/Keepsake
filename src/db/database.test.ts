@@ -42,13 +42,21 @@ describe('runMigrations', () => {
 
     await runMigrations(db);
 
-    const finalVersionCall = db.execAsync.mock.calls.find(([source]) =>
+    const versionCalls = db.execAsync.mock.calls.filter(([source]) =>
       /pragma user_version/i.test(source),
     );
-    expect(finalVersionCall?.[0]).toBe(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    // One PRAGMA per migration applied, in order — not just the final one.
+    expect(versionCalls.map(([source]) => source)).toEqual(
+      Array.from({ length: SCHEMA_VERSION }, (_, i) => `PRAGMA user_version = ${i + 1}`),
+    );
     expect(
       db.execAsync.mock.calls.some(([source]) =>
         /create table if not exists recipes/i.test(source),
+      ),
+    ).toBe(true);
+    expect(
+      db.execAsync.mock.calls.some(([source]) =>
+        /create virtual table if not exists recipe_fts/i.test(source),
       ),
     ).toBe(true);
   });

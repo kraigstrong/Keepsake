@@ -1,5 +1,24 @@
 import { getDatabase } from '../db/database';
-import type { Category, Recipe, RecipeSection, RecipeSummary } from '../recipes/api';
+import type { Category, Recipe, RecipeSection } from '../recipes/api';
+
+// What Library's sort/filter (Phase 7) needs beyond a bare id/title —
+// createdAt for the Smart-sort "Recently Added" tier (distinct from
+// updated_at, which changes on every edit), categoryIds/tags for filters.
+export interface LibraryRecipe {
+  id: string;
+  title: string;
+  createdAt: string;
+  categoryIds: string[];
+  tags: string[];
+}
+
+interface LibraryRecipeRow {
+  id: string;
+  title: string;
+  created_at: string | null;
+  category_ids: string;
+  tags: string;
+}
 
 interface LocalRecipeRow {
   id: string;
@@ -41,9 +60,22 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
 // is what screens read from, kept fresh by the sync engine — never a
 // direct server fetch, so browsing works offline with no special-casing
 // at the call site.
-export async function readLocalRecipeSummaries(): Promise<RecipeSummary[]> {
+export async function readLocalLibraryRecipes(): Promise<LibraryRecipe[]> {
   const db = await getDatabase();
-  return db.getAllAsync<RecipeSummary>('select id, title from recipes order by title');
+  const rows = await db.getAllAsync<LibraryRecipeRow>(
+    'select id, title, created_at, category_ids, tags from recipes order by title',
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    // Only null for a local row that hasn't gone through the schema v3
+    // resync yet (see db/schema.ts's migration 3) — falls back to "epoch"
+    // rather than "now" so an unmigrated row sorts as old, not
+    // freshly-added, until the resync backfills the real value.
+    createdAt: row.created_at ?? new Date(0).toISOString(),
+    categoryIds: JSON.parse(row.category_ids) as string[],
+    tags: JSON.parse(row.tags) as string[],
+  }));
 }
 
 export async function readLocalRecipe(id: string): Promise<Recipe | null> {

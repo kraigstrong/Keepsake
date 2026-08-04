@@ -2,8 +2,8 @@ import { getDatabase } from '../db/database';
 import {
   readCachedImageUri,
   readLocalCategories,
+  readLocalLibraryRecipes,
   readLocalRecipe,
-  readLocalRecipeSummaries,
 } from './offlineRecipes';
 
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
@@ -20,21 +20,45 @@ function createMockDb(overrides: Record<string, jest.Mock> = {}) {
 
 afterEach(() => jest.clearAllMocks());
 
-describe('readLocalRecipeSummaries', () => {
-  it('reads id/title from the local recipes table, ordered by title', async () => {
+describe('readLocalLibraryRecipes', () => {
+  it('reads and deserializes the fields Library sort/filter needs, ordered by title', async () => {
     const db = createMockDb({
       getAllAsync: jest.fn(async () => [
-        { id: 'r1', title: 'Chili' },
-        { id: 'r2', title: 'Tacos' },
+        {
+          id: 'r1',
+          title: 'Chili',
+          created_at: '2026-08-01T00:00:00.000Z',
+          category_ids: JSON.stringify(['c1']),
+          tags: JSON.stringify(['spicy']),
+        },
       ]),
     });
     mockedGetDatabase.mockResolvedValue(db);
 
-    await expect(readLocalRecipeSummaries()).resolves.toEqual([
-      { id: 'r1', title: 'Chili' },
-      { id: 'r2', title: 'Tacos' },
+    await expect(readLocalLibraryRecipes()).resolves.toEqual([
+      {
+        id: 'r1',
+        title: 'Chili',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        categoryIds: ['c1'],
+        tags: ['spicy'],
+      },
     ]);
-    expect(db.getAllAsync).toHaveBeenCalledWith('select id, title from recipes order by title');
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      'select id, title, created_at, category_ids, tags from recipes order by title',
+    );
+  });
+
+  it('falls back a null created_at (pre-schema-v3-resync row) to the epoch, not "now"', async () => {
+    const db = createMockDb({
+      getAllAsync: jest.fn(async () => [
+        { id: 'r1', title: 'Chili', created_at: null, category_ids: '[]', tags: '[]' },
+      ]),
+    });
+    mockedGetDatabase.mockResolvedValue(db);
+
+    const [result] = await readLocalLibraryRecipes();
+    expect(result!.createdAt).toBe(new Date(0).toISOString());
   });
 });
 

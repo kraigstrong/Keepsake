@@ -38,6 +38,7 @@ describe('fetchChangedRecipes', () => {
     source_url: null,
     source_attribution: null,
     tags: ['spicy'],
+    created_at: '2026-08-01T00:00:00.000Z',
     updated_at: '2026-08-05T00:00:00.000Z',
     recipe_ingredient_sections: [{ title: null, sort_order: 0, recipe_ingredients: [] }],
     recipe_instruction_sections: [{ title: null, sort_order: 0, recipe_instructions: [] }],
@@ -68,6 +69,7 @@ describe('fetchChangedRecipes', () => {
         categoryIds: ['c1'],
         ingredientSections: [{ title: null, lines: [] }],
         instructionSections: [{ title: null, lines: [] }],
+        createdAt: '2026-08-01T00:00:00.000Z',
         updatedAt: '2026-08-05T00:00:00.000Z',
       },
     ]);

@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -55,5 +55,51 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
       byte_size integer not null,
       last_accessed_at text not null
     )`,
+  ],
+  // Search (Phase 7, ADR-0014). Standalone FTS5 tables — NOT external-
+  // content against `recipes` (content=/content_rowid=): recipes.id is a
+  // text UUID, and while SQLite gives every rowid table an implicit
+  // integer rowid regardless of its declared primary key type, that
+  // implicit rowid isn't guaranteed stable across a VACUUM unless it's an
+  // `integer primary key` alias — a real footgun for a table already
+  // keyed by a stable id. recipe_id is stored as a plain `unindexed`
+  // column instead and maintained explicitly by src/sync/local.ts
+  // (delete-then-reinsert on every recipe upsert/delete), not by SQL
+  // triggers. Column order matters — buildSearchQuery.ts's per-column
+  // match queries are positional against this exact order.
+  2: [
+    `create virtual table if not exists recipe_fts using fts5(
+      recipe_id unindexed,
+      title,
+      ingredients,
+      notes,
+      source_attribution,
+      source_url,
+      categories,
+      tags,
+      tokenize = 'porter unicode61'
+    )`,
+    // Separate trigram index for the typo-tolerant fallback path only —
+    // title alone, since that's the highest-value tier to still surface
+    // on a typo (see docs/risk-spikes/sqlite-fts.md).
+    `create virtual table if not exists recipe_trigram using fts5(
+      recipe_id unindexed,
+      title,
+      tokenize = 'trigram'
+    )`,
+  ],
+  // Smart sort's "Recently Added (<2wk)" tier (Phase 7, LIB-01/LIB-02)
+  // needs when a recipe was *created*, distinct from updated_at (an edit
+  // shouldn't make a recipe look newly-added). Schema v1 shipped without
+  // it. Existing local rows have no value to backfill from locally — the
+  // recipes_cursor reset below forces every already-synced recipe to be
+  // refetched on the next syncHousehold() call, which is the only place
+  // created_at actually exists (the server row). This is the first real
+  // exercise of the "add a column, backfill via resync" migration path
+  // (Phase 6 flagged only the v0→v1 case had ever run). deletes_cursor is
+  // untouched — nothing about tombstones changed.
+  3: [
+    `alter table recipes add column created_at text`,
+    `update sync_state set recipes_cursor_updated_at = null, recipes_cursor_id = null`,
   ],
 };

@@ -71,6 +71,7 @@ function makeRecipe(
     categoryIds: [],
     ingredientSections: [],
     instructionSections: [],
+    createdAt: updatedAt,
     updatedAt,
   };
 }
@@ -126,8 +127,8 @@ describe('syncHousehold', () => {
     await syncHousehold('h1');
 
     expect(mockedFetchChangedRecipes).toHaveBeenCalledTimes(2);
-    expect(mockedUpsertRecipes).toHaveBeenNthCalledWith(1, FAKE_DB, fullPage);
-    expect(mockedUpsertRecipes).toHaveBeenNthCalledWith(2, FAKE_DB, finalPage);
+    expect(mockedUpsertRecipes).toHaveBeenNthCalledWith(1, FAKE_DB, fullPage, expect.any(Map));
+    expect(mockedUpsertRecipes).toHaveBeenNthCalledWith(2, FAKE_DB, finalPage, expect.any(Map));
 
     // Cursor committed after the first (full) page, advancing to its last row —
     // this is what lets an interrupted sync resume instead of re-fetching.
@@ -216,5 +217,19 @@ describe('syncHousehold', () => {
     expect(mockedReplaceCategories).toHaveBeenCalledWith(FAKE_DB, [
       { id: 'c1', groupName: 'protein', value: 'Chicken' },
     ]);
+  });
+
+  it("passes this same sync pass's freshly-fetched category labels to upsertRecipes for search indexing", async () => {
+    mockedFetchAllCategories.mockResolvedValue([
+      { id: 'c1', groupName: 'protein', value: 'Chicken' },
+    ]);
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z')])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+
+    const [, , categoryLabelsById] = mockedUpsertRecipes.mock.calls[0]!;
+    expect(categoryLabelsById.get('c1')).toBe('Chicken');
   });
 });
