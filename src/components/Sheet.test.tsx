@@ -70,6 +70,64 @@ describe('Sheet', () => {
     expect(screen.getByTestId('sheet').props.animationType).toBe('none');
   });
 
+  it('opens when visible flips from false to true after the initial render', async () => {
+    const { rerender } = await render(
+      <Sheet visible={false} onDismiss={() => {}} testID="sheet">
+        <Text>Sheet content</Text>
+      </Sheet>,
+    );
+    expect(screen.queryByText('Sheet content')).not.toBeOnTheScreen();
+
+    await act(async () => {
+      rerender(
+        <Sheet visible onDismiss={() => {}} testID="sheet">
+          <Text>Sheet content</Text>
+        </Sheet>,
+      );
+    });
+
+    expect(screen.getByText('Sheet content')).toBeOnTheScreen();
+  });
+
+  it('opens again after having been opened and closed once already', async () => {
+    const { rerender } = await render(
+      <Sheet visible={false} onDismiss={() => {}} testID="sheet">
+        <Text>Sheet content</Text>
+      </Sheet>,
+    );
+
+    await act(async () => {
+      rerender(
+        <Sheet visible onDismiss={() => {}} testID="sheet">
+          <Text>Sheet content</Text>
+        </Sheet>,
+      );
+    });
+    expect(screen.getByText('Sheet content')).toBeOnTheScreen();
+
+    await act(async () => {
+      rerender(
+        <Sheet visible={false} onDismiss={() => {}} testID="sheet">
+          <Text>Sheet content</Text>
+        </Sheet>,
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(screen.queryByText('Sheet content')).not.toBeOnTheScreen();
+
+    await act(async () => {
+      rerender(
+        <Sheet visible onDismiss={() => {}} testID="sheet">
+          <Text>Sheet content</Text>
+        </Sheet>,
+      );
+    });
+
+    expect(screen.getByText('Sheet content')).toBeOnTheScreen();
+  });
+
   it('unmounts only after the close animation finishes, not immediately on dismiss', async () => {
     const { rerender } = await render(
       <Sheet visible onDismiss={() => {}} testID="sheet">
