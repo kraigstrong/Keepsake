@@ -11,6 +11,7 @@ import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
 import { initObservability, logError } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
+import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
 import { syncHousehold } from '../src/sync/syncEngine';
 import { colors, spacing } from '../src/theme/tokens';
 
@@ -93,6 +94,7 @@ function OfflineBanner() {
 function AuthenticatedRouteBoundary() {
   const { session, isLoading: sessionLoading } = useSession();
   const { profile, household, isLoading: householdLoading } = useHousehold();
+  useDevAutoSignIn();
 
   if (sessionLoading) {
     return null;
