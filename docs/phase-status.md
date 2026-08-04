@@ -4,13 +4,13 @@ The single source of truth for "where are we." Update this at the start and end 
 
 ## Current
 
-- **Phase:** 6 — Offline Read Model and Synchronization
-- **Status:** Build scope complete, 12 commits on `phase-6-offline-sync`. Not yet exit-reviewed — see "Phase 6 summary" below.
-- **Branch:** `phase-6-offline-sync` (based on `main` at `1980e0b`)
-- **Next action:** Run the `exit-phase` skill, then push and open a PR per the `pr-ready` skill once the developer signs off.
-- **Blocked on:** Nothing technical. Exit-gate Pass/Conditional-Pass decision is the developer's call.
+- **Phase:** 7 — Library, Smart Sort, Search, and Filters
+- **Status:** Not started
+- **Branch:** _(none yet)_
+- **Next action:** Run the `start-phase` skill for Phase 7. Build scope: Library, flat Smart sort, sort persistence, SQLite full-text index, weighted title/ingredient/everything search, typo fallback, singular/plural behavior, filters, active filter count, search-state restoration, empty states, performance instrumentation. Exit gate: users can find known recipes quickly and predictably.
+- **Blocked on:** Nothing yet. Carry in two things flagged for this phase specifically: Phase 1's risk spike left SQLite FTS's bm25 title-ranking unsolved (`docs/risk-spikes/`); the local SQLite backup-location finding below is worth a real-device check before building more on top of the local DB.
 
-## Phase 6 summary (for reference — see History below once exited)
+## Phase 6 summary (for reference — see History below for the exit record)
 
 12 commits on `phase-6-offline-sync`. ADR-0013 resolved the design questions the phase's build scope leaves open before any schema or client code exists: local SQLite mirrors the client's already-flattened `Recipe` read shape (one row per recipe, JSON columns for sections/tags/categories) rather than the server's normalized child tables, since nothing local ever queries into ingredients/instructions independently; sync cursor is `(updated_at, id)` / `(deleted_at, id)` tuples, not bare timestamps, to avoid missing or double-fetching same-instant changes; tombstones are a narrow `deleted_recipes(id, household_id, deleted_at)` table populated by a `before delete` trigger on `recipes` — forward plumbing added ahead of Phase 16's delete feature, which doesn't exist yet.
 
@@ -86,6 +86,7 @@ ADR-0008 (email OTP auth, not passwords; SECURITY DEFINER RPCs, not Edge Functio
 | 4.5 | **Pass** | 2026-08-03 | Cross-cutting doc maintenance, merged via [PR #18](https://github.com/kraigstrong/Keepsake/pull/18) — not a numbered execution-plan phase. Reconciled prd.md/execution-plan.md against what Phase 4 actually built: renamed prd.md §13's "Author" to "Source attribution" to match the real field name; flagged in execution-plan.md that Phase 10 should reuse Phase 4's hero-image replace/crop/remove rather than rebuild it; flagged that Phase 11 needs to retrofit structure onto Phase 4's deliberately plain-text ingredient lines and decide whether `yield_text` needs a companion numeric servings field. No PRD IDs owned. |
 | 5 | **Conditional Pass** | 2026-08-04 | Drafts, Version History, and Edit Conflicts. 12 commits on `phase-5-drafts-versions-conflicts`, merged via [PR #19](https://github.com/kraigstrong/Keepsake/pull/19). See "Phase 5 summary" above for the full build description. REC-08, VER-01/02/03/04 → `Done (tested)`. 43 suites, 219 passed, 1 skipped; typecheck/lint/format clean. **Conditional Pass, not Pass**, for the same reason as Phase 4 — no live Simulator demonstration and no real migration execution possible in this sandbox — see "Phase 5 Conditional Pass follow-ups" above. |
 | 5.5 | — (no gate) | 2026-08-04 | Optional password sign-in (ADR-0012), cross-cutting, not a numbered execution-plan phase. Merged via [PR #20](https://github.com/kraigstrong/Keepsake/pull/20); a follow-up device-testing fix-up (stale env var name, confusing sign-in copy, found on the first real physical-device pass) merged via [PR #21](https://github.com/kraigstrong/Keepsake/pull/21). See "Optional password sign-in" above for the full build description. No exit decision — this isn't a phase with a gate. |
+| 6 | **Pass** | 2026-08-03 | Offline Read Model and Synchronization. 22 commits on `phase-6-offline-sync`, merged via [PR #23](https://github.com/kraigstrong/Keepsake/pull/23) — the first PR in this repo's history where a real CI run of the migration/pgTAP suite is confirmed (previously only ever reasoned about, never executed in this sandbox), and the first phase with genuine, if informal, physical-device/Simulator verification behind it (several real bugs found and fixed live — see "Phase 6 summary" above for the full build description). OFF-01 → `Done (tested)`. 54 suites, 294 passed, 1 skipped; typecheck/lint/format clean; `npm audit --omit=dev --audit-level=high` exit 0. **Pass**, not Conditional Pass — developer judgment call (2026-08-03) that the extensive live device/Simulator testing this session, though informal rather than a scripted walkthrough, was sufficient evidence; no follow-up required. |
 
 ## Carried-forward items (not phase-blocking, but tracked so they aren't lost)
 
@@ -105,10 +106,4 @@ ADR-0008 (email OTP auth, not passwords; SECURITY DEFINER RPCs, not Edge Functio
 
 ## Open questions for the developer
 
-- The optional-password-sign-in work isn't pushed yet — push `auth/optional-password-signin` and open a PR against `main` using `.github/PULL_REQUEST_TEMPLATE.md` when ready:
-  ```bash
-  git push -u origin auth/optional-password-signin
-  ```
-  PR title: "Add optional password sign-in alongside email OTP (ADR-0012)". Body should cover what changed (SessionProvider additions, the two screen extractions, config change, threat-model T11) and that it's opt-in — nothing changes for anyone who doesn't set a password.
-- `expo-image-manipulator` (Phase 4) and `react-native-svg` (Phase 3.5) are native dependencies added since the last real device build — a fresh `pod install` is needed before either shows up correctly in a real build.
-- Staging Supabase connectivity is the one Phase 3 Conditional Pass follow-up still genuinely open — nothing in this environment can reach a real staging project, and per the Phase 4 exit discussion, the credentials likely already exist (Phase 0 provisioning) — the gap is a verification pass on your own machine, not new setup. Worth doing before too many more phases stack on top of unverified auth/email delivery.
+None currently open. The three previously listed here are resolved: the optional-password-sign-in work merged via PR #20/#21 (History row 5.5); `expo-image-manipulator`/`react-native-svg` have been through real device builds repeatedly since (Phase 6's live Sheet/text-input bug fixes couldn't have been found otherwise); staging Supabase connectivity was resolved 2026-08-05 (see "Conditional Pass follow-ups (Phase 3)" above).
