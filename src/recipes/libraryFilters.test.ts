@@ -4,6 +4,7 @@ import {
   filterRecipes,
   toggleCategoryFilter,
   toggleTagFilter,
+  uniqueTags,
   type LibraryFilters,
 } from './libraryFilters';
 import type { LibraryRecipe } from '../sync/offlineRecipes';
@@ -80,5 +81,19 @@ describe('toggleCategoryFilter / toggleTagFilter', () => {
     const filters: LibraryFilters = { categoryIds: ['c1'], tags: [] };
     const next = toggleTagFilter(filters, 'weeknight');
     expect(next).toEqual({ categoryIds: ['c1'], tags: ['weeknight'] });
+  });
+});
+
+describe('uniqueTags', () => {
+  it('deduplicates and alphabetizes tags across all given recipes', () => {
+    const recipes = [
+      recipe({ id: 'r1', tags: ['weeknight', 'spicy'] }),
+      recipe({ id: 'r2', tags: ['spicy', 'freezer'] }),
+    ];
+    expect(uniqueTags(recipes)).toEqual(['freezer', 'spicy', 'weeknight']);
+  });
+
+  it('returns an empty array when no recipe has any tags', () => {
+    expect(uniqueTags([recipe()])).toEqual([]);
   });
 });

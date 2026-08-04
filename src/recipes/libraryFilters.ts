@@ -44,3 +44,12 @@ export function toggleCategoryFilter(filters: LibraryFilters, categoryId: string
 export function toggleTagFilter(filters: LibraryFilters, tag: string): LibraryFilters {
   return { ...filters, tags: toggle(filters.tags, tag) };
 }
+
+/** The tag vocabulary offered in the filter sheet — only tags actually present on at least one recipe currently in the library, alphabetized. */
+export function uniqueTags(recipes: LibraryRecipe[]): string[] {
+  const tags = new Set<string>();
+  for (const recipe of recipes) {
+    for (const tag of recipe.tags) tags.add(tag);
+  }
+  return [...tags].sort((a, b) => a.localeCompare(b));
+}
