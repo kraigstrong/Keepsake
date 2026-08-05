@@ -263,11 +263,18 @@ Deno.serve(async (req: Request) => {
       return await fail(422, 'Could not find enough recipe content on this page');
     }
 
-    // AI extraction.
+    // AI extraction. Model strategy is environment-gated (developer
+    // decision, 2026-08-05): only a deployment with APP_ENV=production
+    // set uses the full Sonnet-primary/Opus-escalation cost — every
+    // other deployment (including today's only deployed environment)
+    // defaults to a single cheap Haiku call instead. See
+    // ExtractRecipeOptions in extractRecipe.ts.
     let extraction: RecipeExtraction;
     try {
       const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
-      extraction = await extractRecipe(anthropic, reducedText);
+      extraction = await extractRecipe(anthropic, reducedText, {
+        useProductionModels: Deno.env.get('APP_ENV') === 'production',
+      });
     } catch (error) {
       return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
     }
