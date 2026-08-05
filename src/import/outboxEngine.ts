@@ -59,6 +59,12 @@ export async function drainAppGroupQueueIntoOutbox(): Promise<void> {
 const RETRY_LATER_MESSAGES = new Set([
   'please wait before importing another recipe',
   'too many imports for this household in the last hour',
+  // A concurrent request already claimed this job (claim_import_job) —
+  // a normal outcome of two callers racing for the same job, not a
+  // real failure; the next attempt either finds the job already
+  // resolved (idempotent replay) or, if the claimant died mid-flight,
+  // reclaims it itself after the 60s staleness window.
+  'import already in progress for this request',
 ]);
 
 // execution-plan.md's Phase 9 security scope: "Staging data expires" — a

@@ -191,6 +191,30 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // A still-'processing' job isn't necessarily *this* call's to work —
+  // two concurrent requests can both land here for the same job (a
+  // client_import_id replay racing its own original request, or two
+  // concurrent batch-item calls resolving the same jobId). Only the
+  // caller that successfully claims it may run the pipeline; a losing
+  // claim is a normal outcome of that race, not a real failure, so it
+  // gets the same "stored outcome, no pipeline" shape as the check
+  // above rather than a 5xx.
+  {
+    const { data: claimedJob, error: claimError } = await supabase
+      .rpc('claim_import_job', { job_id: job.id })
+      .single();
+    if (claimError || !claimedJob) {
+      return jsonResponse(
+        {
+          jobId: job.id,
+          error: claimError?.message ?? 'import already in progress for this request',
+        },
+        200,
+      );
+    }
+    job = claimedJob as ImportJobRow;
+  }
+
   // Always recomputed from job.source_url rather than trusted from
   // job.normalized_url — a batch-created job's stored normalized_url is
   // only a placeholder equal to the raw url (create_import_batch can't

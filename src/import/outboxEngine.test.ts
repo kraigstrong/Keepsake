@@ -157,8 +157,9 @@ describe('submitPendingOutboxItems', () => {
   it.each([
     'please wait before importing another recipe',
     'too many imports for this household in the last hour',
+    'import already in progress for this request',
   ])(
-    'treats a household rate limit ("%s") as retry-later, not a failure, and stops the run',
+    'treats a retry-later outcome ("%s") as retry-later, not a failure, and stops the run',
     async (message) => {
       mockedListSubmittableOutboxItems.mockResolvedValue([
         { id: 'o1', url: 'https://example.com/soup', status: 'pending' },
