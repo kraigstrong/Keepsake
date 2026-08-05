@@ -1,6 +1,6 @@
 import { deleteQueuedShare, readQueuedShares } from '../appGroup/appGroupHandoff';
 import { getDatabase } from '../db/database';
-import { logError } from '../observability';
+import { logError, trackEvent } from '../observability';
 import { submitImportJob } from './api';
 import {
   insertOutboxItemIfNew,
@@ -39,6 +39,14 @@ export async function drainAppGroupQueueIntoOutbox(): Promise<void> {
       // leave the App Group file in place — retried on the next drain
     }
   }
+
+  // Count only — never a URL — same rule import_completed/import_failed
+  // already follow (prd.md §30). This is the app's own first
+  // JS-observable point for Share Extension usage; the extension itself
+  // has no telemetry (it carries only a URL and timestamp — no
+  // privileged credentials, execution-plan.md's "No privileged
+  // credentials in extension").
+  trackEvent('share_extension_drained', { count: shares.length });
 }
 
 // create_import_job's own abuse-control guards (supabase/migrations/

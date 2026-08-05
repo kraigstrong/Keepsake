@@ -175,6 +175,27 @@ describe('createImportBatch', () => {
     ]);
   });
 
+  it('emits a count-only telemetry event, never the URLs themselves', async () => {
+    mockedRpc.mockResolvedValue({
+      data: [
+        {
+          batch_id: 'b1',
+          job_id: 'j1',
+          source_url: 'https://secret.example.com/a',
+          status: 'processing',
+        },
+      ],
+      error: null,
+    });
+
+    await createImportBatch(['https://secret.example.com/a']);
+
+    expect(mockedTrackEvent).toHaveBeenCalledWith('bulk_import_started', { urlCount: 1 });
+    for (const call of mockedTrackEvent.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain('secret.example.com');
+    }
+  });
+
   it('throws on an RPC error (e.g. the hourly cap)', async () => {
     mockedRpc.mockResolvedValue({
       data: null,

@@ -1,7 +1,7 @@
 import { drainAppGroupQueueIntoOutbox, submitPendingOutboxItems } from './outboxEngine';
 import { deleteQueuedShare, readQueuedShares } from '../appGroup/appGroupHandoff';
 import { getDatabase } from '../db/database';
-import { logError } from '../observability';
+import { logError, trackEvent } from '../observability';
 import { submitImportJob } from './api';
 import {
   insertOutboxItemIfNew,
@@ -17,7 +17,7 @@ jest.mock('../appGroup/appGroupHandoff', () => ({
   deleteQueuedShare: jest.fn(),
 }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
-jest.mock('../observability', () => ({ logError: jest.fn() }));
+jest.mock('../observability', () => ({ logError: jest.fn(), trackEvent: jest.fn() }));
 jest.mock('./api', () => ({ submitImportJob: jest.fn() }));
 jest.mock('./outbox', () => ({
   insertOutboxItemIfNew: jest.fn(),
@@ -38,6 +38,7 @@ const mockedMarkSubmitting = markOutboxItemSubmitting as jest.Mock;
 const mockedMarkPending = markOutboxItemPending as jest.Mock;
 const mockedMarkSubmitted = markOutboxItemSubmitted as jest.Mock;
 const mockedMarkFailed = markOutboxItemFailed as jest.Mock;
+const mockedTrackEvent = trackEvent as jest.Mock;
 
 const fakeDb = { fake: 'db' };
 
@@ -72,6 +73,20 @@ describe('drainAppGroupQueueIntoOutbox', () => {
     expect(mockedInsertOutboxItemIfNew).toHaveBeenCalledWith(fakeDb, share);
     expect(mockedDeleteQueuedShare).toHaveBeenCalledWith('s1');
     expect(callOrder).toEqual(['insert', 'delete']);
+  });
+
+  it('emits a count-only telemetry event, never a URL', async () => {
+    mockedReadQueuedShares.mockReturnValue([
+      { id: 's1', url: 'https://secret.example.com/a', receivedAt: 1 },
+      { id: 's2', url: 'https://secret.example.com/b', receivedAt: 2 },
+    ]);
+
+    await drainAppGroupQueueIntoOutbox();
+
+    expect(mockedTrackEvent).toHaveBeenCalledWith('share_extension_drained', { count: 2 });
+    for (const call of mockedTrackEvent.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain('secret.example.com');
+    }
   });
 
   it('leaves the App Group file in place when the local insert fails, so the next drain retries it', async () => {

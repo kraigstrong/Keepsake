@@ -111,6 +111,9 @@ export async function createImportBatch(urls: string[]): Promise<BatchJobStub[]>
   if (error) {
     throw new Error(error.message);
   }
+  // Count only — never the URLs themselves, same "no raw content" rule
+  // import_completed/import_failed already follow (prd.md §30).
+  trackEvent('bulk_import_started', { urlCount: urls.length });
   return ((data ?? []) as BatchJobRow[]).map((row) => ({
     batchId: row.batch_id,
     jobId: row.job_id,
