@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
 import { getHeroImageUrl } from './heroImage';
@@ -9,7 +9,12 @@ import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
-import { readCachedImageUri, readLocalCategories, readLocalRecipe } from '../sync/offlineRecipes';
+import {
+  cacheHeroImage,
+  readCachedImageUri,
+  readLocalCategories,
+  readLocalRecipe,
+} from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface RecipeDetailScreenProps {
@@ -45,6 +50,14 @@ export function RecipeDetailScreen({
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  // Crossfades the hero image in over the placeholder once it's ready,
+  // rather than an instant swap — the placeholder never unmounts, it
+  // just gets covered, so there's no layout jump alongside the fade.
+  // useState's lazy initializer, not useRef — same reasoning as
+  // Sheet.tsx's `progress`: Animated.Value is read directly during
+  // render, and useRef().current trips react-hooks/refs even though
+  // this exact pattern is correct here.
+  const [heroOpacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (justImported) showToast(wasDuplicate ? 'Already in your library' : 'Recipe imported');
@@ -56,6 +69,7 @@ export function RecipeDetailScreen({
 
   useEffect(() => {
     let cancelled = false;
+    heroOpacity.setValue(0);
 
     // Local-first (ADR-0013 / OFF-01): a cache hit shows instantly and
     // works offline. A live fetch always runs alongside/after it too —
@@ -72,7 +86,14 @@ export function RecipeDetailScreen({
         return;
       }
       const signedUrl = await getHeroImageUrl(heroImagePath).catch(() => null);
-      if (!cancelled && signedUrl) setHeroImageUrl(signedUrl);
+      if (!signedUrl || cancelled) return;
+      // Cache it now, not just display it — otherwise a recipe from a
+      // just-completed import (which hasn't had a full sync pass yet,
+      // Phase 6's own pre-caching) stays slow to view *every* time,
+      // re-fetching a signed URL and re-downloading over the network on
+      // every visit rather than only the first.
+      const localUri = await cacheHeroImage(heroImagePath, signedUrl).catch(() => null);
+      if (!cancelled) setHeroImageUrl(localUri ?? signedUrl);
     }
 
     async function load() {
@@ -114,7 +135,10 @@ export function RecipeDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [recipeId]);
+    // heroOpacity's identity never changes (useState with no setter
+    // call) — listed to satisfy exhaustive-deps, not because it should
+    // ever actually re-trigger this effect.
+  }, [recipeId, heroOpacity]);
 
   if (isLoading) {
     return <LoadingState label="Loading recipe…" testID="recipe-detail-loading" />;
@@ -146,11 +170,23 @@ export function RecipeDetailScreen({
       contentContainerStyle={styles.content}
       testID="recipe-detail-screen"
     >
-      {heroImageUrl ? (
-        <Image source={{ uri: heroImageUrl }} style={styles.heroImage} testID="recipe-hero" />
-      ) : (
-        <ImagePlaceholder size={200} testID="recipe-hero-placeholder" />
-      )}
+      <View style={styles.heroContainer}>
+        <ImagePlaceholder width="100%" height={200} testID="recipe-hero-placeholder" />
+        {heroImageUrl && (
+          <Animated.Image
+            source={{ uri: heroImageUrl }}
+            style={[styles.heroImage, styles.heroImageOverlay, { opacity: heroOpacity }]}
+            onLoad={() => {
+              Animated.timing(heroOpacity, {
+                toValue: 1,
+                duration: 200,
+                useNativeDriver: true,
+              }).start();
+            }}
+            testID="recipe-hero"
+          />
+        )}
+      </View>
 
       <Text style={styles.title}>{recipe.title}</Text>
 
@@ -247,10 +283,19 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  heroContainer: {
+    width: '100%',
+    height: 200,
+  },
   heroImage: {
     width: '100%',
     height: 200,
     borderRadius: radii.md,
+  },
+  heroImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   title: {
     ...typography.title,

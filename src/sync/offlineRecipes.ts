@@ -1,6 +1,6 @@
 import { getDatabase } from '../db/database';
 import type { Category, Recipe, RecipeSection } from '../recipes/api';
-import { defaultImageStore, type ImageStore } from './imageCache';
+import { defaultImageStore, ensureImageCached, type ImageStore } from './imageCache';
 
 // What Library's sort/filter (Phase 7) needs beyond a bare id/title —
 // createdAt for the Smart-sort "Recently Added" tier (distinct from
@@ -109,4 +109,23 @@ export async function readCachedImageUri(
   );
   if (!row) return null;
   return imageStore.fileExists(row.local_uri) ? row.local_uri : null;
+}
+
+/**
+ * Downloads and caches a hero image whose signed URL a screen just
+ * resolved on a cache miss, so the *next* view of this recipe is a
+ * cache hit instead of re-fetching a signed URL and re-downloading over
+ * the network every single time. Sync's own pre-caching (Phase 6,
+ * syncEngine.ts) only reaches a recipe on its next full sync pass,
+ * which a recipe from a just-completed import hasn't had yet — this is
+ * what closes that gap for the common "view it right after importing"
+ * case instead of leaving every such view slow indefinitely.
+ */
+export async function cacheHeroImage(
+  heroImagePath: string,
+  signedUrl: string,
+  imageStore: ImageStore = defaultImageStore,
+): Promise<string> {
+  const db = await getDatabase();
+  return ensureImageCached(db, heroImagePath, signedUrl, imageStore);
 }
