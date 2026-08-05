@@ -1,7 +1,7 @@
-import { deleteDatabaseAsync, openDatabaseAsync } from 'expo-sqlite';
+import { openDatabaseAsync } from 'expo-sqlite';
 
 import {
-  DATABASE_NAME,
+  __resetDatabaseConnectionForTests,
   getDatabase,
   runMigrations,
   wipeDatabase,
@@ -11,11 +11,9 @@ import { SCHEMA_VERSION } from './schema';
 
 jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: jest.fn(),
-  deleteDatabaseAsync: jest.fn(),
 }));
 
 const mockedOpenDatabaseAsync = openDatabaseAsync as jest.Mock;
-const mockedDeleteDatabaseAsync = deleteDatabaseAsync as jest.Mock;
 
 function createMockDb(initialUserVersion: number): MigratableDatabase & { execAsync: jest.Mock } {
   let userVersion = initialUserVersion;
@@ -59,6 +57,11 @@ describe('runMigrations', () => {
         /create virtual table if not exists recipe_fts/i.test(source),
       ),
     ).toBe(true);
+    expect(
+      db.execAsync.mock.calls.some(([source]) =>
+        /create table if not exists import_outbox/i.test(source),
+      ),
+    ).toBe(true);
   });
 
   it('is a no-op when the database is already at SCHEMA_VERSION', async () => {
@@ -99,14 +102,12 @@ describe('getDatabase / wipeDatabase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedOpenDatabaseAsync.mockImplementation(async () => mockOpenedDb());
-    mockedDeleteDatabaseAsync.mockResolvedValue(undefined);
   });
 
   // getDatabase caches a module-level singleton — reset it after every
   // test so tests don't leak a mocked handle into one another.
-  afterEach(async () => {
-    await wipeDatabase();
-    jest.clearAllMocks();
+  afterEach(() => {
+    __resetDatabaseConnectionForTests();
   });
 
   it('opens and migrates the database once, then reuses the same handle', async () => {
@@ -117,33 +118,36 @@ describe('getDatabase / wipeDatabase', () => {
     expect(db1).toBe(db2);
   });
 
-  it('closes the open connection and deletes the file', async () => {
+  it('deletes rows from the recipe-mirror tables, not the outbox, and never closes the connection', async () => {
     const db = await getDatabase();
 
     await wipeDatabase();
 
-    expect(db.closeAsync).toHaveBeenCalled();
-    expect(mockedDeleteDatabaseAsync).toHaveBeenCalledWith(DATABASE_NAME);
+    expect(db.closeAsync).not.toHaveBeenCalled();
+    const deletedTables = (db.execAsync as jest.Mock).mock.calls
+      .map(([source]: [string]) => source)
+      .filter((source: string) => /^delete from/i.test(source));
+    expect(deletedTables).toEqual([
+      'delete from recipes',
+      'delete from categories',
+      'delete from sync_state',
+      'delete from cached_images',
+      'delete from recipe_fts',
+      'delete from recipe_trigram',
+    ]);
+    expect(deletedTables.some((source: string) => /import_outbox/i.test(source))).toBe(false);
   });
 
-  it('is safe to call when no database was ever opened', async () => {
+  it('opens the database on demand if wipeDatabase is called before any read', async () => {
     await expect(wipeDatabase()).resolves.toBeUndefined();
-    expect(mockedDeleteDatabaseAsync).toHaveBeenCalledWith(DATABASE_NAME);
-  });
-
-  it('opens a brand new handle after wiping', async () => {
-    await getDatabase();
-    await wipeDatabase();
-    mockedOpenDatabaseAsync.mockClear();
-
-    await getDatabase();
-
     expect(mockedOpenDatabaseAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('does not throw when deleting the underlying file fails', async () => {
-    mockedDeleteDatabaseAsync.mockRejectedValue(new Error('no such file'));
+  it('reuses the same handle across repeated wipes rather than reopening', async () => {
+    await getDatabase();
+    await wipeDatabase();
+    await wipeDatabase();
 
-    await expect(wipeDatabase()).resolves.toBeUndefined();
+    expect(mockedOpenDatabaseAsync).toHaveBeenCalledTimes(1);
   });
 });

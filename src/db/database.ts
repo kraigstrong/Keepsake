@@ -1,4 +1,4 @@
-import { deleteDatabaseAsync, openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
 
@@ -58,19 +58,39 @@ export function getDatabase(): Promise<SQLiteDatabase> {
   return dbPromise;
 }
 
-// Sign-out wipe (ADR-0013): the whole database file, not a per-household
-// filtered delete — MVP is one household per user (ADR-0004), so there's
-// never a second household's cache to preserve. Closes the open
-// connection first (if any) so the file delete doesn't race a still-open
-// native handle; the next getDatabase() call opens (and migrates) a
-// fresh file.
+// Sign-out wipe (ADR-0013, revised by ADR-0016 decision 1): clears the
+// recipe mirror by table name rather than dropping the whole database
+// file, so import_outbox (Phase 9) survives sign-out — an unsent Share
+// Extension submission is the only copy of that share until the server
+// confirms it, unlike everything else here, which is a rebuildable
+// server mirror. Not a per-household filtered delete — MVP is one
+// household per user (ADR-0004), so there's never a second household's
+// cache to preserve.
+const RECIPE_MIRROR_TABLES = [
+  'recipes',
+  'categories',
+  'sync_state',
+  'cached_images',
+  'recipe_fts',
+  'recipe_trigram',
+] as const;
+
 export async function wipeDatabase(): Promise<void> {
-  if (dbPromise) {
-    const db = await dbPromise.catch(() => null);
-    await db?.closeAsync();
-  }
-  dbPromise = null;
-  await deleteDatabaseAsync(DATABASE_NAME).catch(() => {
-    // Nothing to delete — e.g. signing out before any sync ever ran.
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    for (const table of RECIPE_MIRROR_TABLES) {
+      await db.execAsync(`delete from ${table}`);
+    }
   });
+}
+
+/**
+ * Test-only: forgets the cached connection so the next getDatabase() call
+ * opens (and migrates) a fresh mock, simulating a new app launch. wipeDatabase()
+ * itself no longer touches this cache — it reuses the open connection to
+ * delete rows, it doesn't reopen one — so tests need an explicit way to reset
+ * between cases instead of relying on wipeDatabase() as a side effect.
+ */
+export function __resetDatabaseConnectionForTests(): void {
+  dbPromise = null;
 }
