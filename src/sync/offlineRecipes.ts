@@ -1,5 +1,6 @@
 import { getDatabase } from '../db/database';
 import type { Category, Recipe, RecipeSection } from '../recipes/api';
+import { defaultImageStore, type ImageStore } from './imageCache';
 
 // What Library's sort/filter (Phase 7) needs beyond a bare id/title —
 // createdAt for the Smart-sort "Recently Added" tier (distinct from
@@ -92,12 +93,20 @@ export async function readLocalCategories(): Promise<Category[]> {
 }
 
 // Null when the image hasn't been cached yet (e.g. sync hasn't reached it,
-// or it failed best-effort) — the caller falls back to a live signed URL.
-export async function readCachedImageUri(heroImagePath: string): Promise<string | null> {
+// or it failed best-effort) *or* when a cached row exists but the file
+// it points to doesn't anymore — iOS is documented to purge
+// Library/Caches/ under storage pressure at any time, exactly where
+// hero images live (ADR-0013), so a DB row alone doesn't mean the file
+// survived. Either way, the caller falls back to a live signed URL.
+export async function readCachedImageUri(
+  heroImagePath: string,
+  imageStore: ImageStore = defaultImageStore,
+): Promise<string | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ local_uri: string }>(
     'select local_uri from cached_images where path = ?',
     heroImagePath,
   );
-  return row?.local_uri ?? null;
+  if (!row) return null;
+  return imageStore.fileExists(row.local_uri) ? row.local_uri : null;
 }
