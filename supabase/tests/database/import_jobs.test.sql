@@ -101,10 +101,16 @@ select throws_ok(
 );
 
 -- create_import_job's abuse-control cooldown (import_job_abuse_controls.sql)
--- is 5 seconds per household — a real pause, not a fixture trick, so this
--- test genuinely exercises the RPC's own guard rather than working around
--- it. Same before alice_job_3 below.
-select pg_sleep(5.1);
+-- checks against now(), which is frozen at this transaction's start for
+-- its entire duration (a real pg_sleep() between calls doesn't help —
+-- now() never advances no matter how much real time passes inside one
+-- transaction; only clock_timestamp() would). Backdating the previous
+-- job's created_at directly is the same technique
+-- import_job_abuse_controls.test.sql already uses for the same reason,
+-- and avoids changing the RPC's own now()-based semantics just to suit
+-- a test. Same before alice_job_3 below.
+update public.import_jobs set created_at = now() - interval '10 minutes'
+where id = (select id from alice_job);
 
 create temporary table alice_job_2 as
 select * from public.create_import_job('https://example.test/duplicate', 'https://example.test/duplicate');
@@ -125,7 +131,8 @@ select is(
   'complete_import_job: duplicate_of_recipe_id recorded when this import resolved to an existing recipe'
 );
 
-select pg_sleep(5.1);
+update public.import_jobs set created_at = now() - interval '10 minutes'
+where id = (select id from alice_job_2);
 
 create temporary table alice_job_3 as
 select * from public.create_import_job('https://example.test/broken', 'https://example.test/broken');
