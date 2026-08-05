@@ -30,7 +30,9 @@ describe('normalizeUrl', () => {
   });
 
   it('keeps non-tracking query parameters and sorts them', () => {
-    expect(normalizeUrl('https://example.com/recipe?b=2&a=1')).toBe('https://example.com/recipe?a=1&b=2');
+    expect(normalizeUrl('https://example.com/recipe?b=2&a=1')).toBe(
+      'https://example.com/recipe?a=1&b=2',
+    );
   });
 
   it('mixes tracking and non-tracking params correctly', () => {
@@ -46,9 +48,15 @@ describe('normalizeUrl', () => {
   });
 
   it('rejects a non-http(s) scheme', () => {
-    expect(() => normalizeUrl('javascript:alert(1)')).toThrow('Only http/https URLs can be imported');
-    expect(() => normalizeUrl('ftp://example.com/recipe')).toThrow('Only http/https URLs can be imported');
-    expect(() => normalizeUrl('mailto:someone@example.com')).toThrow('Only http/https URLs can be imported');
+    expect(() => normalizeUrl('javascript:alert(1)')).toThrow(
+      'Only http/https URLs can be imported',
+    );
+    expect(() => normalizeUrl('ftp://example.com/recipe')).toThrow(
+      'Only http/https URLs can be imported',
+    );
+    expect(() => normalizeUrl('mailto:someone@example.com')).toThrow(
+      'Only http/https URLs can be imported',
+    );
     expect(() => normalizeUrl('data:text/html,<script>1</script>')).toThrow(
       'Only http/https URLs can be imported',
     );

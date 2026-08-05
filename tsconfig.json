@@ -13,6 +13,12 @@
     "jest.config.js",
     "eslint.config.js",
     "android",
-    "ios"
+    "ios",
+    // Deno Edge Functions (Phase 8+, ADR-0015) are a separate runtime and
+    // type universe (Deno globals, npm:/jsr: specifiers, .ts-extension
+    // imports) — not checkable by this Node/RN project's tsc. Verified
+    // instead by `supabase functions deploy` (which bundles and type-
+    // checks via Deno itself) and a real invocation against staging.
+    "supabase/functions"
   ]
 }

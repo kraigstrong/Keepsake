@@ -38,7 +38,10 @@ export function normalizeUrl(rawUrl: string): string {
   url.hostname = url.hostname.toLowerCase();
   url.hash = '';
 
-  if ((url.protocol === 'http:' && url.port === '80') || (url.protocol === 'https:' && url.port === '443')) {
+  if (
+    (url.protocol === 'http:' && url.port === '80') ||
+    (url.protocol === 'https:' && url.port === '443')
+  ) {
     url.port = '';
   }
 
@@ -48,7 +51,9 @@ export function normalizeUrl(rawUrl: string): string {
       params.delete(key);
     }
   }
-  url.search = new URLSearchParams([...params.entries()].sort(([a], [b]) => a.localeCompare(b))).toString();
+  url.search = new URLSearchParams(
+    [...params.entries()].sort(([a], [b]) => a.localeCompare(b)),
+  ).toString();
 
   if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
     url.pathname = url.pathname.slice(0, -1);
