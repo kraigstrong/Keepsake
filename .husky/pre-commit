@@ -8,3 +8,8 @@ else
   echo "gitleaks not found locally — skipping pre-commit secret scan (CI still enforces this)."
   echo "Install: brew install gitleaks  (or see https://github.com/gitleaks/gitleaks#installing)"
 fi
+
+# No external dependency, so this one IS enforced locally (not
+# best-effort) — same check CI runs, catching a server-only secret name
+# leaking into src/ or app/ before it's even committed.
+npm run check:client-secrets

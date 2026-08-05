@@ -28,6 +28,7 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test -- --ci
+      - run: npm run check:client-secrets
 
   database:
     name: Migration apply/reset and RLS tests

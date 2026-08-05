@@ -71,6 +71,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "check:client-secrets": "node scripts/check-no-server-secrets-in-client.mjs",
     "prepare": "husky"
   }
 }
