@@ -1,6 +1,7 @@
 /**
- * URL Import Foundation (Phase 8, ADR-0015). The only piece of this
- * phase that can't be Jest-tested — it's the thin wiring layer over
+ * URL Import Foundation (Phase 8, ADR-0015), extended for Phase 9
+ * bulk/durable import (ADR-0016 decision 4). The only piece of these
+ * phases that can't be Jest-tested — it's the thin wiring layer over
  * server/import/*.ts and server/ai/extractRecipe.ts, which are all
  * unit-tested in Node already. Verified by an actual deploy + live
  * invocation against staging (see docs/phase-status.md), the same way
@@ -11,6 +12,16 @@
  * enforcement boundary. Only ANTHROPIC_API_KEY is a genuinely new
  * server-only secret; SUPABASE_URL/SUPABASE_ANON_KEY are injected into
  * every Edge Function by the platform automatically.
+ *
+ * The request body accepts either "url" (Phase 8's original shape —
+ * creates a fresh job) or "jobId" (a job already reserved by
+ * create_import_batch, ADR-0016 decision 4), plus an optional
+ * "clientImportId" (the durable Share Extension outbox's idempotency
+ * key, ADR-0016 decision 2). Either path can land on a job that's
+ * already past 'processing' — a pre-created batch item some earlier
+ * call already finished, or a client_import_id replay — in which case
+ * the pipeline is skipped entirely and the stored outcome is returned
+ * as-is, never re-fetching or re-charging Anthropic for the same job.
  */
 import { Anthropic } from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
@@ -33,6 +44,11 @@ interface ImportJobRow {
   id: string;
   household_id: string;
   status: string;
+  source_url: string;
+  normalized_url: string;
+  recipe_id: string | null;
+  duplicate_of_recipe_id: string | null;
+  error_message: string | null;
 }
 
 interface CategoryRow {
@@ -91,22 +107,32 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Missing Authorization header' }, 401);
   }
 
-  let rawUrl: string;
+  let requestedJobId: string | undefined;
+  let rawUrl: string | undefined;
+  let clientImportId: string | undefined;
   try {
-    const body = (await req.json()) as { url?: unknown };
-    if (typeof body.url !== 'string' || body.url.trim().length === 0) {
-      return jsonResponse({ error: 'Request body must include a non-empty "url" string' }, 400);
+    const body = (await req.json()) as { url?: unknown; jobId?: unknown; clientImportId?: unknown };
+    if (body.jobId !== undefined) {
+      if (typeof body.jobId !== 'string' || body.jobId.trim().length === 0) {
+        return jsonResponse({ error: '"jobId" must be a non-empty string' }, 400);
+      }
+      requestedJobId = body.jobId;
+    } else if (typeof body.url !== 'string' || body.url.trim().length === 0) {
+      return jsonResponse(
+        { error: 'Request body must include a non-empty "url" string, or a "jobId"' },
+        400,
+      );
+    } else {
+      rawUrl = body.url;
     }
-    rawUrl = body.url;
+    if (body.clientImportId !== undefined) {
+      if (typeof body.clientImportId !== 'string') {
+        return jsonResponse({ error: '"clientImportId" must be a string' }, 400);
+      }
+      clientImportId = body.clientImportId;
+    }
   } catch {
     return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
-  }
-
-  let normalizedUrl: string;
-  try {
-    normalizedUrl = normalizeUrl(rawUrl);
-  } catch (error) {
-    return jsonResponse({ error: errorMessage(error) }, 400);
   }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -114,15 +140,58 @@ Deno.serve(async (req: Request) => {
   });
 
   let job: ImportJobRow;
-  {
+  if (requestedJobId) {
+    // A job create_import_batch already reserved (ADR-0016 decision 4).
+    // RLS's own select policy on import_jobs is what enforces this can
+    // only resolve to the caller's own household's job.
     const { data, error } = await supabase
-      .rpc('create_import_job', { source_url: rawUrl, normalized_url: normalizedUrl })
+      .from('import_jobs')
+      .select(
+        'id, household_id, status, source_url, normalized_url, recipe_id, duplicate_of_recipe_id, error_message',
+      )
+      .eq('id', requestedJobId)
+      .single();
+    if (error || !data) {
+      return jsonResponse({ error: 'import job not found' }, 404);
+    }
+    job = data as ImportJobRow;
+  } else {
+    let normalizedUrl: string;
+    try {
+      normalizedUrl = normalizeUrl(rawUrl!);
+    } catch (error) {
+      return jsonResponse({ error: errorMessage(error) }, 400);
+    }
+    const { data, error } = await supabase
+      .rpc('create_import_job', {
+        source_url: rawUrl,
+        normalized_url: normalizedUrl,
+        client_import_id: clientImportId ?? null,
+      })
       .single();
     if (error || !data) {
       return jsonResponse({ error: error?.message ?? 'Could not create import job' }, 400);
     }
     job = data as ImportJobRow;
   }
+
+  if (job.status !== 'processing') {
+    // Either a pre-created batch job an earlier call already finished,
+    // or a client_import_id replay hit — the pipeline never runs twice
+    // for the same job (ADR-0016 decision 4): no second fetch, no
+    // second Anthropic call, just the outcome that's already stored.
+    return jsonResponse(
+      {
+        jobId: job.id,
+        recipeId: job.recipe_id ?? undefined,
+        duplicate: job.duplicate_of_recipe_id != null,
+        error: job.status === 'failed' ? (job.error_message ?? undefined) : undefined,
+      },
+      200,
+    );
+  }
+
+  const normalizedUrl = job.normalized_url;
 
   async function fail(status: number, message: string): Promise<Response> {
     await supabase.rpc('fail_import_job', { job_id: job.id, error_message: message });
