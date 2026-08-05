@@ -20,40 +20,58 @@ export function readTestPayload(): string | null {
 }
 
 export interface SharedImport {
+  id: string;
   url: string;
   receivedAt: number;
 }
 
 /**
- * Reads whatever the real Share Extension (targets/share/ShareViewController.swift)
- * most recently wrote. Parsed defensively — the file is written by our own
- * extension, not arbitrary external input, but a partially-written or
- * unexpected-shape file should surface as "nothing to import" rather than
- * throw and break app startup.
+ * Reads every share currently queued in the App Group's share-inbox/
+ * directory (written by the real Share Extension,
+ * targets/share/ShareViewController.swift) — a directory of one <uuid>.json
+ * file per share, not a single fixed filename, so a second share before the
+ * app opens doesn't overwrite the first (ADR-0016, adopting
+ * docs/risk-spikes/durable-import-submission.md decision 1). Each entry is
+ * parsed defensively: the files are written by our own extension, not
+ * arbitrary external input, but a partially-written or unexpected-shape
+ * file is skipped rather than thrown, so one bad entry doesn't break the
+ * drain for the rest of the queue.
  */
-export function readSharedImport(): SharedImport | null {
-  const raw = AppGroupBridge.readSharePayload();
-  if (!raw) return null;
+export function readQueuedShares(): SharedImport[] {
+  const rawPayloads = AppGroupBridge.listSharePayloads();
+  const shares: SharedImport[] = [];
 
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'url' in parsed &&
-      typeof parsed.url === 'string' &&
-      parsed.url.length > 0 &&
-      'receivedAt' in parsed &&
-      typeof parsed.receivedAt === 'number'
-    ) {
-      return { url: parsed.url, receivedAt: parsed.receivedAt };
+  for (const raw of rawPayloads) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'id' in parsed &&
+        typeof parsed.id === 'string' &&
+        parsed.id.length > 0 &&
+        'url' in parsed &&
+        typeof parsed.url === 'string' &&
+        parsed.url.length > 0 &&
+        'receivedAt' in parsed &&
+        typeof parsed.receivedAt === 'number'
+      ) {
+        shares.push({ id: parsed.id, url: parsed.url, receivedAt: parsed.receivedAt });
+      }
+    } catch {
+      // skip a malformed entry rather than losing the rest of the queue
     }
-    return null;
-  } catch {
-    return null;
   }
+
+  return shares;
 }
 
-export function clearSharedImport(): boolean {
-  return AppGroupBridge.clearSharePayload();
+/**
+ * Removes one share's queue file. Callers must only do this after the
+ * share is durably recorded elsewhere (the local outbox) — deleting first
+ * and persisting second would risk losing an import if the app is killed
+ * in between (durable-import-submission.md decision 2).
+ */
+export function deleteQueuedShare(id: string): boolean {
+  return AppGroupBridge.deleteSharePayload(id);
 }
