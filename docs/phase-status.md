@@ -5,10 +5,10 @@ The single source of truth for "where are we." Update this at the start and end 
 ## Current
 
 - **Phase:** 10 — Camera and Existing Photo Import
-- **Status:** Not started.
-- **Branch:** None yet — start from `main` (`git checkout -b phase-10-photo-import`).
-- **Next action:** Read execution-plan.md's Phase 10 section in full before writing code. Reuse Phase 4's `src/recipes/heroImage.ts` for the hero replace/crop/remove step rather than rebuilding it (execution-plan.md says so explicitly) — this phase's own image work is the *source* photo: capture/pick, upload-before-processing, metadata stripping, and retaining the original separately from whatever becomes the hero. Note the carried-forward item below: `captureFromCamera()`'s photo-picker permission/cancel pattern was never physical-device-confirmed (Phase 1 spike, deliberately deferred) — worth a quick check before this phase builds vision-extraction on top of it, since this phase also requires its own physical-device pass for live camera capture (Simulator has no camera — ADR-0003).
-- **Blocked on:** Nothing yet.
+- **Status:** Server-side half complete: ADR-0017 (design decisions), schema (`recipes.original_photo_path`, `import_jobs.photo_path`, pgTAP including Storage-path isolation), domain logic (`preserveOriginalPhoto`/`uploadOriginalPhoto`, `extractRecipeFromImage`), and the `import-recipe` Edge Function extended for photo-sourced jobs — all committed on `phase-10-photo-import`. 5 commits so far. Not yet built: the client upload/submit API, the actual photo-import screen + Add-sheet wiring, "View Original Photo" on recipe detail, e2e route coverage, telemetry/threat-model/traceability updates, and the security-check pass.
+- **Branch:** `phase-10-photo-import`.
+- **Next action:** Client `src/photoImport/api.ts` (upload the preserved original, then call the Edge Function with `{ photoPath }`), then the photo-import UI (camera/library entry point, upload+extraction progress, reuse `ImportRecipeScreen`'s uncertain-fields review surface per ADR-0017 decision 5), then wire into the global Add sheet (currently a placeholder for camera/photo since Phase 4). See the task list already broken out (this session) for the remaining ordered steps.
+- **Blocked on:** Nothing yet. Note the carried-forward item below: `captureFromCamera()`'s photo-picker permission/cancel pattern was never physical-device-confirmed (Phase 1 spike, deliberately deferred) — worth a quick check once this phase's UI exists, since this phase also requires its own physical-device pass for live camera capture (Simulator has no camera — ADR-0003).
 
 ## Phase 9 Conditional Pass follow-ups (tracked until closed)
 
