@@ -1,4 +1,4 @@
-import { importRecipeFromUrl } from './api';
+import { importRecipeFromUrl, submitImportJob } from './api';
 import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
@@ -102,5 +102,50 @@ describe('importRecipeFromUrl', () => {
     for (const call of mockedTrackEvent.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('secret-family-recipes');
     }
+  });
+});
+
+describe('submitImportJob', () => {
+  it('sends jobId and clientImportId through to the Edge Function when given', async () => {
+    mockedInvoke.mockResolvedValue({
+      data: { jobId: 'j1', recipeId: 'r1', duplicate: false },
+      error: null,
+    });
+
+    await submitImportJob({ jobId: 'j1', clientImportId: 'outbox-1' });
+
+    expect(mockedInvoke).toHaveBeenCalledWith('import-recipe', {
+      body: { jobId: 'j1', clientImportId: 'outbox-1' },
+    });
+  });
+
+  it('treats a stored error on an otherwise-200 response as a failure (a replayed or pre-created failed job)', async () => {
+    mockedInvoke.mockResolvedValue({
+      data: { jobId: 'j1', error: 'Could not fetch the page: timed out' },
+      error: null,
+    });
+
+    await expect(submitImportJob({ jobId: 'j1' })).rejects.toThrow(
+      'Could not fetch the page: timed out',
+    );
+    expect(mockedTrackEvent).toHaveBeenCalledWith('import_failed', {
+      durationMs: expect.any(Number),
+    });
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith('import_completed', expect.anything());
+  });
+
+  it('treats a stored duplicate outcome on a 200 response as success', async () => {
+    mockedInvoke.mockResolvedValue({
+      data: { jobId: 'j1', recipeId: 'r1', duplicate: true },
+      error: null,
+    });
+
+    const result = await submitImportJob({ jobId: 'j1' });
+
+    expect(result).toEqual({ jobId: 'j1', recipeId: 'r1', duplicate: true });
+    expect(mockedTrackEvent).toHaveBeenCalledWith('import_completed', {
+      durationMs: expect.any(Number),
+      duplicate: true,
+    });
   });
 });

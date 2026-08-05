@@ -3,16 +3,33 @@ import { supabase } from '../supabase/instance';
 
 export interface ImportRecipeResult {
   jobId: string;
-  recipeId: string;
+  recipeId?: string;
   duplicate: boolean;
-  uncertainFields: string[];
+  uncertainFields?: string[];
+}
+
+export interface ImportJobRequest {
+  // Either url (Phase 8's original shape, creates a fresh job) or jobId
+  // (a job create_import_batch already reserved, ADR-0016 decision 4) —
+  // the Edge Function itself enforces exactly one is required.
+  url?: string;
+  jobId?: string;
+  // The durable Share Extension outbox's idempotency key (ADR-0016
+  // decision 2) — omitted for the plain single-URL screen and for
+  // batch items, which are already idempotent via jobId.
+  clientImportId?: string;
 }
 
 /**
- * Thin client wrapper over the import-recipe Edge Function (ADR-0015).
- * `functions.invoke` forwards the current session's JWT automatically —
- * the same RLS-scoped identity every other write in this app uses, no
- * different here.
+ * Thin client wrapper over the import-recipe Edge Function (ADR-0015,
+ * extended ADR-0016 decision 4). `functions.invoke` forwards the current
+ * session's JWT automatically — the same RLS-scoped identity every other
+ * write in this app uses, no different here.
+ *
+ * A 200 response can still carry a stored failure (a pre-created batch
+ * job or a client_import_id replay that had already failed) — surfaced
+ * here the same way a transport-level error is, so every caller only
+ * has one failure path to handle.
  *
  * Emits a timing-only telemetry event on completion (duration + whether
  * it resolved to a duplicate, or just duration on failure) — never the
@@ -20,11 +37,11 @@ export interface ImportRecipeResult {
  * "exclude recipe content ... from logs and analytics" and the same
  * "raw search terms excluded" precedent Phase 7 set for search_performed.
  */
-export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResult> {
+export async function submitImportJob(request: ImportJobRequest): Promise<ImportRecipeResult> {
   const startedAt = Date.now();
 
   try {
-    const { data, error } = await supabase.functions.invoke('import-recipe', { body: { url } });
+    const { data, error } = await supabase.functions.invoke('import-recipe', { body: request });
 
     if (error) {
       // Supabase's FunctionsHttpError carries the actual response body
@@ -43,7 +60,11 @@ export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResu
       throw new Error(specificMessage ?? error.message);
     }
 
-    const result = data as ImportRecipeResult;
+    const result = data as ImportRecipeResult & { error?: string };
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
     trackEvent('import_completed', {
       durationMs: Date.now() - startedAt,
       duplicate: result.duplicate,
@@ -53,4 +74,8 @@ export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResu
     trackEvent('import_failed', { durationMs: Date.now() - startedAt });
     throw error;
   }
+}
+
+export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResult> {
+  return submitImportJob({ url });
 }

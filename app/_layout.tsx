@@ -10,6 +10,7 @@ import { OfflineState } from '../src/components/OfflineState';
 import { ToastProvider } from '../src/components/Toast';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
+import { drainAppGroupQueueIntoOutbox, submitPendingOutboxItems } from '../src/import/outboxEngine';
 import { initObservability, logError } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
@@ -53,8 +54,14 @@ function ConnectivityAwareApp() {
   const householdId = household?.id ?? null;
 
   return (
-    <ConnectivityProvider onReconnect={() => triggerHouseholdSync(householdId)}>
+    <ConnectivityProvider
+      onReconnect={() => {
+        triggerHouseholdSync(householdId);
+        triggerImportOutboxWork(householdId);
+      }}
+    >
       <HouseholdSyncOnMount householdId={householdId} />
+      <ImportOutboxOnMount householdId={householdId} />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -75,6 +82,27 @@ function triggerHouseholdSync(householdId: string | null): void {
 function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
   useEffect(() => {
     triggerHouseholdSync(householdId);
+  }, [householdId]);
+  return null;
+}
+
+// Draining the App Group queue is a pure local operation (no auth, no
+// network) and always runs, even signed out or pre-onboarding — a share
+// captured before the user signs in must still survive to be submitted
+// later (ADR-0016 decision 1). Submission itself is gated on a
+// household existing (create_import_job requires one server-side
+// regardless); re-runs when householdId transitions from null to set so
+// anything drained before onboarding finished gets submitted once it
+// can be.
+function triggerImportOutboxWork(householdId: string | null): void {
+  drainAppGroupQueueIntoOutbox()
+    .then(() => (householdId ? submitPendingOutboxItems() : undefined))
+    .catch((error) => logError(error, { context: 'importOutbox' }));
+}
+
+function ImportOutboxOnMount({ householdId }: { householdId: string | null }) {
+  useEffect(() => {
+    triggerImportOutboxWork(householdId);
   }, [householdId]);
   return null;
 }
