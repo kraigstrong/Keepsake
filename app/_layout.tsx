@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -66,7 +66,7 @@ function ConnectivityAwareApp() {
       }}
     >
       <HouseholdSyncOnMount householdId={householdId} />
-      <ImportOutboxOnMount householdId={householdId} showToast={showToast} />
+      <ImportOutboxLifecycle householdId={householdId} showToast={showToast} />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -119,7 +119,15 @@ function triggerImportOutboxWork(
     .catch((error) => logError(error, { context: 'importOutbox' }));
 }
 
-function ImportOutboxOnMount({
+// Cold launch alone isn't enough: the realistic path for a Share
+// Extension capture is "share from Safari, then switch back to
+// Keepsake" — a plain foreground, not a relaunch, since nothing about
+// sharing quits the app. Without an AppState listener, that share sits
+// captured but undrained until the app is eventually force-quit and
+// reopened, which the user has no reason to ever do. Mirrors
+// SessionProvider's own AppState('active')-driven pattern for the same
+// "mobile backgrounding breaks timer-based assumptions" reason.
+function ImportOutboxLifecycle({
   householdId,
   showToast,
 }: {
@@ -128,6 +136,14 @@ function ImportOutboxOnMount({
 }) {
   useEffect(() => {
     triggerImportOutboxWork(householdId, showToast);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        triggerImportOutboxWork(householdId, showToast);
+      }
+    });
+
+    return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable (useCallback in ToastProvider); only householdId should re-trigger this.
   }, [householdId]);
   return null;
