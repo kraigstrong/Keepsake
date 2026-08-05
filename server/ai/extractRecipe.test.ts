@@ -42,7 +42,7 @@ describe('RecipeExtractionSchema', () => {
   });
 });
 
-describe('extractRecipe — model escalation', () => {
+describe('extractRecipe — model selection', () => {
   const confidentExtraction = {
     title: 'Roast Chicken',
     activeTimeMinutes: 20,
@@ -63,84 +63,116 @@ describe('extractRecipe — model escalation', () => {
     return { messages: { parse } } as unknown as Anthropic;
   }
 
-  it('does not escalate when the primary (Sonnet) result looks confident', async () => {
-    const client = clientReturning(confidentExtraction);
-
-    const result = await extractRecipe(client, 'page text');
-
-    expect(result).toEqual(confidentExtraction);
-    expect(client.messages.parse).toHaveBeenCalledTimes(1);
-    expect(client.messages.parse).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-sonnet-5' }),
-    );
-  });
-
-  it.each(['title', 'ingredientSections', 'instructionSections'])(
-    'escalates to Opus when %s (a mission-critical field) is flagged uncertain',
-    async (criticalField) => {
-      const escalated = { ...confidentExtraction, title: 'Roast Chicken (opus)' };
-      const uncertainPrimary = { ...confidentExtraction, uncertainFields: [criticalField] };
-      const client = clientReturning(uncertainPrimary, escalated);
+  describe('dev mode (default — useProductionModels omitted)', () => {
+    it('always makes a single Haiku call, regardless of uncertainty, no escalation', async () => {
+      const uncertainResult = { ...confidentExtraction, uncertainFields: ['title'] };
+      const client = clientReturning(uncertainResult);
 
       const result = await extractRecipe(client, 'page text');
 
-      expect(result).toEqual(escalated);
-      expect(client.messages.parse).toHaveBeenCalledTimes(2);
-      expect(client.messages.parse).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ model: 'claude-opus-5' }),
+      expect(result).toEqual(uncertainResult);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+      expect(client.messages.parse).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-haiku-4-5-20251001' }),
       );
-    },
-  );
+    });
 
-  it('escalates when every ingredient section came back empty', async () => {
-    const noIngredients = {
-      ...confidentExtraction,
-      ingredientSections: [{ heading: null, items: [] }],
-    };
-    const client = clientReturning(noIngredients, confidentExtraction);
+    it('is also the behavior when useProductionModels is explicitly false', async () => {
+      const client = clientReturning(confidentExtraction);
 
-    await extractRecipe(client, 'page text');
+      await extractRecipe(client, 'page text', { useProductionModels: false });
 
-    expect(client.messages.parse).toHaveBeenCalledTimes(2);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+      expect(client.messages.parse).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-haiku-4-5-20251001' }),
+      );
+    });
   });
 
-  it('escalates when every instruction section came back empty', async () => {
-    const noInstructions = {
-      ...confidentExtraction,
-      instructionSections: [{ heading: null, steps: [] }],
-    };
-    const client = clientReturning(noInstructions, confidentExtraction);
+  describe('production mode (useProductionModels: true)', () => {
+    const prodOptions = { useProductionModels: true };
 
-    await extractRecipe(client, 'page text');
+    it('does not escalate when the primary (Sonnet) result looks confident', async () => {
+      const client = clientReturning(confidentExtraction);
 
-    expect(client.messages.parse).toHaveBeenCalledTimes(2);
-  });
+      const result = await extractRecipe(client, 'page text', prodOptions);
 
-  it('does not escalate when only non-critical fields (timing, yield, categories/tags) are uncertain', async () => {
-    const nonCriticalUncertainty = {
-      ...confidentExtraction,
-      uncertainFields: [
-        'activeTimeMinutes',
-        'totalTimeMinutes',
-        'yield',
-        'suggestedCategories',
-        'suggestedTags',
-      ],
-    };
-    const client = clientReturning(nonCriticalUncertainty);
+      expect(result).toEqual(confidentExtraction);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+      expect(client.messages.parse).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-sonnet-5' }),
+      );
+    });
 
-    const result = await extractRecipe(client, 'page text');
+    it.each(['title', 'ingredientSections', 'instructionSections'])(
+      'escalates to Opus when %s (a mission-critical field) is flagged uncertain',
+      async (criticalField) => {
+        const escalated = { ...confidentExtraction, title: 'Roast Chicken (opus)' };
+        const uncertainPrimary = { ...confidentExtraction, uncertainFields: [criticalField] };
+        const client = clientReturning(uncertainPrimary, escalated);
 
-    expect(result).toEqual(nonCriticalUncertainty);
-    expect(client.messages.parse).toHaveBeenCalledTimes(1);
+        const result = await extractRecipe(client, 'page text', prodOptions);
+
+        expect(result).toEqual(escalated);
+        expect(client.messages.parse).toHaveBeenCalledTimes(2);
+        expect(client.messages.parse).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ model: 'claude-opus-5' }),
+        );
+      },
+    );
+
+    it('escalates when every ingredient section came back empty', async () => {
+      const noIngredients = {
+        ...confidentExtraction,
+        ingredientSections: [{ heading: null, items: [] }],
+      };
+      const client = clientReturning(noIngredients, confidentExtraction);
+
+      await extractRecipe(client, 'page text', prodOptions);
+
+      expect(client.messages.parse).toHaveBeenCalledTimes(2);
+    });
+
+    it('escalates when every instruction section came back empty', async () => {
+      const noInstructions = {
+        ...confidentExtraction,
+        instructionSections: [{ heading: null, steps: [] }],
+      };
+      const client = clientReturning(noInstructions, confidentExtraction);
+
+      await extractRecipe(client, 'page text', prodOptions);
+
+      expect(client.messages.parse).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not escalate when only non-critical fields (timing, yield, categories/tags) are uncertain', async () => {
+      const nonCriticalUncertainty = {
+        ...confidentExtraction,
+        uncertainFields: [
+          'activeTimeMinutes',
+          'totalTimeMinutes',
+          'yield',
+          'suggestedCategories',
+          'suggestedTags',
+        ],
+      };
+      const client = clientReturning(nonCriticalUncertainty);
+
+      const result = await extractRecipe(client, 'page text', prodOptions);
+
+      expect(result).toEqual(nonCriticalUncertainty);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
 // Real API call — the actual proof this risk spike exists to produce.
 // Skips (not fails) when no key is available, since CI doesn't have
 // ANTHROPIC_API_KEY wired in yet (tracked in docs/phase-status.md's
-// carried-forward items — this spike is the trigger for adding it).
+// carried-forward items — this spike is the trigger for adding it). No
+// options passed below, so this now costs a single Haiku call rather
+// than Sonnet(+Opus) — dev-mode is the default (2026-08-05).
 const describeIfApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
 
 describeIfApiKey('extractRecipe (live API)', () => {

@@ -17,6 +17,7 @@ function createMockImageStore(overrides: Partial<ImageStore> = {}): ImageStore &
   downloadTo: jest.Mock;
   deleteFile: jest.Mock;
   deleteDirectory: jest.Mock;
+  fileExists: jest.Mock;
 } {
   return {
     ensureDirectory: jest.fn(),
@@ -26,8 +27,16 @@ function createMockImageStore(overrides: Partial<ImageStore> = {}): ImageStore &
     })),
     deleteFile: jest.fn(),
     deleteDirectory: jest.fn(),
+    // Existing cache-hit tests assume the file is still there; the
+    // stale-cache case gets its own test with this overridden to false.
+    fileExists: jest.fn(() => true),
     ...overrides,
-  } as ImageStore & { downloadTo: jest.Mock; deleteFile: jest.Mock; deleteDirectory: jest.Mock };
+  } as ImageStore & {
+    downloadTo: jest.Mock;
+    deleteFile: jest.Mock;
+    deleteDirectory: jest.Mock;
+    fileExists: jest.Mock;
+  };
 }
 
 describe('ensureImageCached', () => {
@@ -82,6 +91,40 @@ describe('ensureImageCached', () => {
       'update cached_images set last_accessed_at = ? where path = ?',
       expect.any(String),
       'h1/r1.jpg',
+    );
+  });
+
+  it('re-downloads when a cached row exists but its file is gone (e.g. iOS purged Library/Caches/)', async () => {
+    const db = createMockDb({
+      getFirstAsync: async <T>() =>
+        ({
+          path: 'h1/r1.jpg',
+          local_uri: 'file:///cache/hero-images/h1_r1.jpg',
+          byte_size: 1000,
+          last_accessed_at: '2026-08-01T00:00:00.000Z',
+        }) as T,
+    });
+    const imageStore = createMockImageStore({ fileExists: jest.fn(() => false) });
+
+    const uri = await ensureImageCached(
+      db,
+      'h1/r1.jpg',
+      'https://signed.example/r1.jpg',
+      imageStore,
+    );
+
+    expect(imageStore.fileExists).toHaveBeenCalledWith('file:///cache/hero-images/h1_r1.jpg');
+    expect(imageStore.downloadTo).toHaveBeenCalledWith(
+      'https://signed.example/r1.jpg',
+      'h1_r1.jpg',
+    );
+    expect(uri).toBe('file:///cache/hero-images/h1_r1.jpg');
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('insert into cached_images'),
+      'h1/r1.jpg',
+      'file:///cache/hero-images/h1_r1.jpg',
+      1000,
+      expect.any(String),
     );
   });
 

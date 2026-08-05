@@ -1,5 +1,6 @@
 import { getDatabase } from '../db/database';
 import type { Category, Recipe, RecipeSection } from '../recipes/api';
+import { defaultImageStore, ensureImageCached, type ImageStore } from './imageCache';
 
 // What Library's sort/filter (Phase 7) needs beyond a bare id/title —
 // createdAt for the Smart-sort "Recently Added" tier (distinct from
@@ -92,12 +93,39 @@ export async function readLocalCategories(): Promise<Category[]> {
 }
 
 // Null when the image hasn't been cached yet (e.g. sync hasn't reached it,
-// or it failed best-effort) — the caller falls back to a live signed URL.
-export async function readCachedImageUri(heroImagePath: string): Promise<string | null> {
+// or it failed best-effort) *or* when a cached row exists but the file
+// it points to doesn't anymore — iOS is documented to purge
+// Library/Caches/ under storage pressure at any time, exactly where
+// hero images live (ADR-0013), so a DB row alone doesn't mean the file
+// survived. Either way, the caller falls back to a live signed URL.
+export async function readCachedImageUri(
+  heroImagePath: string,
+  imageStore: ImageStore = defaultImageStore,
+): Promise<string | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ local_uri: string }>(
     'select local_uri from cached_images where path = ?',
     heroImagePath,
   );
-  return row?.local_uri ?? null;
+  if (!row) return null;
+  return imageStore.fileExists(row.local_uri) ? row.local_uri : null;
+}
+
+/**
+ * Downloads and caches a hero image whose signed URL a screen just
+ * resolved on a cache miss, so the *next* view of this recipe is a
+ * cache hit instead of re-fetching a signed URL and re-downloading over
+ * the network every single time. Sync's own pre-caching (Phase 6,
+ * syncEngine.ts) only reaches a recipe on its next full sync pass,
+ * which a recipe from a just-completed import hasn't had yet — this is
+ * what closes that gap for the common "view it right after importing"
+ * case instead of leaving every such view slow indefinitely.
+ */
+export async function cacheHeroImage(
+  heroImagePath: string,
+  signedUrl: string,
+  imageStore: ImageStore = defaultImageStore,
+): Promise<string> {
+  const db = await getDatabase();
+  return ensureImageCached(db, heroImagePath, signedUrl, imageStore);
 }

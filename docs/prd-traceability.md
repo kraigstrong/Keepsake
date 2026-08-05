@@ -31,8 +31,8 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | IMP-01 | Website URL import | 8 | Done (tested) |
-| IMP-02 | Safari Share Sheet import | 9 | Not Started |
-| IMP-03 | Bulk URL import | 9 | Not Started |
+| IMP-02 | Safari Share Sheet import | 9 | Done (untested) |
+| IMP-03 | Bulk URL import | 9 | Done (tested) |
 | IMP-04 | Camera import | 10 | Not Started |
 | IMP-05 | Existing photo import | 10 | Not Started |
 | IMP-06 | Manual creation | 4 | Done (tested) |
@@ -78,7 +78,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4 | Done (tested) |
 | ORG-02 | Multiple category selections allowed | 4 | Done (tested) |
 | ORG-03 | Free-form tags supported | 4 | Done (tested) |
-| ORG-04 | AI suggests categories and tags | 8 | Not Started |
+| ORG-04 | AI suggests categories and tags | 8 | Done (tested) |
 
 ## Search (SRCH)
 

@@ -14,7 +14,12 @@ import { capture } from './posthog';
  * content, cooking notes, or credentials in `props`.
  */
 export type AnalyticsEvent =
-  'app_opened' | 'search_performed' | 'import_completed' | 'import_failed';
+  | 'app_opened'
+  | 'search_performed'
+  | 'import_completed'
+  | 'import_failed'
+  | 'bulk_import_started'
+  | 'share_extension_drained';
 
 export function trackEvent(
   name: AnalyticsEvent,

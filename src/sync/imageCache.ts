@@ -29,6 +29,13 @@ export interface ImageStore {
   // used by the sign-out wipe (ADR-0013), which clears the entire local
   // cache rather than deleting tracked files one row at a time.
   deleteDirectory(): void;
+  // iOS is documented to purge Library/Caches/ under storage pressure at
+  // any time — exactly where hero images live (ADR-0013). A
+  // cached_images row surviving that purge (or pointing at a container
+  // path that no longer exists at all) is a stale reference, not a real
+  // cache hit; callers must check this before trusting local_uri rather
+  // than assuming a DB row means the file is actually still there.
+  fileExists(uri: string): boolean;
 }
 
 class ExpoImageStore implements ImageStore {
@@ -64,6 +71,17 @@ class ExpoImageStore implements ImageStore {
       // Already gone — a sign-out wipe with nothing cached yet is fine.
     }
   }
+
+  fileExists(uri: string): boolean {
+    try {
+      return new File(uri).exists;
+    } catch {
+      // A URI from a container that no longer exists at all (e.g. after
+      // a reinstall) throws rather than just reporting false — treat
+      // that the same as "not there".
+      return false;
+    }
+  }
 }
 
 export const defaultImageStore: ImageStore = new ExpoImageStore();
@@ -89,7 +107,7 @@ export async function ensureImageCached(
     'select * from cached_images where path = ?',
     heroImagePath,
   );
-  if (existing) {
+  if (existing && imageStore.fileExists(existing.local_uri)) {
     await db.runAsync(
       'update cached_images set last_accessed_at = ? where path = ?',
       new Date().toISOString(),

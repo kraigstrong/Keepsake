@@ -1,8 +1,8 @@
 Pod::Spec.new do |s|
   s.name           = 'AppGroupBridge'
   s.version        = '1.0.0'
-  s.summary        = 'Local Expo module: App Group shared-container read/write, Phase 1 risk spike only.'
-  s.description    = 'Local Expo module: App Group shared-container read/write, Phase 1 risk spike only.'
+  s.summary        = 'Local Expo module: App Group shared-container read/write for the Share Extension handoff.'
+  s.description    = 'Local Expo module: App Group shared-container read/write for the Share Extension handoff.'
   s.author         = ''
   s.homepage       = 'https://docs.expo.dev/modules/'
   s.platforms      = {

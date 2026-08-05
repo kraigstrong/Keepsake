@@ -61,6 +61,11 @@ beforeEach(() => {
   mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(null);
   mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
   mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(null);
+  // Pass-through by default — tests that only care "the hero image
+  // eventually shows" don't need to know the local-vs-signed distinction.
+  mockedOfflineRecipes.cacheHeroImage.mockImplementation(
+    async (_heroImagePath, signedUrl) => signedUrl,
+  );
   jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
 });
 
@@ -168,6 +173,53 @@ it('falls back to a live signed URL when the hero image is not cached locally', 
 
   await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
   expect(mockedHeroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/existing.jpg');
+});
+
+it('caches a freshly signed-URL hero image so the next view is a cache hit', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(null);
+  mockedHeroImage.getHeroImageUrl.mockResolvedValue('https://signed.example.com/existing.jpg');
+  mockedOfflineRecipes.cacheHeroImage.mockResolvedValue('file:///cache/hero-images/existing.jpg');
+  mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
+  mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+  expect(mockedOfflineRecipes.cacheHeroImage).toHaveBeenCalledWith(
+    'household-1/existing.jpg',
+    'https://signed.example.com/existing.jpg',
+  );
+});
+
+it('still displays the signed URL directly if caching it fails', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(null);
+  mockedHeroImage.getHeroImageUrl.mockResolvedValue('https://signed.example.com/existing.jpg');
+  mockedOfflineRecipes.cacheHeroImage.mockRejectedValue(new Error('disk full'));
+  mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
+  mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+});
+
+it('does not attempt to cache when the hero image is already cached locally', async () => {
+  mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+  mockedOfflineRecipes.readLocalCategories.mockResolvedValue([]);
+  mockedOfflineRecipes.readCachedImageUri.mockResolvedValue(
+    'file:///cache/hero-images/existing.jpg',
+  );
+  mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
+  mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+  expect(mockedOfflineRecipes.cacheHeroImage).not.toHaveBeenCalled();
 });
 
 it('omits the timing line and hero image when the recipe has neither', async () => {

@@ -1,15 +1,20 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { OfflineState } from '../src/components/OfflineState';
-import { ToastProvider } from '../src/components/Toast';
+import { ToastProvider, useToast } from '../src/components/Toast';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
+import {
+  drainAppGroupQueueIntoOutbox,
+  submitPendingOutboxItems,
+  summarizeOutboxOutcomes,
+} from '../src/import/outboxEngine';
 import { initObservability, logError } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
@@ -51,10 +56,17 @@ export default function RootLayout() {
 function ConnectivityAwareApp() {
   const { household } = useHousehold();
   const householdId = household?.id ?? null;
+  const { showToast } = useToast();
 
   return (
-    <ConnectivityProvider onReconnect={() => triggerHouseholdSync(householdId)}>
+    <ConnectivityProvider
+      onReconnect={() => {
+        triggerHouseholdSync(householdId);
+        triggerImportOutboxWork(householdId, showToast);
+      }}
+    >
       <HouseholdSyncOnMount householdId={householdId} />
+      <ImportOutboxLifecycle householdId={householdId} showToast={showToast} />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -75,6 +87,64 @@ function triggerHouseholdSync(householdId: string | null): void {
 function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
   useEffect(() => {
     triggerHouseholdSync(householdId);
+  }, [householdId]);
+  return null;
+}
+
+// Draining the App Group queue is a pure local operation (no auth, no
+// network) and always runs, even signed out or pre-onboarding — a share
+// captured before the user signs in must still survive to be submitted
+// later (ADR-0016 decision 1). Submission itself is gated on a
+// household existing (create_import_job requires one server-side
+// regardless); re-runs when householdId transitions from null to set so
+// anything drained before onboarding finished gets submitted once it
+// can be.
+//
+// A Share-Extension-originated import has no screen of its own to land
+// on — unlike the in-app single-URL/bulk-paste flows, which navigate
+// somewhere on completion, this runs entirely in the background. The
+// toast is the only signal the user gets that "the thing I shared"
+// resolved to anything at all; without it, a successful import is
+// indistinguishable from one that silently vanished.
+function triggerImportOutboxWork(
+  householdId: string | null,
+  showToast: (message: string) => void,
+): void {
+  drainAppGroupQueueIntoOutbox()
+    .then(() => (householdId ? submitPendingOutboxItems() : []))
+    .then((outcomes) => {
+      const message = summarizeOutboxOutcomes(outcomes);
+      if (message) showToast(message);
+    })
+    .catch((error) => logError(error, { context: 'importOutbox' }));
+}
+
+// Cold launch alone isn't enough: the realistic path for a Share
+// Extension capture is "share from Safari, then switch back to
+// Keepsake" — a plain foreground, not a relaunch, since nothing about
+// sharing quits the app. Without an AppState listener, that share sits
+// captured but undrained until the app is eventually force-quit and
+// reopened, which the user has no reason to ever do. Mirrors
+// SessionProvider's own AppState('active')-driven pattern for the same
+// "mobile backgrounding breaks timer-based assumptions" reason.
+function ImportOutboxLifecycle({
+  householdId,
+  showToast,
+}: {
+  householdId: string | null;
+  showToast: (message: string) => void;
+}) {
+  useEffect(() => {
+    triggerImportOutboxWork(householdId, showToast);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        triggerImportOutboxWork(householdId, showToast);
+      }
+    });
+
+    return () => subscription.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable (useCallback in ToastProvider); only householdId should re-trigger this.
   }, [householdId]);
   return null;
 }

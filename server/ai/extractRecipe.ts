@@ -73,8 +73,17 @@ Rules:
 // 2026-08-05 — supersedes this file's earlier "defaults to claude-opus-5
 // per this project's model-choice policy" note (docs/risk-spikes/
 // claude-extraction.md's "Cost/model tuning" open item, now resolved).
+// This is the production model strategy — see useProductionModels below
+// for why it's opt-in, not the default.
 const PRIMARY_MODEL = 'claude-sonnet-5';
 const ESCALATION_MODEL = 'claude-opus-5';
+
+// A single, cheap Haiku call, no escalation — every non-production call
+// uses this instead (developer decision, 2026-08-05): the
+// Sonnet-primary/Opus-escalation cost adds up fast while iterating (a
+// live Opus-only call was ~6 cents mid-Phase-8) for no benefit until
+// there's a real user-facing result to care about the quality of.
+const DEV_MODEL = 'claude-haiku-4-5-20251001';
 
 // Fields worth paying for a second, stronger-model call over — the
 // actual usable recipe. Timing (activeTimeMinutes/totalTimeMinutes) and
@@ -134,10 +143,28 @@ async function callModel(
   return response.parsed_output;
 }
 
+export interface ExtractRecipeOptions {
+  /**
+   * Opts into the full Sonnet-primary/Opus-escalation strategy. Defaults
+   * to false, which always uses the cheap single Haiku call instead
+   * (see DEV_MODEL above) — the caller decides this from its own
+   * deployment environment (e.g. the Edge Function reading
+   * `Deno.env.get('APP_ENV') === 'production'`) rather than this file
+   * knowing anything about *which* runtime or environment it's in, so it
+   * stays plain, portable TS either way.
+   */
+  useProductionModels?: boolean;
+}
+
 export async function extractRecipe(
   client: Anthropic,
   pageText: string,
+  options: ExtractRecipeOptions = {},
 ): Promise<RecipeExtraction> {
+  if (!options.useProductionModels) {
+    return callModel(client, pageText, DEV_MODEL);
+  }
+
   const primaryResult = await callModel(client, pageText, PRIMARY_MODEL);
   if (!seemsUncertain(primaryResult)) return primaryResult;
 

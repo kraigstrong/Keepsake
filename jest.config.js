@@ -21,6 +21,17 @@ module.exports = {
       // tests live under src/navigation/ instead, and use renderRouter's
       // context param to point back at app/.
       testMatch: ['<rootDir>/src/**/*.test.{ts,tsx}'],
+      // jest-expo only auto-mocks official Expo SDK native modules —
+      // AppGroupBridge is a project-local one (modules/app-group-bridge),
+      // so any test rendering the real app tree needs a safe default or
+      // it throws "Cannot find native module 'AppGroupBridge'" the moment
+      // app/_layout.tsx pulls it in (via src/import/outboxEngine.ts,
+      // ADR-0016). A test file's own explicit jest.mock() for this same
+      // path still takes precedence over this mapping.
+      moduleNameMapper: {
+        '^.*/modules/app-group-bridge/src/AppGroupBridgeModule$':
+          '<rootDir>/__mocks__/modules/app-group-bridge/AppGroupBridgeModule.ts',
+      },
     },
     {
       ...jestExpoPreset,

@@ -111,6 +111,15 @@ function TabsLayoutContent() {
             }}
             testID="add-recipe-import-url"
           />
+          <Button
+            title="Import multiple URLs"
+            variant="secondary"
+            onPress={() => {
+              closeAddSheet();
+              router.push('/recipe/import-bulk');
+            }}
+            testID="add-recipe-import-bulk"
+          />
           <Text>Importing from a camera or photo is coming soon.</Text>
           <Button title="Close" onPress={() => closeAddSheet()} variant="secondary" />
         </View>

@@ -1,4 +1,5 @@
 import { getDatabase } from '../db/database';
+import type { ImageStore } from './imageCache';
 import {
   readCachedImageUri,
   readLocalCategories,
@@ -124,13 +125,16 @@ describe('readLocalCategories', () => {
 });
 
 describe('readCachedImageUri', () => {
-  it('returns the local uri when the image is cached', async () => {
+  it('returns the local uri when the image is cached and the file still exists', async () => {
     const db = createMockDb({
       getFirstAsync: jest.fn(async () => ({ local_uri: 'file:///cache/hero-images/r1.jpg' })),
     });
     mockedGetDatabase.mockResolvedValue(db);
+    const imageStore = { fileExists: jest.fn(() => true) } as unknown as ImageStore;
 
-    await expect(readCachedImageUri('h1/r1.jpg')).resolves.toBe('file:///cache/hero-images/r1.jpg');
+    await expect(readCachedImageUri('h1/r1.jpg', imageStore)).resolves.toBe(
+      'file:///cache/hero-images/r1.jpg',
+    );
   });
 
   it('returns null when the image has not been cached yet', async () => {
@@ -138,5 +142,16 @@ describe('readCachedImageUri', () => {
     mockedGetDatabase.mockResolvedValue(db);
 
     await expect(readCachedImageUri('h1/r1.jpg')).resolves.toBeNull();
+  });
+
+  it('returns null when a cached row exists but its file is gone (e.g. iOS purged Library/Caches/)', async () => {
+    const db = createMockDb({
+      getFirstAsync: jest.fn(async () => ({ local_uri: 'file:///cache/hero-images/r1.jpg' })),
+    });
+    mockedGetDatabase.mockResolvedValue(db);
+    const imageStore = { fileExists: jest.fn(() => false) } as unknown as ImageStore;
+
+    await expect(readCachedImageUri('h1/r1.jpg', imageStore)).resolves.toBeNull();
+    expect(imageStore.fileExists).toHaveBeenCalledWith('file:///cache/hero-images/r1.jpg');
   });
 });

@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -101,5 +101,27 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   3: [
     `alter table recipes add column created_at text`,
     `update sync_state set recipes_cursor_updated_at = null, recipes_cursor_id = null`,
+  ],
+  // Durable Share Extension submission (Phase 9, ADR-0016 decisions 1-2,
+  // adopting docs/risk-spikes/durable-import-submission.md's design). id
+  // is the client-generated UUID minted at capture time in the
+  // extension — the same value that becomes the App Group payload's
+  // `id` field and, on submission, the server's client_import_id
+  // (idempotency end-to-end, one key, never invented later). This table
+  // is deliberately excluded from wipeDatabase()'s table list (see
+  // database.ts) — an unsent share is the only copy of that share until
+  // the server confirms it, so it must survive sign-out rather than
+  // being dropped with the rebuildable recipe mirror.
+  4: [
+    `create table if not exists import_outbox (
+      id text primary key,
+      url text not null,
+      received_at text not null,
+      status text not null default 'pending' check (status in ('pending', 'submitting', 'submitted', 'failed')),
+      server_job_id text,
+      error_message text,
+      created_at text not null,
+      updated_at text not null
+    )`,
   ],
 };

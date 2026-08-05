@@ -1,8 +1,8 @@
 import AppGroupBridge from '../../modules/app-group-bridge/src/AppGroupBridgeModule';
 import {
-  clearSharedImport,
+  deleteQueuedShare,
   isAppGroupContainerAvailable,
-  readSharedImport,
+  readQueuedShares,
   readTestPayload,
   writeTestPayload,
 } from './appGroupHandoff';
@@ -11,8 +11,8 @@ jest.mock('../../modules/app-group-bridge/src/AppGroupBridgeModule', () => ({
   containerAvailable: jest.fn(),
   writeTestPayload: jest.fn(),
   readTestPayload: jest.fn(),
-  readSharePayload: jest.fn(),
-  clearSharePayload: jest.fn(),
+  listSharePayloads: jest.fn(),
+  deleteSharePayload: jest.fn(),
 }));
 
 const mocked = AppGroupBridge as jest.Mocked<typeof AppGroupBridge>;
@@ -42,39 +42,65 @@ describe('writeTestPayload / readTestPayload', () => {
   });
 });
 
-describe('readSharedImport', () => {
-  afterEach(() => jest.clearAllMocks());
+describe('readQueuedShares', () => {
+  it('parses every well-formed payload from the Share Extension queue', () => {
+    mocked.listSharePayloads.mockReturnValue([
+      '{"id":"11111111-1111-1111-1111-111111111111","url":"https://example.com/recipe","receivedAt":1785600000000}',
+      '{"id":"22222222-2222-2222-2222-222222222222","url":"https://example.com/soup","receivedAt":1785600000001}',
+    ]);
 
-  it('parses a well-formed payload from the Share Extension', () => {
-    mocked.readSharePayload.mockReturnValue(
-      '{"url":"https://example.com/recipe","receivedAt":1785600000000}',
-    );
-    expect(readSharedImport()).toEqual({
-      url: 'https://example.com/recipe',
-      receivedAt: 1785600000000,
-    });
+    expect(readQueuedShares()).toEqual([
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        url: 'https://example.com/recipe',
+        receivedAt: 1785600000000,
+      },
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        url: 'https://example.com/soup',
+        receivedAt: 1785600000001,
+      },
+    ]);
   });
 
-  it('returns null when nothing has been shared yet', () => {
-    mocked.readSharePayload.mockReturnValue(null);
-    expect(readSharedImport()).toBeNull();
+  it('returns an empty array when the queue is empty', () => {
+    mocked.listSharePayloads.mockReturnValue([]);
+    expect(readQueuedShares()).toEqual([]);
   });
 
   it.each([
     ['invalid JSON', 'not json'],
-    ['missing url', '{"receivedAt":1785600000000}'],
-    ['empty url', '{"url":"","receivedAt":1785600000000}'],
-    ['non-string url', '{"url":123,"receivedAt":1785600000000}'],
-    ['missing receivedAt', '{"url":"https://example.com"}'],
-  ])('returns null for %s rather than throwing', (_label, raw) => {
-    mocked.readSharePayload.mockReturnValue(raw);
-    expect(readSharedImport()).toBeNull();
+    ['missing id', '{"url":"https://example.com","receivedAt":1785600000000}'],
+    ['empty id', '{"id":"","url":"https://example.com","receivedAt":1785600000000}'],
+    ['missing url', '{"id":"1","receivedAt":1785600000000}'],
+    ['empty url', '{"id":"1","url":"","receivedAt":1785600000000}'],
+    ['non-string url', '{"id":"1","url":123,"receivedAt":1785600000000}'],
+    ['missing receivedAt', '{"id":"1","url":"https://example.com"}'],
+  ])('skips a malformed entry for %s rather than throwing', (_label, raw) => {
+    mocked.listSharePayloads.mockReturnValue([raw]);
+    expect(readQueuedShares()).toEqual([]);
+  });
+
+  it('skips only the malformed entries in a mixed batch, keeping the rest', () => {
+    mocked.listSharePayloads.mockReturnValue([
+      'not json',
+      '{"id":"11111111-1111-1111-1111-111111111111","url":"https://example.com/recipe","receivedAt":1785600000000}',
+    ]);
+
+    expect(readQueuedShares()).toEqual([
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        url: 'https://example.com/recipe',
+        receivedAt: 1785600000000,
+      },
+    ]);
   });
 });
 
-describe('clearSharedImport', () => {
-  it('delegates to the native bridge', () => {
-    mocked.clearSharePayload.mockReturnValue(true);
-    expect(clearSharedImport()).toBe(true);
+describe('deleteQueuedShare', () => {
+  it('delegates to the native bridge with the given id', () => {
+    mocked.deleteSharePayload.mockReturnValue(true);
+    expect(deleteQueuedShare('11111111-1111-1111-1111-111111111111')).toBe(true);
+    expect(mocked.deleteSharePayload).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111');
   });
 });
