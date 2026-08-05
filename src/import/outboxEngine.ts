@@ -61,6 +61,19 @@ const RETRY_LATER_MESSAGES = new Set([
   'too many imports for this household in the last hour',
 ]);
 
+// execution-plan.md's Phase 9 security scope: "Staging data expires" — a
+// share that's never submitted (the app isn't reopened signed-in for a
+// long stretch) shouldn't sit in local storage indefinitely. 30 days is
+// generous for a real gap in usage while still bounding it; expired
+// items are marked failed with an explicit reason rather than silently
+// dropped, so the user can see what happened rather than a share just
+// quietly vanishing.
+const OUTBOX_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+
+function isExpired(item: { receivedAt: string }, now: Date): boolean {
+  return now.getTime() - new Date(item.receivedAt).getTime() > OUTBOX_EXPIRY_MS;
+}
+
 /**
  * Attempts to submit every outbox row that hasn't reached a terminal
  * state, oldest first. Callers gate this on being signed in, online, and
@@ -71,8 +84,14 @@ const RETRY_LATER_MESSAGES = new Set([
 export async function submitPendingOutboxItems(): Promise<void> {
   const db = await getDatabase();
   const items = await listSubmittableOutboxItems(db);
+  const now = new Date();
 
   for (const item of items) {
+    if (isExpired(item, now)) {
+      await markOutboxItemFailed(db, item.id, 'This import was never completed and has expired.');
+      continue;
+    }
+
     await markOutboxItemSubmitting(db, item.id);
     try {
       const result = await submitImportJob({ url: item.url, clientImportId: item.id });

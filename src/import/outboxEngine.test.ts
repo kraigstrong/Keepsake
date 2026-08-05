@@ -193,4 +193,60 @@ describe('submitPendingOutboxItems', () => {
     expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o1', 'job-1');
     expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o2', 'job-2');
   });
+
+  it('marks a share older than 30 days as failed/expired without attempting submission ("Staging data expires")', async () => {
+    const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending', receivedAt: thirtyOneDaysAgo },
+    ]);
+
+    await submitPendingOutboxItems();
+
+    expect(mockedSubmitImportJob).not.toHaveBeenCalled();
+    expect(mockedMarkSubmitting).not.toHaveBeenCalled();
+    expect(mockedMarkFailed).toHaveBeenCalledWith(
+      fakeDb,
+      'o1',
+      'This import was never completed and has expired.',
+    );
+  });
+
+  it('still attempts submission for a share within the expiry window', async () => {
+    const twentyNineDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString();
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending', receivedAt: twentyNineDaysAgo },
+    ]);
+    mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-1', duplicate: false });
+
+    await submitPendingOutboxItems();
+
+    expect(mockedSubmitImportJob).toHaveBeenCalledWith({
+      url: 'https://example.com/a',
+      clientImportId: 'o1',
+    });
+    expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o1', 'job-1');
+  });
+
+  it('checks each item for expiry independently, still processing non-expired ones after an expired one', async () => {
+    const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending', receivedAt: thirtyOneDaysAgo },
+      { id: 'o2', url: 'https://example.com/b', status: 'pending', receivedAt: now },
+    ]);
+    mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-2', duplicate: false });
+
+    await submitPendingOutboxItems();
+
+    expect(mockedMarkFailed).toHaveBeenCalledWith(
+      fakeDb,
+      'o1',
+      'This import was never completed and has expired.',
+    );
+    expect(mockedSubmitImportJob).toHaveBeenCalledWith({
+      url: 'https://example.com/b',
+      clientImportId: 'o2',
+    });
+    expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o2', 'job-2');
+  });
 });
