@@ -25,16 +25,16 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '44444444-4444-4444-4444-444444444444'),
   ('cccccccc-cccc-cccc-cccc-cccccccccccc', '55555555-5555-5555-5555-555555555555');
 
--- household aaaa already has 30 imports, created well outside the
--- cooldown window, so the next call trips the rolling-hour cap rather
--- than the cooldown.
+-- household aaaa already has 30 imports, created well outside the 5s
+-- cooldown window but still inside the 1-hour count-cap window, so the
+-- next call trips the rolling-hour cap rather than the cooldown.
 insert into public.import_jobs (household_id, created_by, source_url, normalized_url, created_at)
 select
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   '11111111-1111-1111-1111-111111111111',
   'https://example.test/recipe-' || n::text,
   'https://example.test/recipe-' || n::text,
-  now() - interval '2 hours'
+  now() - interval '10 minutes'
 from generate_series(1, 30) as n;
 
 -- household bbbb has just one very recent import, well under the cap,

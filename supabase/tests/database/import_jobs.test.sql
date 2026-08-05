@@ -100,6 +100,12 @@ select throws_ok(
   'complete_import_job: cannot be called twice on the same job'
 );
 
+-- create_import_job's abuse-control cooldown (import_job_abuse_controls.sql)
+-- is 5 seconds per household — a real pause, not a fixture trick, so this
+-- test genuinely exercises the RPC's own guard rather than working around
+-- it. Same before alice_job_3 below.
+select pg_sleep(5.1);
+
 create temporary table alice_job_2 as
 select * from public.create_import_job('https://example.test/duplicate', 'https://example.test/duplicate');
 
@@ -118,6 +124,8 @@ select is(
   (select id from alice_recipe),
   'complete_import_job: duplicate_of_recipe_id recorded when this import resolved to an existing recipe'
 );
+
+select pg_sleep(5.1);
 
 create temporary table alice_job_3 as
 select * from public.create_import_job('https://example.test/broken', 'https://example.test/broken');
