@@ -138,6 +138,13 @@ describe('recipe routes', () => {
     });
   });
 
+  it('reaches the URL import screen at /recipe/import', async () => {
+    act(() => router.push('/recipe/import'));
+    await waitFor(() => {
+      expect(screen.getByTestId('import-url-input')).toBeOnTheScreen();
+    });
+  });
+
   it('reaches the history screen at /recipe/[id]/history', async () => {
     act(() => router.push('/recipe/recipe-1/history'));
     await waitFor(() => {

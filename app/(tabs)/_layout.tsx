@@ -102,7 +102,16 @@ function TabsLayoutContent() {
             }}
             testID="add-recipe-manual"
           />
-          <Text>Importing from a URL, camera, or photo is coming soon.</Text>
+          <Button
+            title="Import from a URL"
+            variant="secondary"
+            onPress={() => {
+              closeAddSheet();
+              router.push('/recipe/import');
+            }}
+            testID="add-recipe-import-url"
+          />
+          <Text>Importing from a camera or photo is coming soon.</Text>
           <Button title="Close" onPress={() => closeAddSheet()} variant="secondary" />
         </View>
       </Sheet>

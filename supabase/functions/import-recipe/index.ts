@@ -48,7 +48,10 @@ const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
 };
 
 async function resolveDns(hostname: string): Promise<string[]> {
-  const results = await Promise.allSettled([Deno.resolveDns(hostname, 'A'), Deno.resolveDns(hostname, 'AAAA')]);
+  const results = await Promise.allSettled([
+    Deno.resolveDns(hostname, 'A'),
+    Deno.resolveDns(hostname, 'AAAA'),
+  ]);
 
   const addresses: string[] = [];
   for (const result of results) {
@@ -129,7 +132,10 @@ Deno.serve(async (req: Request) => {
     // Duplicate detection (ADR-0015 decision 4) — before any fetch or AI
     // call. RLS already scopes this select to the caller's own
     // household, so no explicit household_id filter is needed here.
-    const { data: existingRecipes } = await supabase.from('recipes').select('id, source_url').not('source_url', 'is', null);
+    const { data: existingRecipes } = await supabase
+      .from('recipes')
+      .select('id, source_url')
+      .not('source_url', 'is', null);
 
     for (const existing of existingRecipes ?? []) {
       let existingNormalized: string;
@@ -140,10 +146,17 @@ Deno.serve(async (req: Request) => {
       }
       if (existingNormalized === normalizedUrl) {
         const { data: completed, error } = await supabase
-          .rpc('complete_import_job', { job_id: job.id, recipe_id: existing.id, duplicate_of_recipe_id: existing.id })
+          .rpc('complete_import_job', {
+            job_id: job.id,
+            recipe_id: existing.id,
+            duplicate_of_recipe_id: existing.id,
+          })
           .single();
         if (error || !completed) {
-          return jsonResponse({ jobId: job.id, error: error?.message ?? 'Could not complete import job' }, 500);
+          return jsonResponse(
+            { jobId: job.id, error: error?.message ?? 'Could not complete import job' },
+            500,
+          );
         }
         return jsonResponse({ jobId: job.id, recipeId: existing.id, duplicate: true }, 200);
       }
@@ -231,8 +244,14 @@ Deno.serve(async (req: Request) => {
           sourceAttribution,
           tags: extraction.suggestedTags,
           categoryIds,
-          ingredientSections: extraction.ingredientSections.map((s) => ({ title: s.heading, lines: s.items })),
-          instructionSections: extraction.instructionSections.map((s) => ({ title: s.heading, lines: s.steps })),
+          ingredientSections: extraction.ingredientSections.map((s) => ({
+            title: s.heading,
+            lines: s.items,
+          })),
+          instructionSections: extraction.instructionSections.map((s) => ({
+            title: s.heading,
+            lines: s.steps,
+          })),
         },
       })
       .single();
@@ -250,7 +269,12 @@ Deno.serve(async (req: Request) => {
     }
 
     return jsonResponse(
-      { jobId: job.id, recipeId: savedRecipe.id, duplicate: false, uncertainFields: extraction.uncertainFields },
+      {
+        jobId: job.id,
+        recipeId: savedRecipe.id,
+        duplicate: false,
+        uncertainFields: extraction.uncertainFields,
+      },
       200,
     );
   } catch (error) {
