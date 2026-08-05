@@ -108,9 +108,20 @@ select throws_ok(
 -- job's created_at directly is the same technique
 -- import_job_abuse_controls.test.sql already uses for the same reason,
 -- and avoids changing the RPC's own now()-based semantics just to suit
--- a test. Same before alice_job_3 below.
+-- a test. import_jobs has no update grant for authenticated (writes are
+-- RPC-only, by design) — reset to the privileged role for the backdate
+-- itself, same as recipe_isolation.test.sql's "as postgres, RLS is
+-- bypassed" pattern, then resume impersonating alice. Same before
+-- alice_job_3 below.
+reset role;
 update public.import_jobs set created_at = now() - interval '10 minutes'
 where id = (select id from alice_job);
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
 
 create temporary table alice_job_2 as
 select * from public.create_import_job('https://example.test/duplicate', 'https://example.test/duplicate');
@@ -131,8 +142,15 @@ select is(
   'complete_import_job: duplicate_of_recipe_id recorded when this import resolved to an existing recipe'
 );
 
+reset role;
 update public.import_jobs set created_at = now() - interval '10 minutes'
 where id = (select id from alice_job_2);
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
 
 create temporary table alice_job_3 as
 select * from public.create_import_job('https://example.test/broken', 'https://example.test/broken');
