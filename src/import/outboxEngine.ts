@@ -74,21 +74,38 @@ function isExpired(item: { receivedAt: string }, now: Date): boolean {
   return now.getTime() - new Date(item.receivedAt).getTime() > OUTBOX_EXPIRY_MS;
 }
 
+export interface OutboxSubmissionOutcome {
+  id: string;
+  status: 'submitted' | 'failed';
+  recipeId?: string;
+  duplicate?: boolean;
+  errorMessage?: string;
+}
+
 /**
  * Attempts to submit every outbox row that hasn't reached a terminal
  * state, oldest first. Callers gate this on being signed in, online, and
  * belonging to a household — a call made without those would just fail
  * every item for a reason unrelated to the import itself, so it's the
  * caller's job not to invoke this until they hold.
+ *
+ * Returns what happened to each item attempted (not the ones left
+ * 'pending' by a rate-limit guard) so a caller can surface it — a
+ * Share-Extension-originated import has no screen of its own to land on
+ * or show an inline error the way the single-URL import screen does, so
+ * without this, "I shared something, then what?" has no answer at all.
  */
-export async function submitPendingOutboxItems(): Promise<void> {
+export async function submitPendingOutboxItems(): Promise<OutboxSubmissionOutcome[]> {
   const db = await getDatabase();
   const items = await listSubmittableOutboxItems(db);
   const now = new Date();
+  const outcomes: OutboxSubmissionOutcome[] = [];
 
   for (const item of items) {
     if (isExpired(item, now)) {
-      await markOutboxItemFailed(db, item.id, 'This import was never completed and has expired.');
+      const errorMessage = 'This import was never completed and has expired.';
+      await markOutboxItemFailed(db, item.id, errorMessage);
+      outcomes.push({ id: item.id, status: 'failed', errorMessage });
       continue;
     }
 
@@ -96,14 +113,47 @@ export async function submitPendingOutboxItems(): Promise<void> {
     try {
       const result = await submitImportJob({ url: item.url, clientImportId: item.id });
       await markOutboxItemSubmitted(db, item.id, result.jobId);
+      outcomes.push({
+        id: item.id,
+        status: 'submitted',
+        recipeId: result.recipeId,
+        duplicate: result.duplicate,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       if (RETRY_LATER_MESSAGES.has(message)) {
         await markOutboxItemPending(db, item.id);
-        return;
+        return outcomes;
       }
       await markOutboxItemFailed(db, item.id, message);
+      outcomes.push({ id: item.id, status: 'failed', errorMessage: message });
       logError(error, { context: 'submitOutboxItem' });
     }
   }
+
+  return outcomes;
+}
+
+/**
+ * Turns a batch of outcomes into one toast-sized message. Multiple
+ * outcomes get a summary rather than one toast per item — ToastProvider
+ * shows a single message at a time, so firing several in a row would
+ * only ever leave the last one visible.
+ */
+export function summarizeOutboxOutcomes(outcomes: OutboxSubmissionOutcome[]): string | null {
+  if (outcomes.length === 0) return null;
+
+  if (outcomes.length === 1) {
+    const [outcome] = outcomes;
+    if (outcome!.status === 'failed') return "Couldn't import a recipe you shared";
+    return outcome!.duplicate ? 'Already in your library' : 'Recipe imported from Share';
+  }
+
+  const succeeded = outcomes.filter((outcome) => outcome.status === 'submitted').length;
+  const failed = outcomes.length - succeeded;
+  if (failed === 0) return `${succeeded} recipes imported from Share`;
+  if (succeeded === 0) {
+    return `Couldn't import ${failed} shared recipe${failed === 1 ? '' : 's'}`;
+  }
+  return `${succeeded} imported, ${failed} failed`;
 }

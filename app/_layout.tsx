@@ -7,10 +7,14 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { OfflineState } from '../src/components/OfflineState';
-import { ToastProvider } from '../src/components/Toast';
+import { ToastProvider, useToast } from '../src/components/Toast';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
-import { drainAppGroupQueueIntoOutbox, submitPendingOutboxItems } from '../src/import/outboxEngine';
+import {
+  drainAppGroupQueueIntoOutbox,
+  submitPendingOutboxItems,
+  summarizeOutboxOutcomes,
+} from '../src/import/outboxEngine';
 import { initObservability, logError } from '../src/observability';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
@@ -52,16 +56,17 @@ export default function RootLayout() {
 function ConnectivityAwareApp() {
   const { household } = useHousehold();
   const householdId = household?.id ?? null;
+  const { showToast } = useToast();
 
   return (
     <ConnectivityProvider
       onReconnect={() => {
         triggerHouseholdSync(householdId);
-        triggerImportOutboxWork(householdId);
+        triggerImportOutboxWork(householdId, showToast);
       }}
     >
       <HouseholdSyncOnMount householdId={householdId} />
-      <ImportOutboxOnMount householdId={householdId} />
+      <ImportOutboxOnMount householdId={householdId} showToast={showToast} />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -94,15 +99,36 @@ function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
 // regardless); re-runs when householdId transitions from null to set so
 // anything drained before onboarding finished gets submitted once it
 // can be.
-function triggerImportOutboxWork(householdId: string | null): void {
+//
+// A Share-Extension-originated import has no screen of its own to land
+// on — unlike the in-app single-URL/bulk-paste flows, which navigate
+// somewhere on completion, this runs entirely in the background. The
+// toast is the only signal the user gets that "the thing I shared"
+// resolved to anything at all; without it, a successful import is
+// indistinguishable from one that silently vanished.
+function triggerImportOutboxWork(
+  householdId: string | null,
+  showToast: (message: string) => void,
+): void {
   drainAppGroupQueueIntoOutbox()
-    .then(() => (householdId ? submitPendingOutboxItems() : undefined))
+    .then(() => (householdId ? submitPendingOutboxItems() : []))
+    .then((outcomes) => {
+      const message = summarizeOutboxOutcomes(outcomes);
+      if (message) showToast(message);
+    })
     .catch((error) => logError(error, { context: 'importOutbox' }));
 }
 
-function ImportOutboxOnMount({ householdId }: { householdId: string | null }) {
+function ImportOutboxOnMount({
+  householdId,
+  showToast,
+}: {
+  householdId: string | null;
+  showToast: (message: string) => void;
+}) {
   useEffect(() => {
-    triggerImportOutboxWork(householdId);
+    triggerImportOutboxWork(householdId, showToast);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable (useCallback in ToastProvider); only householdId should re-trigger this.
   }, [householdId]);
   return null;
 }

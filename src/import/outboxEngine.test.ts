@@ -1,4 +1,8 @@
-import { drainAppGroupQueueIntoOutbox, submitPendingOutboxItems } from './outboxEngine';
+import {
+  drainAppGroupQueueIntoOutbox,
+  submitPendingOutboxItems,
+  summarizeOutboxOutcomes,
+} from './outboxEngine';
 import { deleteQueuedShare, readQueuedShares } from '../appGroup/appGroupHandoff';
 import { getDatabase } from '../db/database';
 import { logError, trackEvent } from '../observability';
@@ -248,5 +252,89 @@ describe('submitPendingOutboxItems', () => {
       clientImportId: 'o2',
     });
     expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o2', 'job-2');
+  });
+
+  it('returns an outcome per item attempted, so a caller can surface what happened', async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending' },
+      { id: 'o2', url: 'https://example.com/b', status: 'pending' },
+    ]);
+    mockedSubmitImportJob
+      .mockResolvedValueOnce({ jobId: 'job-1', recipeId: 'r1', duplicate: false })
+      .mockRejectedValueOnce(new Error('Could not fetch the page'));
+
+    const outcomes = await submitPendingOutboxItems();
+
+    expect(outcomes).toEqual([
+      { id: 'o1', status: 'submitted', recipeId: 'r1', duplicate: false },
+      { id: 'o2', status: 'failed', errorMessage: 'Could not fetch the page' },
+    ]);
+  });
+
+  it('returns only the outcomes attempted before a rate-limit guard stopped the run', async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending' },
+      { id: 'o2', url: 'https://example.com/b', status: 'pending' },
+    ]);
+    mockedSubmitImportJob
+      .mockResolvedValueOnce({ jobId: 'job-1', duplicate: false })
+      .mockRejectedValueOnce(new Error('please wait before importing another recipe'));
+
+    const outcomes = await submitPendingOutboxItems();
+
+    expect(outcomes).toEqual([
+      { id: 'o1', status: 'submitted', recipeId: undefined, duplicate: false },
+    ]);
+  });
+});
+
+describe('summarizeOutboxOutcomes', () => {
+  it('returns null for no outcomes (nothing to tell the user)', () => {
+    expect(summarizeOutboxOutcomes([])).toBeNull();
+  });
+
+  it('describes a single fresh import', () => {
+    expect(summarizeOutboxOutcomes([{ id: 'o1', status: 'submitted', duplicate: false }])).toBe(
+      'Recipe imported from Share',
+    );
+  });
+
+  it('describes a single duplicate distinctly', () => {
+    expect(summarizeOutboxOutcomes([{ id: 'o1', status: 'submitted', duplicate: true }])).toBe(
+      'Already in your library',
+    );
+  });
+
+  it('describes a single failure', () => {
+    expect(summarizeOutboxOutcomes([{ id: 'o1', status: 'failed', errorMessage: 'boom' }])).toBe(
+      "Couldn't import a recipe you shared",
+    );
+  });
+
+  it('summarizes multiple successes as a count', () => {
+    expect(
+      summarizeOutboxOutcomes([
+        { id: 'o1', status: 'submitted', duplicate: false },
+        { id: 'o2', status: 'submitted', duplicate: false },
+      ]),
+    ).toBe('2 recipes imported from Share');
+  });
+
+  it('summarizes multiple failures as a count', () => {
+    expect(
+      summarizeOutboxOutcomes([
+        { id: 'o1', status: 'failed' },
+        { id: 'o2', status: 'failed' },
+      ]),
+    ).toBe("Couldn't import 2 shared recipes");
+  });
+
+  it('summarizes a mix of successes and failures', () => {
+    expect(
+      summarizeOutboxOutcomes([
+        { id: 'o1', status: 'submitted', duplicate: false },
+        { id: 'o2', status: 'failed' },
+      ]),
+    ).toBe('1 imported, 1 failed');
   });
 });
