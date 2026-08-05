@@ -184,13 +184,21 @@ select results_eq(
   'RLS: carol (a different household) sees none of alice''s import jobs'
 );
 
+-- complete_import_job checks recipe ownership before job ownership, so
+-- a cross-household caller referencing both someone else's job *and*
+-- someone else's recipe sees "recipe not found" here, not "import job
+-- not found" — equally valid as a denial (carol is blocked either way,
+-- neither message confirms alice's data exists), just the message this
+-- particular combination actually produces. This exact assertion never
+-- ran until the two other bugs earlier in this file were fixed — the
+-- script always aborted before reaching it.
 select throws_ok(
   format(
     $$ select public.complete_import_job(%L, %L) $$,
     (select id from alice_job_3),
     (select id from alice_recipe)
   ),
-  'import job not found or already closed',
+  'recipe not found',
   'complete_import_job: carol cannot close out alice''s job'
 );
 
