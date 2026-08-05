@@ -78,7 +78,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4 | Done (tested) |
 | ORG-02 | Multiple category selections allowed | 4 | Done (tested) |
 | ORG-03 | Free-form tags supported | 4 | Done (tested) |
-| ORG-04 | AI suggests categories and tags | 8 | Not Started |
+| ORG-04 | AI suggests categories and tags | 8 | Done (tested) |
 
 ## Search (SRCH)
 
