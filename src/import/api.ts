@@ -85,6 +85,9 @@ export interface BatchJobStub {
   jobId: string;
   sourceUrl: string;
   status: string;
+  recipeId?: string;
+  duplicate?: boolean;
+  errorMessage?: string;
 }
 
 interface BatchJobRow {
@@ -122,7 +125,7 @@ export async function createImportBatch(urls: string[]): Promise<BatchJobStub[]>
 export async function fetchBatchJobs(batchId: string): Promise<BatchJobStub[]> {
   const { data, error } = await supabase
     .from('import_jobs')
-    .select('id, batch_id, source_url, status')
+    .select('id, batch_id, source_url, status, recipe_id, duplicate_of_recipe_id, error_message')
     .eq('batch_id', batchId)
     .order('created_at', { ascending: true });
   if (error) {
@@ -133,5 +136,8 @@ export async function fetchBatchJobs(batchId: string): Promise<BatchJobStub[]> {
     jobId: row.id as string,
     sourceUrl: row.source_url as string,
     status: row.status as string,
+    recipeId: (row.recipe_id as string | null) ?? undefined,
+    duplicate: row.duplicate_of_recipe_id != null,
+    errorMessage: (row.error_message as string | null) ?? undefined,
   }));
 }

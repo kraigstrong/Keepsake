@@ -190,7 +190,17 @@ describe('createImportBatch', () => {
 describe('fetchBatchJobs', () => {
   it('queries import_jobs scoped to the given batch, oldest first', async () => {
     const order = jest.fn().mockResolvedValue({
-      data: [{ id: 'j1', batch_id: 'b1', source_url: 'https://example.com/a', status: 'complete' }],
+      data: [
+        {
+          id: 'j1',
+          batch_id: 'b1',
+          source_url: 'https://example.com/a',
+          status: 'complete',
+          recipe_id: 'r1',
+          duplicate_of_recipe_id: null,
+          error_message: null,
+        },
+      ],
       error: null,
     });
     const eq = jest.fn().mockReturnValue({ order });
@@ -203,7 +213,15 @@ describe('fetchBatchJobs', () => {
     expect(eq).toHaveBeenCalledWith('batch_id', 'b1');
     expect(order).toHaveBeenCalledWith('created_at', { ascending: true });
     expect(result).toEqual([
-      { batchId: 'b1', jobId: 'j1', sourceUrl: 'https://example.com/a', status: 'complete' },
+      {
+        batchId: 'b1',
+        jobId: 'j1',
+        sourceUrl: 'https://example.com/a',
+        status: 'complete',
+        recipeId: 'r1',
+        duplicate: false,
+        errorMessage: undefined,
+      },
     ]);
   });
 
