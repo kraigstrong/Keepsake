@@ -8,11 +8,23 @@ import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
+import { useToast } from '../components/Toast';
 import { readCachedImageUri, readLocalCategories, readLocalRecipe } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface RecipeDetailScreenProps {
   recipeId: string;
+  // Set when this screen was reached straight from a successful import
+  // (ImportRecipeScreen's router.replace) — the recipe is already saved
+  // by the time we land here (IMP-07: no mandatory review step), but
+  // without any signal the user has no way to tell "this just got
+  // imported" apart from "I navigated to an existing recipe." A toast
+  // is the whole fix; it doesn't add a review step.
+  justImported?: boolean;
+  // Whether that import resolved to an already-saved recipe (ADR-0015
+  // duplicate detection) rather than creating a new one — changes the
+  // toast wording, nothing else.
+  wasDuplicate?: boolean;
 }
 
 /**
@@ -21,13 +33,26 @@ export interface RecipeDetailScreenProps {
  * than an inline-editable detail view, matching REC-09's "no clutter"
  * shape (nothing here but what's meant to be read while cooking).
  */
-export function RecipeDetailScreen({ recipeId }: RecipeDetailScreenProps) {
+export function RecipeDetailScreen({
+  recipeId,
+  justImported = false,
+  wasDuplicate = false,
+}: RecipeDetailScreenProps) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (justImported) showToast(wasDuplicate ? 'Already in your library' : 'Recipe imported');
+    // Only ever meant to fire once, right when this screen is reached
+    // straight from a successful import — not on every re-render, and
+    // not again if the same recipeId is somehow revisited later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

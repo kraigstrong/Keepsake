@@ -30,11 +30,14 @@ export function ImportRecipeScreen() {
       // Navigates straight to the recipe either way — whether this
       // created a new recipe or resolved to one that already existed
       // (ADR-0015's duplicate detection), the useful outcome for the
-      // user is the same: land on the recipe. There's no intermediate
-      // state to show a "this was a duplicate" notice in, since
-      // navigation happens immediately after this call resolves.
+      // user is the same: land on the recipe. The destination screen
+      // shows a toast confirming what happened (imported/duplicate) —
+      // there's no intermediate state on *this* screen to show it in,
+      // since navigation happens immediately after this call resolves.
       const result = await importRecipeFromUrl(url.trim());
-      router.replace(`/recipe/${result.recipeId}`);
+      router.replace(
+        `/recipe/${result.recipeId}?imported=1${result.duplicate ? '&duplicate=1' : ''}`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong importing this recipe.');
     } finally {

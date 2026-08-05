@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { OfflineState } from '../src/components/OfflineState';
+import { ToastProvider } from '../src/components/Toast';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
 import { initObservability, logError } from '../src/observability';
@@ -27,15 +28,17 @@ export default function RootLayout() {
           (ADR-0009). Revisit once Cooking Mode's dark variant exists and
           needs to flip this per-screen. */}
       <StatusBar style="dark" />
-      <SafeAreaProvider>
-        <DeepLinkProvider>
-          <SessionProvider>
-            <HouseholdProvider>
-              <ConnectivityAwareApp />
-            </HouseholdProvider>
-          </SessionProvider>
-        </DeepLinkProvider>
-      </SafeAreaProvider>
+      <ToastProvider>
+        <SafeAreaProvider>
+          <DeepLinkProvider>
+            <SessionProvider>
+              <HouseholdProvider>
+                <ConnectivityAwareApp />
+              </HouseholdProvider>
+            </SessionProvider>
+          </DeepLinkProvider>
+        </SafeAreaProvider>
+      </ToastProvider>
     </GestureHandlerRootView>
   );
 }

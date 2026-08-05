@@ -45,7 +45,7 @@ describe('ImportRecipeScreen', () => {
     await fireEvent.press(screen.getByTestId('import-url-submit'));
 
     await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
+      expect(replace).toHaveBeenCalledWith('/recipe/recipe-1?imported=1');
     });
     expect(mockedApi.importRecipeFromUrl).toHaveBeenCalledWith('https://example.com/recipe');
   });
@@ -81,7 +81,7 @@ describe('ImportRecipeScreen', () => {
     await fireEvent.press(screen.getByTestId('import-url-submit'));
 
     await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith('/recipe/existing-recipe');
+      expect(replace).toHaveBeenCalledWith('/recipe/existing-recipe?imported=1&duplicate=1');
     });
   });
 
