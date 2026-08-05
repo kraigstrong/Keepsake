@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-import { extractRecipe, RecipeExtractionSchema } from './extractRecipe';
+import { extractRecipe, extractRecipeFromImage, RecipeExtractionSchema } from './extractRecipe';
 import { MESSY_RECIPE_PAGE_TEXT } from './fixtures/messyRecipePage';
 
 describe('RecipeExtractionSchema', () => {
@@ -162,6 +162,71 @@ describe('extractRecipe — model selection', () => {
       const result = await extractRecipe(client, 'page text', prodOptions);
 
       expect(result).toEqual(nonCriticalUncertainty);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('extractRecipeFromImage — model selection (ADR-0017)', () => {
+    it('floors at Sonnet (not Haiku) even without useProductionModels, and does not escalate', async () => {
+      const uncertainResult = { ...confidentExtraction, uncertainFields: ['title'] };
+      const client = clientReturning(uncertainResult);
+
+      const result = await extractRecipeFromImage(client, 'base64data', 'image/jpeg');
+
+      expect(result).toEqual(uncertainResult);
+      expect(client.messages.parse).toHaveBeenCalledTimes(1);
+      expect(client.messages.parse).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-sonnet-5' }),
+      );
+    });
+
+    it('sends the image as a base64 content block alongside a text instruction', async () => {
+      const client = clientReturning(confidentExtraction);
+
+      await extractRecipeFromImage(client, 'base64data', 'image/png');
+
+      expect(client.messages.parse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: { type: 'base64', media_type: 'image/png', data: 'base64data' },
+                },
+                { type: 'text', text: expect.any(String) },
+              ],
+            },
+          ],
+        }),
+      );
+    });
+
+    it('escalates to Opus when a critical field is uncertain and useProductionModels is set', async () => {
+      const escalated = { ...confidentExtraction, title: 'Roast Chicken (opus)' };
+      const uncertainPrimary = { ...confidentExtraction, uncertainFields: ['ingredientSections'] };
+      const client = clientReturning(uncertainPrimary, escalated);
+
+      const result = await extractRecipeFromImage(client, 'base64data', 'image/jpeg', {
+        useProductionModels: true,
+      });
+
+      expect(result).toEqual(escalated);
+      expect(client.messages.parse).toHaveBeenCalledTimes(2);
+      expect(client.messages.parse).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ model: 'claude-opus-5' }),
+      );
+    });
+
+    it('does not escalate in production mode when the primary result looks confident', async () => {
+      const client = clientReturning(confidentExtraction);
+
+      await extractRecipeFromImage(client, 'base64data', 'image/jpeg', {
+        useProductionModels: true,
+      });
+
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
     });
   });

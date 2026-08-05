@@ -7,7 +7,9 @@ import { z } from 'zod';
  * bundle). This is Phase 1's proof that Claude structured extraction
  * works; Phase 8 wires it into the real import pipeline (a Supabase Edge
  * Function, not this Node module directly — the schema/prompt design
- * carries over, the runtime host doesn't).
+ * carries over, the runtime host doesn't). Phase 10 (ADR-0017) adds
+ * extractRecipeFromImage, a vision-input sibling to extractRecipe that
+ * shares this same schema and the same Sonnet/Opus escalation logic.
  *
  * Every field maps to an explicit PRD requirement so the schema itself
  * documents what it's for:
@@ -119,16 +121,21 @@ function seemsUncertain(extraction: RecipeExtraction): boolean {
   return hasNoIngredients || hasNoInstructions || hasCriticalUncertainty;
 }
 
+// Anthropic's `messages` content accepts a plain string or an array of
+// content blocks — generalized here (rather than staying pageText-only)
+// so the image extraction path below can reuse the exact same call/parse/
+// error-handling logic instead of duplicating it.
 async function callModel(
   client: Anthropic,
-  pageText: string,
+  content: Anthropic.MessageParam['content'],
   model: string,
+  systemPrompt: string,
 ): Promise<RecipeExtraction> {
   const response = await client.messages.parse({
     model,
     max_tokens: 4096,
-    system: EXTRACTION_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: pageText }],
+    system: systemPrompt,
+    messages: [{ role: 'user', content }],
     output_config: {
       format: zodOutputFormat(RecipeExtractionSchema),
     },
@@ -162,11 +169,64 @@ export async function extractRecipe(
   options: ExtractRecipeOptions = {},
 ): Promise<RecipeExtraction> {
   if (!options.useProductionModels) {
-    return callModel(client, pageText, DEV_MODEL);
+    return callModel(client, pageText, DEV_MODEL, EXTRACTION_SYSTEM_PROMPT);
   }
 
-  const primaryResult = await callModel(client, pageText, PRIMARY_MODEL);
+  const primaryResult = await callModel(client, pageText, PRIMARY_MODEL, EXTRACTION_SYSTEM_PROMPT);
   if (!seemsUncertain(primaryResult)) return primaryResult;
 
-  return callModel(client, pageText, ESCALATION_MODEL);
+  return callModel(client, pageText, ESCALATION_MODEL, EXTRACTION_SYSTEM_PROMPT);
+}
+
+/**
+ * Phase 10 (ADR-0017 decision 3): a photo's extraction quality depends on
+ * real visual parsing (handwriting, glare, cropped edges, multi-column
+ * layouts), where DEV_MODEL's weaker Haiku call is more likely to produce
+ * exactly the confidently-wrong output AI-08 exists to prevent — so this
+ * path floors at PRIMARY_MODEL (Sonnet) in every environment, dev
+ * included, instead of reusing DEV_MODEL. The escalate-to-Opus-on-
+ * uncertain-critical-fields decision itself (seemsUncertain, gated on
+ * useProductionModels) is unchanged from the text path — only the floor
+ * moved.
+ */
+export const IMAGE_EXTRACTION_SYSTEM_PROMPT = `You extract a single recipe from a photograph — a recipe card, a cookbook page, a handwritten note, or similar. The image may have glare, be partially cropped, show only part of a multi-page recipe, or be otherwise imperfect.
+
+Rules:
+- Rewrite instructions clearly and concisely; do not copy awkward phrasing verbatim, but do not invent steps that aren't legible in the photo either.
+- Include each ingredient's quantity inline in its own item text (e.g. "2 cups flour", not a separate quantity field).
+- Preserve the source's own section structure for ingredients and instructions when present; use a single unheaded section when there is none.
+- If the photo shows only part of a recipe (e.g. ingredients but no instructions, or the image is cut off), extract what is genuinely legible and leave the rest empty — do not invent missing sections.
+- Infer active time, total time, and yield only when legibly stated or clearly implied; do NOT invent a specific number you cannot support from the image.
+- For any field you are not confident about — including anything illegible, ambiguous handwriting, or a guess at a partially-obscured word — still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
+- suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly in the photo.`;
+
+export interface ExtractRecipeFromImageOptions {
+  /** Same meaning as ExtractRecipeOptions.useProductionModels — opts into Opus escalation on an uncertain Sonnet result. Unlike the text path, the non-production floor is still Sonnet, not Haiku (see this function's own doc comment). */
+  useProductionModels?: boolean;
+}
+
+export async function extractRecipeFromImage(
+  client: Anthropic,
+  imageBase64: string,
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+  options: ExtractRecipeFromImageOptions = {},
+): Promise<RecipeExtraction> {
+  const content: Anthropic.MessageParam['content'] = [
+    {
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: imageBase64 },
+    },
+    { type: 'text', text: 'Extract the recipe shown in this photo.' },
+  ];
+
+  const primaryResult = await callModel(
+    client,
+    content,
+    PRIMARY_MODEL,
+    IMAGE_EXTRACTION_SYSTEM_PROMPT,
+  );
+  if (!options.useProductionModels) return primaryResult;
+  if (!seemsUncertain(primaryResult)) return primaryResult;
+
+  return callModel(client, content, ESCALATION_MODEL, IMAGE_EXTRACTION_SYSTEM_PROMPT);
 }
