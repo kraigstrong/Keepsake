@@ -31,7 +31,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | IMP-01 | Website URL import | 8 | Done (tested) |
-| IMP-02 | Safari Share Sheet import | 9 | Done (untested) |
+| IMP-02 | Safari Share Sheet import | 9 | Done (untested) — Simulator-verified live, physical-device confirmation pending |
 | IMP-03 | Bulk URL import | 9 | Done (tested) |
 | IMP-04 | Camera import | 10 | Not Started |
 | IMP-05 | Existing photo import | 10 | Not Started |
