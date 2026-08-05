@@ -30,32 +30,32 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| IMP-01 | Website URL import | 8 | Not Started |
+| IMP-01 | Website URL import | 8 | Done (tested) |
 | IMP-02 | Safari Share Sheet import | 9 | Not Started |
 | IMP-03 | Bulk URL import | 9 | Not Started |
 | IMP-04 | Camera import | 10 | Not Started |
 | IMP-05 | Existing photo import | 10 | Not Started |
 | IMP-06 | Manual creation | 4 | Done (tested) |
-| IMP-07 | No mandatory review step after import | 8 | Not Started |
+| IMP-07 | No mandatory review step after import | 8 | Done (tested) |
 
 ## AI Responsibilities (AI)
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| AI-01 | Remove blog content | 8 | Not Started |
-| AI-02 | Rewrite instructions clearly | 8 | Not Started |
-| AI-03 | Include ingredient quantities inline | 8 | Not Started |
-| AI-04 | Identify sections | 8 | Not Started |
-| AI-05 | Infer timing | 8 | Not Started |
-| AI-06 | Infer categories and tags | 8 | Not Started |
-| AI-07 | Detect and highlight ambiguity | 8 | Not Started |
-| AI-08 | Never confidently invent missing information | 8 (cross-cutting) | Not Started |
+| AI-01 | Remove blog content | 8 | Done (tested) |
+| AI-02 | Rewrite instructions clearly | 8 | Done (tested) |
+| AI-03 | Include ingredient quantities inline | 8 | Done (tested) |
+| AI-04 | Identify sections | 8 | Done (tested) |
+| AI-05 | Infer timing | 8 | Done (tested) |
+| AI-06 | Infer categories and tags | 8 | Done (tested) |
+| AI-07 | Detect and highlight ambiguity | 8 | Done (tested) |
+| AI-08 | Never confidently invent missing information | 8 (cross-cutting) | Done (tested) |
 
 ## Images (IMG)
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| IMG-01 | Website recipe images stored locally, never hotlinked | 8 | Not Started |
+| IMG-01 | Website recipe images stored locally, never hotlinked | 8 | Done (tested) |
 | IMG-02 | Photo import preserves the original image | 10 | Not Started |
 | IMG-03 | Original photo viewable later | 10 | Not Started |
 | IMG-04 | Replace / crop-square / remove image | 4 / 10 | Done (tested) |

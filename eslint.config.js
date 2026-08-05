@@ -36,6 +36,10 @@ module.exports = [
       // as eslint.config.js itself (which flat config never lints).
       'jest.config.js',
       'babel.config.js',
+      // Deno Edge Functions (Phase 8+, ADR-0015) — separate runtime, not
+      // lintable by this Node/RN project's ESLint config. See
+      // tsconfig.json's matching exclusion for the full reasoning.
+      'supabase/functions/*',
     ],
   },
 ];

@@ -4,8 +4,17 @@ import { Linking } from 'react-native';
 
 import * as api from './api';
 import * as heroImage from './heroImage';
-import { RecipeDetailScreen } from './RecipeDetailScreen';
+import { RecipeDetailScreen, type RecipeDetailScreenProps } from './RecipeDetailScreen';
+import { ToastProvider } from '../components/Toast';
 import * as offlineRecipes from '../sync/offlineRecipes';
+
+function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
+  return render(
+    <ToastProvider>
+      <RecipeDetailScreen {...props} />
+    </ToastProvider>,
+  );
+}
 
 jest.mock('./api');
 jest.mock('./heroImage');
@@ -59,7 +68,7 @@ it('shows a loading state, then the recipe', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
   mockedHeroImage.getHeroImageUrl.mockResolvedValue('https://signed.example.com/existing.jpg');
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
   expect(screen.getByText('Active 20 min · Total 70 min · Serves 4')).toBeTruthy();
@@ -75,7 +84,7 @@ it('shows a loading state, then the recipe', async () => {
 it('shows an error state when the recipe fails to load', async () => {
   mockedApi.fetchRecipe.mockRejectedValue(new Error('not found'));
 
-  await render(<RecipeDetailScreen recipeId="missing" />);
+  await renderRecipeDetailScreen({ recipeId: 'missing' });
 
   expect(screen.getByTestId('recipe-detail-load-error')).toBeTruthy();
 });
@@ -83,7 +92,7 @@ it('shows an error state when the recipe fails to load', async () => {
 it('navigates to the edit screen', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await fireEvent.press(screen.getByTestId('recipe-detail-edit-button'));
 
@@ -93,7 +102,7 @@ it('navigates to the edit screen', async () => {
 it('navigates to the history screen', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
 
@@ -103,7 +112,7 @@ it('navigates to the history screen', async () => {
 it('opens the source url in the browser', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await fireEvent.press(screen.getByTestId('recipe-detail-source-url'));
 
@@ -123,7 +132,7 @@ it('shows the recipe from the local cache immediately, even when the live fetch 
   mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
   mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   expect(screen.getByTestId('recipe-detail-category-Chicken')).toBeTruthy();
@@ -141,7 +150,7 @@ it('does not show an error when the live refresh fails but local data already lo
   mockedApi.fetchRecipe.mockRejectedValue(new Error('offline'));
   mockedApi.fetchCategories.mockRejectedValue(new Error('offline'));
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   expect(screen.queryByTestId('recipe-detail-load-error')).toBeNull();
@@ -155,7 +164,7 @@ it('falls back to a live signed URL when the hero image is not cached locally', 
   mockedApi.fetchRecipe.mockReturnValue(new Promise(() => {}));
   mockedApi.fetchCategories.mockReturnValue(new Promise(() => {}));
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
   expect(mockedHeroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/existing.jpg');
@@ -170,8 +179,33 @@ it('omits the timing line and hero image when the recipe has neither', async () 
     yieldText: null,
   });
 
-  await render(<RecipeDetailScreen recipeId="recipe-1" />);
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   expect(screen.queryByText('Active 20 min · Total 70 min · Serves 4')).toBeNull();
   expect(screen.getByTestId('recipe-hero-placeholder')).toBeTruthy();
+});
+
+it('shows a confirmation toast when reached straight from a successful import', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1', justImported: true });
+
+  await waitFor(() => expect(screen.getByText('Recipe imported')).toBeTruthy());
+});
+
+it('shows a different toast when the import resolved to a duplicate', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1', justImported: true, wasDuplicate: true });
+
+  await waitFor(() => expect(screen.getByText('Already in your library')).toBeTruthy());
+});
+
+it('shows no toast when navigated to normally (not from an import)', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  expect(screen.queryByText('Recipe imported')).toBeNull();
+  expect(screen.queryByText('Already in your library')).toBeNull();
 });

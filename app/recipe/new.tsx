@@ -1,5 +1,12 @@
+import { Stack } from 'expo-router';
+
 import { RecipeEditorScreen } from '../../src/recipes/RecipeEditorScreen';
 
 export default function NewRecipeScreen() {
-  return <RecipeEditorScreen />;
+  return (
+    <>
+      <Stack.Screen options={{ title: 'New Recipe' }} />
+      <RecipeEditorScreen />
+    </>
+  );
 }

@@ -67,12 +67,56 @@ Rules:
 - For any field you are not confident about, still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
 - suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly on the page.`;
 
-export async function extractRecipe(
+// Default to the cheaper/faster model; escalate to Opus only when Sonnet's
+// own result looks like it struggled (see seemsUncertain below), rather
+// than paying Opus's cost/latency on every call. Developer decision,
+// 2026-08-05 — supersedes this file's earlier "defaults to claude-opus-5
+// per this project's model-choice policy" note (docs/risk-spikes/
+// claude-extraction.md's "Cost/model tuning" open item, now resolved).
+const PRIMARY_MODEL = 'claude-sonnet-5';
+const ESCALATION_MODEL = 'claude-opus-5';
+
+// Fields worth paying for a second, stronger-model call over — the
+// actual usable recipe. Timing (activeTimeMinutes/totalTimeMinutes) and
+// yield are useful but not mission-critical (developer decision,
+// 2026-08-05): a recipe with fuzzy timing is still fully usable, so
+// Sonnet flagging those alone isn't worth an Opus retry. suggestedCategories/
+// suggestedTags are AI's own inference either way, not something a page
+// "has" to get right.
+const CRITICAL_FIELDS = new Set(['title', 'ingredientSections', 'instructionSections']);
+
+/**
+ * Heuristic for "the primary model's result looks unreliable, worth
+ * paying for a stronger model instead of shipping this as-is": either it
+ * came back with no actual ingredients/instructions at all (which is
+ * either a genuinely content-free page — escalating won't help, but the
+ * extra call is cheap insurance — or the model failing to find content a
+ * stronger model might), or it flagged one of the mission-critical
+ * fields itself as uncertain (AI-07/AI-08's own signal, reused rather
+ * than inventing a second confidence mechanism). Uncertainty about
+ * non-critical fields (timing, yield, suggested categories/tags) does
+ * NOT trigger escalation on its own.
+ */
+function seemsUncertain(extraction: RecipeExtraction): boolean {
+  const hasNoIngredients = extraction.ingredientSections.every(
+    (section) => section.items.length === 0,
+  );
+  const hasNoInstructions = extraction.instructionSections.every(
+    (section) => section.steps.length === 0,
+  );
+  const hasCriticalUncertainty = extraction.uncertainFields.some((field) =>
+    CRITICAL_FIELDS.has(field),
+  );
+  return hasNoIngredients || hasNoInstructions || hasCriticalUncertainty;
+}
+
+async function callModel(
   client: Anthropic,
   pageText: string,
+  model: string,
 ): Promise<RecipeExtraction> {
   const response = await client.messages.parse({
-    model: 'claude-opus-5',
+    model,
     max_tokens: 4096,
     system: EXTRACTION_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: pageText }],
@@ -88,4 +132,14 @@ export async function extractRecipe(
   }
 
   return response.parsed_output;
+}
+
+export async function extractRecipe(
+  client: Anthropic,
+  pageText: string,
+): Promise<RecipeExtraction> {
+  const primaryResult = await callModel(client, pageText, PRIMARY_MODEL);
+  if (!seemsUncertain(primaryResult)) return primaryResult;
+
+  return callModel(client, pageText, ESCALATION_MODEL);
 }
