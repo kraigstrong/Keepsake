@@ -75,23 +75,23 @@ describe('extractRecipe — model escalation', () => {
     );
   });
 
-  it('escalates to Opus when uncertainFields has 3 or more entries', async () => {
-    const escalated = { ...confidentExtraction, title: 'Roast Chicken (opus)' };
-    const uncertainPrimary = {
-      ...confidentExtraction,
-      uncertainFields: ['activeTimeMinutes', 'totalTimeMinutes', 'yield'],
-    };
-    const client = clientReturning(uncertainPrimary, escalated);
+  it.each(['title', 'ingredientSections', 'instructionSections'])(
+    'escalates to Opus when %s (a mission-critical field) is flagged uncertain',
+    async (criticalField) => {
+      const escalated = { ...confidentExtraction, title: 'Roast Chicken (opus)' };
+      const uncertainPrimary = { ...confidentExtraction, uncertainFields: [criticalField] };
+      const client = clientReturning(uncertainPrimary, escalated);
 
-    const result = await extractRecipe(client, 'page text');
+      const result = await extractRecipe(client, 'page text');
 
-    expect(result).toEqual(escalated);
-    expect(client.messages.parse).toHaveBeenCalledTimes(2);
-    expect(client.messages.parse).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ model: 'claude-opus-5' }),
-    );
-  });
+      expect(result).toEqual(escalated);
+      expect(client.messages.parse).toHaveBeenCalledTimes(2);
+      expect(client.messages.parse).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ model: 'claude-opus-5' }),
+      );
+    },
+  );
 
   it('escalates when every ingredient section came back empty', async () => {
     const noIngredients = {
@@ -117,12 +117,22 @@ describe('extractRecipe — model escalation', () => {
     expect(client.messages.parse).toHaveBeenCalledTimes(2);
   });
 
-  it('does not escalate for just 1-2 uncertain fields when content is otherwise present', async () => {
-    const mildlyUncertain = { ...confidentExtraction, uncertainFields: ['yield'] };
-    const client = clientReturning(mildlyUncertain);
+  it('does not escalate when only non-critical fields (timing, yield, categories/tags) are uncertain', async () => {
+    const nonCriticalUncertainty = {
+      ...confidentExtraction,
+      uncertainFields: [
+        'activeTimeMinutes',
+        'totalTimeMinutes',
+        'yield',
+        'suggestedCategories',
+        'suggestedTags',
+      ],
+    };
+    const client = clientReturning(nonCriticalUncertainty);
 
-    await extractRecipe(client, 'page text');
+    const result = await extractRecipe(client, 'page text');
 
+    expect(result).toEqual(nonCriticalUncertainty);
     expect(client.messages.parse).toHaveBeenCalledTimes(1);
   });
 });

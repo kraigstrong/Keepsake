@@ -76,15 +76,26 @@ Rules:
 const PRIMARY_MODEL = 'claude-sonnet-5';
 const ESCALATION_MODEL = 'claude-opus-5';
 
+// Fields worth paying for a second, stronger-model call over — the
+// actual usable recipe. Timing (activeTimeMinutes/totalTimeMinutes) and
+// yield are useful but not mission-critical (developer decision,
+// 2026-08-05): a recipe with fuzzy timing is still fully usable, so
+// Sonnet flagging those alone isn't worth an Opus retry. suggestedCategories/
+// suggestedTags are AI's own inference either way, not something a page
+// "has" to get right.
+const CRITICAL_FIELDS = new Set(['title', 'ingredientSections', 'instructionSections']);
+
 /**
  * Heuristic for "the primary model's result looks unreliable, worth
  * paying for a stronger model instead of shipping this as-is": either it
- * flagged several fields as uncertain (AI-07/AI-08's own signal — reuse
- * it rather than inventing a second confidence mechanism), or it came
- * back with no actual ingredients/instructions at all, which is either a
- * genuinely content-free page (escalating won't help, but the extra
- * call is cheap insurance) or the model failing to find content a
- * stronger model might.
+ * came back with no actual ingredients/instructions at all (which is
+ * either a genuinely content-free page — escalating won't help, but the
+ * extra call is cheap insurance — or the model failing to find content a
+ * stronger model might), or it flagged one of the mission-critical
+ * fields itself as uncertain (AI-07/AI-08's own signal, reused rather
+ * than inventing a second confidence mechanism). Uncertainty about
+ * non-critical fields (timing, yield, suggested categories/tags) does
+ * NOT trigger escalation on its own.
  */
 function seemsUncertain(extraction: RecipeExtraction): boolean {
   const hasNoIngredients = extraction.ingredientSections.every(
@@ -93,7 +104,10 @@ function seemsUncertain(extraction: RecipeExtraction): boolean {
   const hasNoInstructions = extraction.instructionSections.every(
     (section) => section.steps.length === 0,
   );
-  return extraction.uncertainFields.length >= 3 || hasNoIngredients || hasNoInstructions;
+  const hasCriticalUncertainty = extraction.uncertainFields.some((field) =>
+    CRITICAL_FIELDS.has(field),
+  );
+  return hasNoIngredients || hasNoInstructions || hasCriticalUncertainty;
 }
 
 async function callModel(
