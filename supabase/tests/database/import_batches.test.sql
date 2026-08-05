@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(16);
+select plan(15);
 
 insert into auth.users (id, email)
 values
@@ -115,7 +115,6 @@ select set_config(
 -- create_import_batch basics.
 create temporary table alice_batch as
 select * from public.create_import_batch(
-  array['https://example.test/soup', 'https://example.test/salad', 'https://example.test/stew'],
   array['https://example.test/soup', 'https://example.test/salad', 'https://example.test/stew']
 );
 
@@ -144,14 +143,7 @@ select results_eq(
 );
 
 select throws_ok(
-  $$ select public.create_import_batch(array['https://example.test/a'], array['https://example.test/a', 'https://example.test/b']) $$,
-  'source_urls and normalized_urls must be the same length',
-  'create_import_batch: rejects mismatched array lengths'
-);
-
-select throws_ok(
   $$ select public.create_import_batch(
-       array(select 'https://example.test/many-' || n::text from generate_series(1, 21) as n),
        array(select 'https://example.test/many-' || n::text from generate_series(1, 21) as n)
      ) $$,
   'a batch cannot include more than 20 urls',
@@ -172,13 +164,11 @@ select set_config(
 create temporary table alice_batch_2 as
 select * from public.create_import_batch(
   array['https://example.test/pie'],
-  array['https://example.test/pie'],
   '88888888-8888-8888-8888-888888888888'
 );
 
 create temporary table alice_batch_2_replay as
 select * from public.create_import_batch(
-  array['https://example.test/pie'],
   array['https://example.test/pie'],
   '88888888-8888-8888-8888-888888888888'
 );
@@ -199,7 +189,6 @@ select set_config(
 
 select throws_ok(
   $$ select public.create_import_batch(
-       array['https://example.test/x', 'https://example.test/y', 'https://example.test/z'],
        array['https://example.test/x', 'https://example.test/y', 'https://example.test/z']
      ) $$,
   'this batch would exceed the household''s hourly import limit',
@@ -221,7 +210,6 @@ select set_config(
 
 select lives_ok(
   $$ select public.create_import_batch(
-       array['https://example.test/last-1', 'https://example.test/last-2'],
        array['https://example.test/last-1', 'https://example.test/last-2']
      ) $$,
   'create_import_batch: a batch landing exactly on the hourly cap succeeds'
@@ -247,7 +235,7 @@ select set_config(
 );
 
 select throws_ok(
-  $$ select public.create_import_batch(array['https://example.test/orphan'], array['https://example.test/orphan']) $$,
+  $$ select public.create_import_batch(array['https://example.test/orphan']) $$,
   'caller does not belong to a household',
   'create_import_batch: a user with no household cannot create a batch'
 );

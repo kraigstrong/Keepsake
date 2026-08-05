@@ -1,4 +1,4 @@
-import { importRecipeFromUrl, submitImportJob } from './api';
+import { createImportBatch, fetchBatchJobs, importRecipeFromUrl, submitImportJob } from './api';
 import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
@@ -7,12 +7,16 @@ jest.mock('../supabase/instance', () => ({
     functions: {
       invoke: jest.fn(),
     },
+    rpc: jest.fn(),
+    from: jest.fn(),
   },
 }));
 jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
 
 const mockedInvoke = supabase.functions.invoke as jest.Mock;
 const mockedTrackEvent = trackEvent as jest.Mock;
+const mockedRpc = supabase.rpc as jest.Mock;
+const mockedFrom = supabase.from as jest.Mock;
 
 afterEach(() => jest.clearAllMocks());
 
@@ -147,5 +151,66 @@ describe('submitImportJob', () => {
       durationMs: expect.any(Number),
       duplicate: true,
     });
+  });
+});
+
+describe('createImportBatch', () => {
+  it('maps snake_case RPC rows to BatchJobStub', async () => {
+    mockedRpc.mockResolvedValue({
+      data: [
+        { batch_id: 'b1', job_id: 'j1', source_url: 'https://example.com/a', status: 'processing' },
+        { batch_id: 'b1', job_id: 'j2', source_url: 'https://example.com/b', status: 'processing' },
+      ],
+      error: null,
+    });
+
+    const result = await createImportBatch(['https://example.com/a', 'https://example.com/b']);
+
+    expect(mockedRpc).toHaveBeenCalledWith('create_import_batch', {
+      urls: ['https://example.com/a', 'https://example.com/b'],
+    });
+    expect(result).toEqual([
+      { batchId: 'b1', jobId: 'j1', sourceUrl: 'https://example.com/a', status: 'processing' },
+      { batchId: 'b1', jobId: 'j2', sourceUrl: 'https://example.com/b', status: 'processing' },
+    ]);
+  });
+
+  it('throws on an RPC error (e.g. the hourly cap)', async () => {
+    mockedRpc.mockResolvedValue({
+      data: null,
+      error: { message: "this batch would exceed the household's hourly import limit" },
+    });
+
+    await expect(createImportBatch(['https://example.com/a'])).rejects.toThrow(
+      "this batch would exceed the household's hourly import limit",
+    );
+  });
+});
+
+describe('fetchBatchJobs', () => {
+  it('queries import_jobs scoped to the given batch, oldest first', async () => {
+    const order = jest.fn().mockResolvedValue({
+      data: [{ id: 'j1', batch_id: 'b1', source_url: 'https://example.com/a', status: 'complete' }],
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ order });
+    const select = jest.fn().mockReturnValue({ eq });
+    mockedFrom.mockReturnValue({ select });
+
+    const result = await fetchBatchJobs('b1');
+
+    expect(mockedFrom).toHaveBeenCalledWith('import_jobs');
+    expect(eq).toHaveBeenCalledWith('batch_id', 'b1');
+    expect(order).toHaveBeenCalledWith('created_at', { ascending: true });
+    expect(result).toEqual([
+      { batchId: 'b1', jobId: 'j1', sourceUrl: 'https://example.com/a', status: 'complete' },
+    ]);
+  });
+
+  it('throws on a Supabase error', async () => {
+    const order = jest.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
+    mockedFrom.mockReturnValue({ select: () => ({ eq: () => ({ order }) }) });
+
+    await expect(fetchBatchJobs('b1')).rejects.toThrow('boom');
   });
 });

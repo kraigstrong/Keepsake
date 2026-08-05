@@ -191,7 +191,17 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const normalizedUrl = job.normalized_url;
+  // Always recomputed from job.source_url rather than trusted from
+  // job.normalized_url — a batch-created job's stored normalized_url is
+  // only a placeholder equal to the raw url (create_import_batch can't
+  // normalize; that's Deno/server-only code), so this is the one place
+  // that actually computes the real value for both paths uniformly.
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeUrl(job.source_url);
+  } catch (error) {
+    return await fail(400, errorMessage(error));
+  }
 
   async function fail(status: number, message: string): Promise<Response> {
     await supabase.rpc('fail_import_job', { job_id: job.id, error_message: message });

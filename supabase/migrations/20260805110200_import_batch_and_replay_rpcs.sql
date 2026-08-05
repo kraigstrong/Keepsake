@@ -84,15 +84,19 @@ grant execute on function public.create_import_job(text, text, uuid) to authenti
 
 -- Reserves N job rows up front (status 'processing') so the client has
 -- something to poll immediately, before a single Claude call has run.
--- source_urls/normalized_urls are parallel arrays (normalization stays
--- entirely in server/import/normalizeUrl.ts, computed client-side per
--- item before calling this, same division of labor as the single-job
--- RPC). Capped at 20 per batch — comfortably under the existing
--- 30/rolling-hour household cap rather than able to exhaust it in one
--- call (ADR-0016 decision 3).
+-- Takes raw urls only — normalization (server/import/normalizeUrl.ts)
+-- is Deno/server-only code, not something the client can compute, so
+-- normalized_url is stored equal to the raw url here as a placeholder;
+-- same as every other import_jobs row, it's provenance/debugging data
+-- only (ADR-0015 decision 4), never compared against for duplicate
+-- detection. The per-item import-recipe Edge Function call each batch
+-- job goes through afterward computes the real normalized form itself
+-- and does the actual duplicate check, exactly like the single-URL
+-- path already does. Capped at 20 per batch — comfortably under the
+-- existing 30/rolling-hour household cap rather than able to exhaust
+-- it in one call (ADR-0016 decision 3).
 create or replace function public.create_import_batch(
-  source_urls text[],
-  normalized_urls text[],
+  urls text[],
   client_batch_id uuid default null
 )
 returns table (
@@ -118,15 +122,12 @@ begin
     raise exception 'caller does not belong to a household' using errcode = 'P0001';
   end if;
 
-  url_count := coalesce(array_length(source_urls, 1), 0);
+  url_count := coalesce(array_length(urls, 1), 0);
   if url_count = 0 then
     raise exception 'a batch must include at least one url' using errcode = 'P0001';
   end if;
   if url_count > 20 then
     raise exception 'a batch cannot include more than 20 urls' using errcode = 'P0001';
-  end if;
-  if coalesce(array_length(normalized_urls, 1), 0) != url_count then
-    raise exception 'source_urls and normalized_urls must be the same length' using errcode = 'P0001';
   end if;
 
   -- Idempotent replay at the batch level (ADR-0016 decision 3): a
@@ -175,7 +176,7 @@ begin
 
   for i in 1..url_count loop
     insert into public.import_jobs (household_id, created_by, source_url, normalized_url, batch_id)
-    values (caller_household_id, auth.uid(), source_urls[i], normalized_urls[i], new_batch_id);
+    values (caller_household_id, auth.uid(), urls[i], urls[i], new_batch_id);
   end loop;
 
   return query
@@ -187,5 +188,5 @@ begin
 end;
 $$;
 
-revoke all on function public.create_import_batch(text[], text[], uuid) from public;
-grant execute on function public.create_import_batch(text[], text[], uuid) to authenticated;
+revoke all on function public.create_import_batch(text[], uuid) from public;
+grant execute on function public.create_import_batch(text[], uuid) to authenticated;

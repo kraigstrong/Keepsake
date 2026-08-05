@@ -79,3 +79,59 @@ export async function submitImportJob(request: ImportJobRequest): Promise<Import
 export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResult> {
   return submitImportJob({ url });
 }
+
+export interface BatchJobStub {
+  batchId: string;
+  jobId: string;
+  sourceUrl: string;
+  status: string;
+}
+
+interface BatchJobRow {
+  batch_id: string;
+  job_id: string;
+  source_url: string;
+  status: string;
+}
+
+/**
+ * Reserves a batch's job rows (ADR-0016 decision 3/4) — a plain Postgres
+ * RPC, no external I/O, called directly rather than through an Edge
+ * Function, same as save_recipe and every other RPC that doesn't need a
+ * server-only secret. Returns immediately (this call itself does no
+ * fetching or AI work); actually processing each job is a separate step
+ * (see submitImportJob({ jobId }) and src/import/batchEngine.ts), so a
+ * caller can reserve the batch and move on without blocking on it here.
+ */
+export async function createImportBatch(urls: string[]): Promise<BatchJobStub[]> {
+  const { data, error } = await supabase.rpc('create_import_batch', { urls });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as BatchJobRow[]).map((row) => ({
+    batchId: row.batch_id,
+    jobId: row.job_id,
+    sourceUrl: row.source_url,
+    status: row.status,
+  }));
+}
+
+/** Polls a batch's jobs — used by the Import Activity screen to render
+ * live per-item progress and to find jobs still 'processing' that need
+ * (re-)submitting on mount, including after leaving and returning. */
+export async function fetchBatchJobs(batchId: string): Promise<BatchJobStub[]> {
+  const { data, error } = await supabase
+    .from('import_jobs')
+    .select('id, batch_id, source_url, status')
+    .eq('batch_id', batchId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row) => ({
+    batchId: row.batch_id as string,
+    jobId: row.id as string,
+    sourceUrl: row.source_url as string,
+    status: row.status as string,
+  }));
+}
