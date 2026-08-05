@@ -40,11 +40,12 @@ interface CategoryRow {
   value: string;
 }
 
+// Matches the recipe-images bucket's allowed_mime_types — anything
+// secureFetch could return here is already one of these three.
 const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
-  'image/gif': 'gif',
 };
 
 async function resolveDns(hostname: string): Promise<string[]> {
@@ -214,7 +215,13 @@ Deno.serve(async (req: Request) => {
       try {
         const imageResult = await secureFetch(heroImageUrl, {
           resolveDns,
-          allowedContentTypePrefixes: ['image/'],
+          // Matches the recipe-images bucket's own allowed_mime_types
+          // exactly (supabase/migrations/20260802120800_recipe_images_
+          // storage.sql) — Storage's own policy would reject anything
+          // else anyway, but drawing the fetcher's boundary at the same
+          // place avoids spending a fetch on a format we can never
+          // actually store (e.g. an SVG site-logo fallback).
+          allowedContentTypePrefixes: ['image/jpeg', 'image/png', 'image/webp'],
           maxBytes: 8 * 1024 * 1024,
           timeoutMs: 10_000,
         });
