@@ -4,10 +4,10 @@ The single source of truth for "where are we." Update this at the start and end 
 
 ## Current
 
-- **Phase:** 12 — This Week Planning
-- **Status:** Not started.
-- **Branch:** none yet — start from `main` once Phase 11's branch is merged. [PR #31](https://github.com/kraigstrong/Keepsake/pull/31) is open with all 4 CI checks green (migrations and pgTAP ran for real for the first time this phase, catching two real bugs — see Phase 11 summary below).
-- **Next action:** Get PR #31 merged, then run `start-phase` for Phase 12.
+- **Phase:** 11.5 — Import Concurrency and Local Data Isolation
+- **Status:** In progress, branch `phase-11.5-hardening`.
+- **Branch:** `phase-11.5-hardening`, off `main` (Phase 11 merged via [PR #31](https://github.com/kraigstrong/Keepsake/pull/31); JSON-LD extraction hint merged via [PR #32](https://github.com/kraigstrong/Keepsake/pull/32)). Inserted ahead of Phase 12 to close three confirmed defects (ADR-0020) surfaced by code review before more import/sync work stacks on top: the invitation-redemption race (KS-002), non-atomic/unfenced import job finalization (KS-003/KS-004), and unscoped local recipe cache/outbox data (KS-005).
+- **Next action:** Work the commit plan in ADR-0020 — invitation row lock, `finalize_import_job` + claim fencing, household-scoped local reads/outbox — then `security-check` and `exit-phase` before starting Phase 12.
 - **Blocked on:** Nothing.
 
 ## Phase 11 Conditional Pass follow-ups (tracked until closed)
