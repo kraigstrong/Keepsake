@@ -146,7 +146,11 @@ function flattenInstructions(value: unknown, depth = 0): string[] {
   // legal JSON-LD — schema.org properties accept a singular value in
   // place of a one-item array — so it's normalized into one here rather
   // than falling through and silently dropping the only instruction.
-  const items = Array.isArray(value) ? value : typeof value === 'object' && value !== null ? [value] : null;
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null
+      ? [value]
+      : null;
   if (!items) return [];
 
   const lines: string[] = [];

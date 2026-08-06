@@ -224,7 +224,9 @@ describe('extractJsonLdHint', () => {
   });
 
   it('returns null when there is no ld+json script at all', () => {
-    expect(extractJsonLdHint('<html><body><p>No structured data here.</p></body></html>')).toBeNull();
+    expect(
+      extractJsonLdHint('<html><body><p>No structured data here.</p></body></html>'),
+    ).toBeNull();
   });
 
   it('returns null when ld+json is present but not a Recipe', () => {
