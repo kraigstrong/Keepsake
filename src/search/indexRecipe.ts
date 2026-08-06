@@ -1,5 +1,3 @@
-import type { RecipeSection } from '../recipes/api';
-
 /**
  * Pure flattening of a recipe's already-fetched fields into the plain-text
  * columns recipe_fts/recipe_trigram index — no SQLite dependency, fully
@@ -9,6 +7,14 @@ import type { RecipeSection } from '../recipes/api';
  * ingredients, notes, source attribution, source, categories, tags —
  * instructions are deliberately not indexed (not in the PRD's list).
  */
+interface IndexableIngredientSection {
+  title: string | null;
+  // The raw text of each line, not the parsed structured fields
+  // (ADR-0018) — search always matches what was actually typed/
+  // imported, never a scaled or unit-converted display value.
+  lines: { lineText: string }[];
+}
+
 export interface IndexableRecipe {
   id: string;
   title: string;
@@ -17,7 +23,7 @@ export interface IndexableRecipe {
   sourceAttribution: string | null;
   tags: string[];
   categoryIds: string[];
-  ingredientSections: RecipeSection[];
+  ingredientSections: IndexableIngredientSection[];
 }
 
 export interface FlattenedSearchRow {
@@ -31,9 +37,9 @@ export interface FlattenedSearchRow {
   tags: string;
 }
 
-function flattenSections(sections: RecipeSection[]): string {
+function flattenIngredientSections(sections: IndexableIngredientSection[]): string {
   return sections
-    .flatMap((section) => [section.title, ...section.lines])
+    .flatMap((section) => [section.title, ...section.lines.map((line) => line.lineText)])
     .filter((line): line is string => Boolean(line))
     .join(' ');
 }
@@ -45,7 +51,7 @@ export function flattenRecipeForSearch(
   return {
     recipeId: recipe.id,
     title: recipe.title,
-    ingredients: flattenSections(recipe.ingredientSections),
+    ingredients: flattenIngredientSections(recipe.ingredientSections),
     notes: recipe.permanentNotes ?? '',
     sourceAttribution: recipe.sourceAttribution ?? '',
     sourceUrl: recipe.sourceUrl ?? '',

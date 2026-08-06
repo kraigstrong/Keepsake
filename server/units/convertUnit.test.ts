@@ -21,7 +21,10 @@ describe('quantityVocabulary.convertQuantity — safe conversion table', () => {
 
 describe('convertToSystem — Original/Preferred toggle', () => {
   it('converts a us_customary volume quantity to a best-fit metric unit', () => {
-    const result = convertToSystem({ quantityMin: 1, quantityMax: 1, unit: 'cup' as const }, 'metric');
+    const result = convertToSystem(
+      { quantityMin: 1, quantityMax: 1, unit: 'cup' as const },
+      'metric',
+    );
     expect(result.unit).toBe('ml');
     expect(result.quantityMin).toBeCloseTo(236.588, 2);
   });
@@ -29,19 +32,28 @@ describe('convertToSystem — Original/Preferred toggle', () => {
   it('picks liters over an awkwardly large ml value', () => {
     // ~6.34 cups converts to 1500 ml exactly — the target unit should be
     // liters, not "1500 ml" (ADR-0018's own example of what to avoid).
-    const result = convertToSystem({ quantityMin: 1500 / 236.588, quantityMax: 1500 / 236.588, unit: 'cup' as const }, 'metric');
+    const result = convertToSystem(
+      { quantityMin: 1500 / 236.588, quantityMax: 1500 / 236.588, unit: 'cup' as const },
+      'metric',
+    );
     expect(result.unit).toBe('l');
     expect(result.quantityMin).toBeCloseTo(1.5, 2);
   });
 
   it('converts a metric mass quantity to a best-fit us_customary unit', () => {
-    const result = convertToSystem({ quantityMin: 907.184, quantityMax: 907.184, unit: 'g' as const }, 'us_customary');
+    const result = convertToSystem(
+      { quantityMin: 907.184, quantityMax: 907.184, unit: 'g' as const },
+      'us_customary',
+    );
     expect(result.unit).toBe('lb');
     expect(result.quantityMin).toBeCloseTo(2, 2);
   });
 
   it('leaves an already-matching-system quantity completely unchanged, not re-bucketed', () => {
-    const result = convertToSystem({ quantityMin: 1500, quantityMax: 1500, unit: 'ml' as const }, 'metric');
+    const result = convertToSystem(
+      { quantityMin: 1500, quantityMax: 1500, unit: 'ml' as const },
+      'metric',
+    );
     expect(result).toEqual({ quantityMin: 1500, quantityMax: 1500, unit: 'ml' });
   });
 
@@ -56,7 +68,10 @@ describe('convertToSystem — Original/Preferred toggle', () => {
   });
 
   it('converts both bounds of a range independently', () => {
-    const result = convertToSystem({ quantityMin: 1, quantityMax: 2, unit: 'lb' as const }, 'metric');
+    const result = convertToSystem(
+      { quantityMin: 1, quantityMax: 2, unit: 'lb' as const },
+      'metric',
+    );
     expect(result.unit).toBe('g');
     expect(result.quantityMin).toBeCloseTo(453.592, 2);
     expect(result.quantityMax).toBeCloseTo(907.184, 2);

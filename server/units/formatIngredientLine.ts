@@ -31,7 +31,8 @@ export function formatIngredientLine(line: FormattableIngredientLine): string {
   const max = formatQuantity(quantityMax, line.unit);
   const isApproximate = min.isApproximate || max.isApproximate;
 
-  const quantityDisplay = min.display === max.display ? min.display : `${min.display}-${max.display}`;
+  const quantityDisplay =
+    min.display === max.display ? min.display : `${min.display}-${max.display}`;
   const unitDisplay = line.unit ? ` ${unitLabel(line.unit, quantityMax)}` : '';
   const ingredientDisplay = line.ingredientText ? ` ${line.ingredientText}` : '';
 

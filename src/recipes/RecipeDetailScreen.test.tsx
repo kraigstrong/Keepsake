@@ -6,6 +6,8 @@ import * as api from './api';
 import * as heroImage from './heroImage';
 import { RecipeDetailScreen, type RecipeDetailScreenProps } from './RecipeDetailScreen';
 import { ToastProvider } from '../components/Toast';
+import * as householdApi from '../household/api';
+import { useSession } from '../session/SessionProvider';
 import * as offlineRecipes from '../sync/offlineRecipes';
 
 function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
@@ -18,6 +20,8 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 
 jest.mock('./api');
 jest.mock('./heroImage');
+jest.mock('../household/api');
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../sync/offlineRecipes');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 // ./api is auto-mocked above, but Jest still loads the real module once to
@@ -27,6 +31,8 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
+const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
+const mockedUseSession = useSession as jest.Mock;
 const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes>;
 const mockedUseRouter = useRouter as jest.Mock;
 
@@ -41,18 +47,45 @@ const recipe: api.Recipe = {
   activeTimeMinutes: 20,
   totalTimeMinutes: 70,
   yieldText: 'Serves 4',
+  servingsCount: 4,
   permanentNotes: 'Great with potatoes.',
   sourceUrl: 'https://example.com/recipe',
   sourceAttribution: 'Grandma',
   tags: ['weeknight'],
   categoryIds: ['cat-protein-chicken'],
-  ingredientSections: [{ title: null, lines: ['1 whole chicken', '2 tbsp butter'] }],
+  ingredientSections: [
+    {
+      title: null,
+      lines: [
+        {
+          lineText: '1 whole chicken',
+          quantityMin: 1,
+          quantityMax: 1,
+          unit: null,
+          ingredientText: 'whole chicken',
+        },
+        {
+          lineText: '2 tbsp butter',
+          quantityMin: 2,
+          quantityMax: 2,
+          unit: 'tbsp',
+          ingredientText: 'butter',
+        },
+      ],
+    },
+  ],
   instructionSections: [{ title: null, lines: ['Preheat the oven.', 'Roast it.'] }],
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
+  mockedHouseholdApi.fetchProfile.mockResolvedValue({
+    id: 'user-1',
+    displayName: 'Alice',
+    preferredUnitSystem: 'us_customary',
+  });
   mockedApi.fetchCategories.mockResolvedValue([
     { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
   ]);

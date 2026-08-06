@@ -13,8 +13,20 @@ describe('formatIngredientLine', () => {
   });
 
   it('pluralizes a word-form unit based on the displayed quantity', () => {
-    const one = formatIngredientLine({ lineText: '', quantityMin: 1, quantityMax: 1, unit: 'cup', ingredientText: 'flour' });
-    const many = formatIngredientLine({ lineText: '', quantityMin: 2, quantityMax: 2, unit: 'cup', ingredientText: 'flour' });
+    const one = formatIngredientLine({
+      lineText: '',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'cup',
+      ingredientText: 'flour',
+    });
+    const many = formatIngredientLine({
+      lineText: '',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: 'cup',
+      ingredientText: 'flour',
+    });
     expect(one).toBe('1 cup flour');
     expect(many).toBe('2 cups flour');
   });
@@ -31,12 +43,24 @@ describe('formatIngredientLine', () => {
   });
 
   it('shows a unitless/count quantity without a unit label', () => {
-    const line = formatIngredientLine({ lineText: '', quantityMin: 3, quantityMax: 3, unit: null, ingredientText: 'eggs' });
+    const line = formatIngredientLine({
+      lineText: '',
+      quantityMin: 3,
+      quantityMax: 3,
+      unit: null,
+      ingredientText: 'eggs',
+    });
     expect(line).toBe('3 eggs');
   });
 
   it('prefixes an approximation indicator when rounding changed the value', () => {
-    const line = formatIngredientLine({ lineText: '', quantityMin: 0.61, quantityMax: 0.61, unit: 'cup', ingredientText: 'sugar' });
+    const line = formatIngredientLine({
+      lineText: '',
+      quantityMin: 0.61,
+      quantityMax: 0.61,
+      unit: 'cup',
+      ingredientText: 'sugar',
+    });
     expect(line).toBe('~5/8 cup sugar');
   });
 

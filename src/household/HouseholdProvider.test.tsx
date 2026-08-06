@@ -34,13 +34,21 @@ describe('HouseholdProvider / useHousehold', () => {
   });
 
   it('resolves an existing profile and household', async () => {
-    mockedApi.fetchProfile.mockResolvedValue({ id: 'user-1', displayName: 'Alice' });
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
     mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1' });
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.profile).toEqual({ id: 'user-1', displayName: 'Alice' });
+    expect(result.current.profile).toEqual({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
     expect(result.current.household).toEqual({ id: 'household-1' });
   });
 
@@ -56,9 +64,11 @@ describe('HouseholdProvider / useHousehold', () => {
   });
 
   it('setDisplayName creates the profile and refreshes state', async () => {
-    mockedApi.fetchProfile
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: 'user-1', displayName: 'Alice' });
+    mockedApi.fetchProfile.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
     mockedApi.fetchHousehold.mockResolvedValue(null);
     mockedApi.createProfile.mockResolvedValue(undefined);
 
@@ -73,7 +83,11 @@ describe('HouseholdProvider / useHousehold', () => {
     expect(mockedApi.createProfile).toHaveBeenCalledWith('user-1', 'Alice');
     expect(outcome).toEqual({ error: null });
     await waitFor(() =>
-      expect(result.current.profile).toEqual({ id: 'user-1', displayName: 'Alice' }),
+      expect(result.current.profile).toEqual({
+        id: 'user-1',
+        displayName: 'Alice',
+        preferredUnitSystem: 'us_customary',
+      }),
     );
   });
 
@@ -94,7 +108,11 @@ describe('HouseholdProvider / useHousehold', () => {
   });
 
   it('createHousehold creates a household and refreshes state', async () => {
-    mockedApi.fetchProfile.mockResolvedValue({ id: 'user-1', displayName: 'Alice' });
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
     mockedApi.fetchHousehold
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 'household-1' });
@@ -111,7 +129,11 @@ describe('HouseholdProvider / useHousehold', () => {
   });
 
   it('acceptInvitation accepts the invitation and refreshes state', async () => {
-    mockedApi.fetchProfile.mockResolvedValue({ id: 'user-1', displayName: 'Alice' });
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
     mockedApi.fetchHousehold
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 'household-1' });

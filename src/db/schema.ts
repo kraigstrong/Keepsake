@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -131,4 +131,14 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   // freshly created afterward and syncs down complete through the normal
   // incremental pull.
   5: [`alter table recipes add column original_photo_path text`],
+  // Units, scaling, and quantity integrity (Phase 11, ADR-0018).
+  // ingredient_sections' JSON blob shape changes from string lines to
+  // parsed-line objects, but the column itself is untyped opaque text
+  // — no ALTER needed there. servings_count mirrors the new server
+  // column; like original_photo_path (v5) no resync-cursor reset is
+  // needed, since a recipe's server-side servings_count also stays
+  // null until it's next edited (ADR-0018 — no bulk backfill), so an
+  // already-synced local row being null too is already consistent
+  // with the server, not stale.
+  6: [`alter table recipes add column servings_count integer`],
 };

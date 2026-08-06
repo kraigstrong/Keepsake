@@ -65,6 +65,7 @@ function makeRecipe(
     activeTimeMinutes: null,
     totalTimeMinutes: null,
     yieldText: null,
+    servingsCount: null,
     permanentNotes: null,
     sourceUrl: null,
     sourceAttribution: null,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { SettingsScreen } from './SettingsScreen';
 import * as householdApi from '../household/api';
@@ -23,8 +23,46 @@ const setPassword = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
-  mockedUseSession.mockReturnValue({ signOut, setPassword });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } }, signOut, setPassword });
   mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue([]);
+  mockedHouseholdApi.fetchProfile.mockResolvedValue({
+    id: 'user-1',
+    displayName: 'Alice',
+    preferredUnitSystem: 'us_customary',
+  });
+  mockedHouseholdApi.updateProfile.mockResolvedValue(undefined);
+});
+
+describe('preferred unit system (ADR-0018, UNIT-02)', () => {
+  it('shows the current preference and lets the user switch it', async () => {
+    await render(<SettingsScreen />);
+
+    await screen.findByTestId('settings-unit-system-row');
+    expect(mockedHouseholdApi.fetchProfile).toHaveBeenCalledWith('user-1');
+
+    await fireEvent.press(screen.getByTestId('settings-unit-system-metric'));
+
+    expect(mockedHouseholdApi.updateProfile).toHaveBeenCalledWith('user-1', {
+      preferredUnitSystem: 'metric',
+    });
+  });
+
+  it('reverts the optimistic update if saving fails, so the same choice can be retried', async () => {
+    mockedHouseholdApi.updateProfile.mockRejectedValueOnce(new Error('network error'));
+
+    await render(<SettingsScreen />);
+    await screen.findByTestId('settings-unit-system-row');
+
+    await fireEvent.press(screen.getByTestId('settings-unit-system-metric'));
+    await waitFor(() => expect(mockedHouseholdApi.updateProfile).toHaveBeenCalledTimes(1));
+
+    // If the failed save hadn't reverted the optimistic switch, the
+    // preference would already read "metric" and this second press of
+    // the same button would be treated as a same-value no-op.
+    mockedHouseholdApi.updateProfile.mockResolvedValueOnce(undefined);
+    await fireEvent.press(screen.getByTestId('settings-unit-system-metric'));
+    await waitFor(() => expect(mockedHouseholdApi.updateProfile).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe('set a password (ADR-0012)', () => {

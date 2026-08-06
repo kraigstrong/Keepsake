@@ -10,7 +10,17 @@
  * unreachable through this table, not just discouraged.
  */
 
-export const VOLUME_UNITS = ['tsp', 'tbsp', 'fl_oz', 'cup', 'pint', 'quart', 'gallon', 'ml', 'l'] as const;
+export const VOLUME_UNITS = [
+  'tsp',
+  'tbsp',
+  'fl_oz',
+  'cup',
+  'pint',
+  'quart',
+  'gallon',
+  'ml',
+  'l',
+] as const;
 export const MASS_UNITS = ['oz', 'lb', 'g', 'kg'] as const;
 
 export type VolumeUnit = (typeof VOLUME_UNITS)[number];
@@ -29,7 +39,17 @@ export function unitClass(unit: Unit): UnitClass {
   return (VOLUME_UNITS as readonly string[]).includes(unit) ? 'volume' : 'mass';
 }
 
-const US_CUSTOMARY_UNITS = new Set<Unit>(['tsp', 'tbsp', 'fl_oz', 'cup', 'pint', 'quart', 'gallon', 'oz', 'lb']);
+const US_CUSTOMARY_UNITS = new Set<Unit>([
+  'tsp',
+  'tbsp',
+  'fl_oz',
+  'cup',
+  'pint',
+  'quart',
+  'gallon',
+  'oz',
+  'lb',
+]);
 
 export function unitSystem(unit: Unit): UnitSystem {
   return US_CUSTOMARY_UNITS.has(unit) ? 'us_customary' : 'metric';
@@ -69,7 +89,9 @@ const TO_BASE_UNIT: Record<Unit, number> = {
 /** Throws if `from` and `to` belong to different classes — this is the enforcement point for "never volume<->mass." */
 export function convertQuantity(value: number, from: Unit, to: Unit): number {
   if (unitClass(from) !== unitClass(to)) {
-    throw new Error(`Cannot convert a ${unitClass(from)} unit ("${from}") to a ${unitClass(to)} unit ("${to}")`);
+    throw new Error(
+      `Cannot convert a ${unitClass(from)} unit ("${from}") to a ${unitClass(to)} unit ("${to}")`,
+    );
   }
   return (value * TO_BASE_UNIT[from]) / TO_BASE_UNIT[to];
 }

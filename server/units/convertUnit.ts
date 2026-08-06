@@ -13,7 +13,14 @@
  * — there is nothing to convert, only to scale.
  */
 
-import { SYSTEM_UNITS, convertQuantity, unitClass, unitSystem, type Unit, type UnitSystem } from './quantityVocabulary';
+import {
+  SYSTEM_UNITS,
+  convertQuantity,
+  unitClass,
+  unitSystem,
+  type Unit,
+  type UnitSystem,
+} from './quantityVocabulary';
 
 export interface ConvertibleQuantity {
   quantityMin: number | null;
@@ -31,7 +38,10 @@ function bestFitUnit(baseValue: number, candidates: readonly Unit[], from: Unit)
   return candidates[0]!;
 }
 
-export function convertToSystem<T extends ConvertibleQuantity>(quantity: T, targetSystem: UnitSystem): T {
+export function convertToSystem<T extends ConvertibleQuantity>(
+  quantity: T,
+  targetSystem: UnitSystem,
+): T {
   if (quantity.unit === null || quantity.quantityMin === null) {
     return quantity;
   }
@@ -45,7 +55,10 @@ export function convertToSystem<T extends ConvertibleQuantity>(quantity: T, targ
   return {
     ...quantity,
     quantityMin: convertQuantity(quantity.quantityMin, quantity.unit, targetUnit),
-    quantityMax: quantity.quantityMax === null ? null : convertQuantity(quantity.quantityMax, quantity.unit, targetUnit),
+    quantityMax:
+      quantity.quantityMax === null
+        ? null
+        : convertQuantity(quantity.quantityMax, quantity.unit, targetUnit),
     unit: targetUnit,
   };
 }
