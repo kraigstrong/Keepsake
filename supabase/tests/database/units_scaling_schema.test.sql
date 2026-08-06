@@ -51,11 +51,15 @@ select lives_ok(
   'profiles: alice can change her own preferred_unit_system'
 );
 
-select throws_ok(
+-- RLS's USING clause filters which rows an UPDATE can even target — bob's
+-- row simply doesn't match `id = auth.uid()` for alice, so this affects
+-- zero rows rather than throwing (unlike an INSERT/WITH CHECK failure,
+-- which does throw). The real assertion is below: bob's row is
+-- unchanged after this runs.
+select lives_ok(
   $$ update public.profiles set preferred_unit_system = 'metric'
      where id = '22222222-2222-2222-2222-222222222222' $$,
-  'new row violates row-level security policy for table "profiles"',
-  'profiles: alice cannot change bob''s preferred_unit_system'
+  'profiles: alice''s attempt to update bob''s row matches zero rows, not an error'
 );
 
 reset role;

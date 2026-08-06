@@ -29,6 +29,11 @@
 -- pre-Phase-11 version still works: a string line restores with every
 -- structured field null (unparsed, same safe fallback as any other
 -- unparsed line), never a constraint violation.
+--
+-- Carries forward Phase 10's originalPhotoPath handling unchanged: only
+-- the insert (create) branch sets it, deliberately absent from the
+-- update branch's SET clause, so editing a recipe can never blank out
+-- or change the preserved original (ADR-0017).
 create or replace function public.save_recipe(payload jsonb)
 returns public.recipes
 language plpgsql
@@ -57,13 +62,15 @@ begin
 
   if is_create then
     insert into public.recipes (
-      household_id, title, hero_image_path, active_time_minutes, total_time_minutes,
-      yield_text, servings_count, permanent_notes, source_url, source_attribution, tags, created_by
+      household_id, title, hero_image_path, original_photo_path, active_time_minutes,
+      total_time_minutes, yield_text, servings_count, permanent_notes, source_url,
+      source_attribution, tags, created_by
     )
     values (
       caller_household_id,
       payload->>'title',
       payload->>'heroImagePath',
+      payload->>'originalPhotoPath',
       (payload->>'activeTimeMinutes')::int,
       (payload->>'totalTimeMinutes')::int,
       payload->>'yieldText',
