@@ -14,8 +14,8 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 // not require a permanent bottom tab" — reached via the header action
 // below instead. The global add action (per the IA, reachable from both
 // tabs) lives in the header too, opening a Sheet — manual creation
-// (Phase 4) is wired below; real import options (URL, camera, existing
-// photo) are Phase 8/9/10's job and still show as coming soon.
+// (Phase 4), URL import (Phase 8), bulk URL import (Phase 9), and
+// camera/photo import (Phase 10) are all wired below.
 //
 // Native header title is hidden (headerTitle: () => null) rather than
 // removed outright (headerShown: false) — each screen renders its own
@@ -120,7 +120,15 @@ function TabsLayoutContent() {
             }}
             testID="add-recipe-import-bulk"
           />
-          <Text>Importing from a camera or photo is coming soon.</Text>
+          <Button
+            title="Import from a photo"
+            variant="secondary"
+            onPress={() => {
+              closeAddSheet();
+              router.push('/recipe/import-photo');
+            }}
+            testID="add-recipe-import-photo"
+          />
           <Button title="Close" onPress={() => closeAddSheet()} variant="secondary" />
         </View>
       </Sheet>

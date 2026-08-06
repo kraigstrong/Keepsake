@@ -145,6 +145,13 @@ describe('recipe routes', () => {
     });
   });
 
+  it('reaches the photo import screen at /recipe/import-photo', async () => {
+    act(() => router.push('/recipe/import-photo'));
+    await waitFor(() => {
+      expect(screen.getByTestId('photo-import-camera')).toBeOnTheScreen();
+    });
+  });
+
   it('reaches the history screen at /recipe/[id]/history', async () => {
     act(() => router.push('/recipe/recipe-1/history'));
     await waitFor(() => {
