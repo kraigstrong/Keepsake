@@ -20,7 +20,7 @@ import {
   unitSystem,
   type Unit,
   type UnitSystem,
-} from './quantityVocabulary';
+} from './quantityVocabulary.ts';
 
 export interface ConvertibleQuantity {
   quantityMin: number | null;

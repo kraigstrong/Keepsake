@@ -10,8 +10,8 @@
  * independently and shows one shared "~" if either bound was rounded.
  */
 
-import { unitLabel, type Unit } from './quantityVocabulary';
-import { formatQuantity } from './formatQuantity';
+import { unitLabel, type Unit } from './quantityVocabulary.ts';
+import { formatQuantity } from './formatQuantity.ts';
 
 export interface FormattableIngredientLine {
   lineText: string;

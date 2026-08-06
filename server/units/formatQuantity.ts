@@ -12,7 +12,7 @@
  * show the "~" approximation indicator.
  */
 
-import type { Unit } from './quantityVocabulary';
+import type { Unit } from './quantityVocabulary.ts';
 
 export interface FormattedNumber {
   display: string;

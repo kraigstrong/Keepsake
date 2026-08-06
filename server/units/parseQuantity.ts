@@ -15,7 +15,7 @@
  * preservation").
  */
 
-import { isUnit, type Unit } from './quantityVocabulary';
+import { isUnit, type Unit } from './quantityVocabulary.ts';
 
 export interface ParsedIngredientLine {
   lineText: string;
