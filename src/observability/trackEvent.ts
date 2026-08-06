@@ -19,7 +19,8 @@ export type AnalyticsEvent =
   | 'import_completed'
   | 'import_failed'
   | 'bulk_import_started'
-  | 'share_extension_drained';
+  | 'share_extension_drained'
+  | 'photo_import_upload_failed';
 
 export function trackEvent(
   name: AnalyticsEvent,

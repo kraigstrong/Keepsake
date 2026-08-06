@@ -1,5 +1,12 @@
-import { createImportBatch, fetchBatchJobs, importRecipeFromUrl, submitImportJob } from './api';
+import {
+  createImportBatch,
+  fetchBatchJobs,
+  importRecipeFromPhoto,
+  importRecipeFromUrl,
+  submitImportJob,
+} from './api';
 import { trackEvent } from '../observability';
+import { preserveOriginalPhoto, uploadOriginalPhoto } from '../photoImport/photoImport';
 import { supabase } from '../supabase/instance';
 
 jest.mock('../supabase/instance', () => ({
@@ -12,11 +19,17 @@ jest.mock('../supabase/instance', () => ({
   },
 }));
 jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
+jest.mock('../photoImport/photoImport', () => ({
+  preserveOriginalPhoto: jest.fn(),
+  uploadOriginalPhoto: jest.fn(),
+}));
 
 const mockedInvoke = supabase.functions.invoke as jest.Mock;
 const mockedTrackEvent = trackEvent as jest.Mock;
 const mockedRpc = supabase.rpc as jest.Mock;
 const mockedFrom = supabase.from as jest.Mock;
+const mockedPreserveOriginalPhoto = preserveOriginalPhoto as jest.Mock;
+const mockedUploadOriginalPhoto = uploadOriginalPhoto as jest.Mock;
 
 afterEach(() => jest.clearAllMocks());
 
@@ -106,6 +119,43 @@ describe('importRecipeFromUrl', () => {
     for (const call of mockedTrackEvent.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('secret-family-recipes');
     }
+  });
+});
+
+describe('importRecipeFromPhoto', () => {
+  it('preserves, uploads, then submits the job with the resulting photoPath', async () => {
+    mockedPreserveOriginalPhoto.mockResolvedValue('file:///preserved.jpg');
+    mockedUploadOriginalPhoto.mockResolvedValue('household-1/originals/abc.jpg');
+    mockedInvoke.mockResolvedValue({
+      data: { jobId: 'j1', recipeId: 'r1', duplicate: false, uncertainFields: [] },
+      error: null,
+    });
+
+    const result = await importRecipeFromPhoto('household-1', 'file:///captured.jpg');
+
+    expect(mockedPreserveOriginalPhoto).toHaveBeenCalledWith('file:///captured.jpg');
+    expect(mockedUploadOriginalPhoto).toHaveBeenCalledWith('household-1', 'file:///preserved.jpg');
+    expect(mockedInvoke).toHaveBeenCalledWith('import-recipe', {
+      body: { photoPath: 'household-1/originals/abc.jpg' },
+    });
+    expect(result).toEqual({ jobId: 'j1', recipeId: 'r1', duplicate: false, uncertainFields: [] });
+    expect(mockedTrackEvent).toHaveBeenCalledWith('import_completed', {
+      durationMs: expect.any(Number),
+      duplicate: false,
+    });
+  });
+
+  it('propagates an upload failure without calling the Edge Function, and tracks it distinctly', async () => {
+    mockedPreserveOriginalPhoto.mockResolvedValue('file:///preserved.jpg');
+    mockedUploadOriginalPhoto.mockRejectedValue(new Error('storage full'));
+
+    await expect(importRecipeFromPhoto('household-1', 'file:///captured.jpg')).rejects.toThrow(
+      'storage full',
+    );
+    expect(mockedInvoke).not.toHaveBeenCalled();
+    expect(mockedTrackEvent).toHaveBeenCalledWith('photo_import_upload_failed', {
+      durationMs: expect.any(Number),
+    });
   });
 });
 

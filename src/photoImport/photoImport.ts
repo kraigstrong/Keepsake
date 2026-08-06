@@ -1,10 +1,21 @@
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+
+import { randomId } from '../recipes/heroImage';
+import { supabase } from '../supabase/instance';
 
 export interface PickedPhoto {
   uri: string;
   width: number;
   height: number;
 }
+
+// Larger cap and higher quality than heroImage.ts's stripMetadataAndResize
+// (1200px/0.85) — this copy exists to be viewed full-detail later
+// (IMG-03: a recipe card or cookbook page needs to stay legible), not to
+// be a lightweight thumbnail (ADR-0017 decision 1).
+const MAX_DIMENSION = 2400;
+const JPEG_QUALITY = 0.92;
 
 /**
  * IMG-02/IMG-03: preserve the original image, viewable later — this
@@ -43,4 +54,44 @@ function toPickedPhoto(result: ImagePicker.ImagePickerResult): PickedPhoto | nul
   const asset = result.assets[0];
   if (!asset) return null;
   return { uri: asset.uri, width: asset.width, height: asset.height };
+}
+
+/**
+ * IMG-02/IMG-03 meets the metadata-stripping security checklist item
+ * (ADR-0017 decision 1): re-saving as a fresh JPEG strips EXIF (GPS,
+ * device info) as a side effect, same technique as heroImage.ts's
+ * stripMetadataAndResize, just at a size/quality that stays legible as
+ * a standalone reference photo rather than a thumbnail. "Preserve
+ * original image" is read as preserving what the user captured, not
+ * every byte the camera produced — recorded here, not left implicit.
+ */
+export async function preserveOriginalPhoto(uri: string): Promise<string> {
+  const image = await ImageManipulator.manipulate(uri)
+    .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION })
+    .renderAsync();
+  const result = await image.saveAsync({ compress: JPEG_QUALITY, format: SaveFormat.JPEG });
+  return result.uri;
+}
+
+/**
+ * Upload-before-processing (ADR-0017 decision 2): the client uploads the
+ * preserved original to Storage first and the Edge Function is handed a
+ * path, not image bytes — keeps the request well under the Edge
+ * Function's body-size ceiling, and means the original survives even if
+ * extraction itself fails. Path convention: "<household_id>/originals/
+ * <uuid>.jpg" — a new segment under the existing recipe-images bucket,
+ * whose RLS policies already key off the household_id path prefix only
+ * (proven by supabase/tests/database/photo_import_storage.test.sql).
+ */
+export async function uploadOriginalPhoto(householdId: string, localUri: string): Promise<string> {
+  const path = `${householdId}/originals/${randomId()}.jpg`;
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('recipe-images')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw error;
+  return path;
 }

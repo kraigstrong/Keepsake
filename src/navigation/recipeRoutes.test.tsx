@@ -21,6 +21,10 @@ import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-libr
 // it's tested here rather than assumed, for the same reason.
 jest.mock('../supabase/instance', () => ({
   supabase: {
+    // Never resolves — the original-photo route test below only checks
+    // the loading state is reached, same "loading state, not fully
+    // loaded content" convention as the detail/edit routes above.
+    storage: { from: () => ({ createSignedUrl: () => new Promise(() => {}) }) },
     auth: {
       getSession: jest
         .fn()
@@ -142,6 +146,22 @@ describe('recipe routes', () => {
     act(() => router.push('/recipe/import'));
     await waitFor(() => {
       expect(screen.getByTestId('import-url-input')).toBeOnTheScreen();
+    });
+  });
+
+  it('reaches the photo import screen at /recipe/import-photo', async () => {
+    act(() => router.push('/recipe/import-photo'));
+    await waitFor(() => {
+      expect(screen.getByTestId('photo-import-camera')).toBeOnTheScreen();
+    });
+  });
+
+  it('reaches the original photo screen at /recipe/[id]/original-photo', async () => {
+    act(() =>
+      router.push('/recipe/recipe-1/original-photo?path=household-1%2Foriginals%2Fone.jpg'),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('original-photo-loading')).toBeOnTheScreen();
     });
   });
 

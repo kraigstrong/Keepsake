@@ -13,20 +13,26 @@
  * server-only secret; SUPABASE_URL/SUPABASE_ANON_KEY are injected into
  * every Edge Function by the platform automatically.
  *
- * The request body accepts either "url" (Phase 8's original shape —
- * creates a fresh job) or "jobId" (a job already reserved by
- * create_import_batch, ADR-0016 decision 4), plus an optional
- * "clientImportId" (the durable Share Extension outbox's idempotency
- * key, ADR-0016 decision 2). Either path can land on a job that's
- * already past 'processing' — a pre-created batch item some earlier
- * call already finished, or a client_import_id replay — in which case
- * the pipeline is skipped entirely and the stored outcome is returned
- * as-is, never re-fetching or re-charging Anthropic for the same job.
+ * The request body accepts "url" (Phase 8's original shape — creates a
+ * fresh job), "photoPath" (Phase 10, ADR-0017 — a Storage object path
+ * the client already uploaded the preserved original photo to), or
+ * "jobId" (a job already reserved by create_import_batch, ADR-0016
+ * decision 4), plus an optional "clientImportId" (the durable Share
+ * Extension outbox's idempotency key, ADR-0016 decision 2). Any path can
+ * land on a job that's already past 'processing' — a pre-created batch
+ * item some earlier call already finished, or a client_import_id replay
+ * — in which case the pipeline is skipped entirely and the stored
+ * outcome is returned as-is, never re-fetching or re-charging Anthropic
+ * for the same job.
  */
 import { Anthropic } from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
-import { extractRecipe, type RecipeExtraction } from '../../../server/ai/extractRecipe.ts';
+import {
+  extractRecipe,
+  extractRecipeFromImage,
+  type RecipeExtraction,
+} from '../../../server/ai/extractRecipe.ts';
 import { extractHeroImageUrl } from '../../../server/import/extractHeroImageUrl.ts';
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
@@ -44,8 +50,9 @@ interface ImportJobRow {
   id: string;
   household_id: string;
   status: string;
-  source_url: string;
-  normalized_url: string;
+  source_url: string | null;
+  normalized_url: string | null;
+  photo_path: string | null;
   recipe_id: string | null;
   duplicate_of_recipe_id: string | null;
   error_message: string | null;
@@ -81,6 +88,21 @@ async function resolveDns(hostname: string): Promise<string[]> {
   return addresses;
 }
 
+// btoa (Web-standard, available in Deno) needs a plain "binary string",
+// not a Uint8Array directly. String.fromCharCode.apply has an argument-
+// count ceiling well under a multi-megabyte photo's byte length, so this
+// builds the binary string in fixed-size chunks first — same technique
+// commonly used to avoid that ceiling without pulling in a Buffer/base64
+// dependency for something this small.
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK_SIZE = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+}
+
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -109,21 +131,32 @@ Deno.serve(async (req: Request) => {
 
   let requestedJobId: string | undefined;
   let rawUrl: string | undefined;
+  let requestedPhotoPath: string | undefined;
   let clientImportId: string | undefined;
   try {
-    const body = (await req.json()) as { url?: unknown; jobId?: unknown; clientImportId?: unknown };
+    const body = (await req.json()) as {
+      url?: unknown;
+      photoPath?: unknown;
+      jobId?: unknown;
+      clientImportId?: unknown;
+    };
     if (body.jobId !== undefined) {
       if (typeof body.jobId !== 'string' || body.jobId.trim().length === 0) {
         return jsonResponse({ error: '"jobId" must be a non-empty string' }, 400);
       }
       requestedJobId = body.jobId;
-    } else if (typeof body.url !== 'string' || body.url.trim().length === 0) {
+    } else if (typeof body.url === 'string' && body.url.trim().length > 0) {
+      rawUrl = body.url;
+    } else if (typeof body.photoPath === 'string' && body.photoPath.trim().length > 0) {
+      requestedPhotoPath = body.photoPath;
+    } else {
       return jsonResponse(
-        { error: 'Request body must include a non-empty "url" string, or a "jobId"' },
+        {
+          error:
+            'Request body must include a non-empty "url" string, a "photoPath" string, or a "jobId"',
+        },
         400,
       );
-    } else {
-      rawUrl = body.url;
     }
     if (body.clientImportId !== undefined) {
       if (typeof body.clientImportId !== 'string') {
@@ -147,12 +180,27 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await supabase
       .from('import_jobs')
       .select(
-        'id, household_id, status, source_url, normalized_url, recipe_id, duplicate_of_recipe_id, error_message',
+        'id, household_id, status, source_url, normalized_url, photo_path, recipe_id, duplicate_of_recipe_id, error_message',
       )
       .eq('id', requestedJobId)
       .single();
     if (error || !data) {
       return jsonResponse({ error: 'import job not found' }, 404);
+    }
+    job = data as ImportJobRow;
+  } else if (requestedPhotoPath) {
+    // ADR-0017 decision 2/4: mirrors the url branch below, but there's
+    // nothing to normalize for a photo — source_url/normalized_url stay
+    // null on this job (create_import_job's xor check enforces exactly
+    // one of source_url/photo_path is ever set).
+    const { data, error } = await supabase
+      .rpc('create_import_job', {
+        photo_path: requestedPhotoPath,
+        client_import_id: clientImportId ?? null,
+      })
+      .single();
+    if (error || !data) {
+      return jsonResponse({ error: error?.message ?? 'Could not create import job' }, 400);
     }
     job = data as ImportJobRow;
   } else {
@@ -215,16 +263,21 @@ Deno.serve(async (req: Request) => {
     job = claimedJob as ImportJobRow;
   }
 
+  const isPhotoJob = job.photo_path != null;
+
   // Always recomputed from job.source_url rather than trusted from
   // job.normalized_url — a batch-created job's stored normalized_url is
   // only a placeholder equal to the raw url (create_import_batch can't
   // normalize; that's Deno/server-only code), so this is the one place
-  // that actually computes the real value for both paths uniformly.
-  let normalizedUrl: string;
-  try {
-    normalizedUrl = normalizeUrl(job.source_url);
-  } catch (error) {
-    return await fail(400, errorMessage(error));
+  // that actually computes the real value for both paths uniformly. Not
+  // applicable to a photo-sourced job — there's no URL to normalize.
+  let normalizedUrl: string | null = null;
+  if (!isPhotoJob) {
+    try {
+      normalizedUrl = normalizeUrl(job.source_url!);
+    } catch (error) {
+      return await fail(400, errorMessage(error));
+    }
   }
 
   async function fail(status: number, message: string): Promise<Response> {
@@ -233,74 +286,159 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Duplicate detection (ADR-0015 decision 4) — before any fetch or AI
-    // call. RLS already scopes this select to the caller's own
-    // household, so no explicit household_id filter is needed here.
-    const { data: existingRecipes } = await supabase
-      .from('recipes')
-      .select('id, source_url')
-      .not('source_url', 'is', null);
+    // Duplicate detection (ADR-0015 decision 4) is URL-only — a photo
+    // has no comparable normalized key, and each photo capture is
+    // treated as its own import, before any fetch or AI call. RLS
+    // already scopes this select to the caller's own household, so no
+    // explicit household_id filter is needed here.
+    if (!isPhotoJob) {
+      const { data: existingRecipes } = await supabase
+        .from('recipes')
+        .select('id, source_url')
+        .not('source_url', 'is', null);
 
-    for (const existing of existingRecipes ?? []) {
-      let existingNormalized: string;
-      try {
-        existingNormalized = normalizeUrl(existing.source_url as string);
-      } catch {
-        continue; // an old row with a malformed source_url — not a match, not fatal
-      }
-      if (existingNormalized === normalizedUrl) {
-        const { data: completed, error } = await supabase
-          .rpc('complete_import_job', {
-            job_id: job.id,
-            recipe_id: existing.id,
-            duplicate_of_recipe_id: existing.id,
-          })
-          .single();
-        if (error || !completed) {
-          return jsonResponse(
-            { jobId: job.id, error: error?.message ?? 'Could not complete import job' },
-            500,
-          );
+      for (const existing of existingRecipes ?? []) {
+        let existingNormalized: string;
+        try {
+          existingNormalized = normalizeUrl(existing.source_url as string);
+        } catch {
+          continue; // an old row with a malformed source_url — not a match, not fatal
         }
-        return jsonResponse({ jobId: job.id, recipeId: existing.id, duplicate: true }, 200);
+        if (existingNormalized === normalizedUrl) {
+          const { data: completed, error } = await supabase
+            .rpc('complete_import_job', {
+              job_id: job.id,
+              recipe_id: existing.id,
+              duplicate_of_recipe_id: existing.id,
+            })
+            .single();
+          if (error || !completed) {
+            return jsonResponse(
+              { jobId: job.id, error: error?.message ?? 'Could not complete import job' },
+              500,
+            );
+          }
+          return jsonResponse({ jobId: job.id, recipeId: existing.id, duplicate: true }, 200);
+        }
       }
-    }
-
-    // Fetch + reduce.
-    let html: string;
-    let finalUrl: string;
-    try {
-      const fetchResult = await secureFetch(normalizedUrl, {
-        resolveDns,
-        allowedContentTypePrefixes: ['text/html'],
-        maxBytes: 2 * 1024 * 1024,
-        timeoutMs: 10_000,
-      });
-      html = new TextDecoder().decode(fetchResult.bytes);
-      finalUrl = fetchResult.finalUrl;
-    } catch (error) {
-      return await fail(502, `Could not fetch the page: ${errorMessage(error)}`);
-    }
-
-    const reducedText = reduceHtmlToText(html);
-    if (reducedText.length < MIN_USEFUL_REDUCED_TEXT_LENGTH) {
-      return await fail(422, 'Could not find enough recipe content on this page');
     }
 
     // AI extraction. Model strategy is environment-gated (developer
     // decision, 2026-08-05): only a deployment with APP_ENV=production
-    // set uses the full Sonnet-primary/Opus-escalation cost — every
-    // other deployment (including today's only deployed environment)
-    // defaults to a single cheap Haiku call instead. See
-    // ExtractRecipeOptions in extractRecipe.ts.
+    // set uses the full Sonnet-primary/Opus-escalation cost for the URL
+    // path — every other deployment defaults to a single cheap Haiku
+    // call instead (ExtractRecipeOptions in extractRecipe.ts). The photo
+    // path floors at Sonnet in every environment instead (ADR-0017
+    // decision 3, ExtractRecipeFromImageOptions) — ordinary text
+    // extraction and vision extraction intentionally use different
+    // non-production defaults.
+    const useProductionModels = Deno.env.get('APP_ENV') === 'production';
+    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+
     let extraction: RecipeExtraction;
-    try {
-      const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
-      extraction = await extractRecipe(anthropic, reducedText, {
-        useProductionModels: Deno.env.get('APP_ENV') === 'production',
-      });
-    } catch (error) {
-      return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
+    // Populated on the URL path only, used for hero-image extraction and
+    // source attribution below.
+    let html: string | undefined;
+    let finalUrl: string | undefined;
+    // Populated on the photo path only.
+    let heroImagePath: string | null = null;
+    let originalPhotoPath: string | null = null;
+
+    if (isPhotoJob) {
+      originalPhotoPath = job.photo_path!;
+
+      // Upload-before-processing (ADR-0017 decision 2): the original is
+      // already durably stored by the time this function runs, so a
+      // download failure here fails the job cleanly without having lost
+      // the user's photo.
+      const { data: photoBlob, error: downloadError } = await supabase.storage
+        .from('recipe-images')
+        .download(originalPhotoPath);
+      if (downloadError || !photoBlob) {
+        return await fail(
+          502,
+          `Could not read the uploaded photo: ${downloadError?.message ?? 'not found'}`,
+        );
+      }
+      const photoBytes = new Uint8Array(await photoBlob.arrayBuffer());
+      const photoBase64 = uint8ArrayToBase64(photoBytes);
+
+      try {
+        // uploadOriginalPhoto (src/photoImport/photoImport.ts) always
+        // saves as JPEG — this path is only ever reached via that
+        // client-side upload step, so the media type is known, not
+        // sniffed.
+        extraction = await extractRecipeFromImage(anthropic, photoBase64, 'image/jpeg', {
+          useProductionModels,
+        });
+      } catch (error) {
+        return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
+      }
+
+      // The uploaded original doubles as the initial hero image (no
+      // og:image-equivalent exists for a photo import) — the user can
+      // replace or remove it afterward via Phase 4's existing hero-image
+      // flow without affecting original_photo_path, which stays pointed
+      // at this same object regardless.
+      heroImagePath = originalPhotoPath;
+    } else {
+      // Fetch + reduce.
+      try {
+        const fetchResult = await secureFetch(normalizedUrl!, {
+          resolveDns,
+          allowedContentTypePrefixes: ['text/html'],
+          maxBytes: 2 * 1024 * 1024,
+          timeoutMs: 10_000,
+        });
+        html = new TextDecoder().decode(fetchResult.bytes);
+        finalUrl = fetchResult.finalUrl;
+      } catch (error) {
+        return await fail(502, `Could not fetch the page: ${errorMessage(error)}`);
+      }
+
+      const reducedText = reduceHtmlToText(html);
+      if (reducedText.length < MIN_USEFUL_REDUCED_TEXT_LENGTH) {
+        return await fail(422, 'Could not find enough recipe content on this page');
+      }
+
+      try {
+        extraction = await extractRecipe(anthropic, reducedText, { useProductionModels });
+      } catch (error) {
+        return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
+      }
+
+      // Hero image acquisition (IMG-01) — best-effort. A failure here
+      // doesn't fail the whole import; the recipe still gets created
+      // without a hero image rather than being lost over an image fetch
+      // hiccup.
+      const heroImageUrl = extractHeroImageUrl(html, finalUrl);
+      if (heroImageUrl) {
+        try {
+          const imageResult = await secureFetch(heroImageUrl, {
+            resolveDns,
+            // Matches the recipe-images bucket's own allowed_mime_types
+            // exactly (supabase/migrations/20260802120800_recipe_images_
+            // storage.sql) — Storage's own policy would reject anything
+            // else anyway, but drawing the fetcher's boundary at the same
+            // place avoids spending a fetch on a format we can never
+            // actually store (e.g. an SVG site-logo fallback).
+            allowedContentTypePrefixes: ['image/jpeg', 'image/png', 'image/webp'],
+            maxBytes: 8 * 1024 * 1024,
+            timeoutMs: 10_000,
+          });
+          const extension = CONTENT_TYPE_EXTENSIONS[imageResult.contentType] ?? 'jpg';
+          const path = `${job.household_id}/${crypto.randomUUID()}.${extension}`;
+          const { error: uploadError } = await supabase.storage
+            .from('recipe-images')
+            .upload(path, imageResult.bytes, {
+              contentType: imageResult.contentType,
+              upsert: false,
+            });
+          if (!uploadError) heroImagePath = path;
+        } catch {
+          // best-effort — leave heroImagePath null
+        }
+      }
     }
 
     // Map AI-suggested category names onto real category ids — an
@@ -315,49 +453,19 @@ Deno.serve(async (req: Request) => {
       .map((name) => categoryByLowerValue.get(name.toLowerCase()))
       .filter((id): id is string => id !== undefined);
 
-    // Hero image acquisition (IMG-01) — best-effort. A failure here
-    // doesn't fail the whole import; the recipe still gets created
-    // without a hero image rather than being lost over an image fetch
-    // hiccup.
-    let heroImagePath: string | null = null;
-    const heroImageUrl = extractHeroImageUrl(html, finalUrl);
-    if (heroImageUrl) {
-      try {
-        const imageResult = await secureFetch(heroImageUrl, {
-          resolveDns,
-          // Matches the recipe-images bucket's own allowed_mime_types
-          // exactly (supabase/migrations/20260802120800_recipe_images_
-          // storage.sql) — Storage's own policy would reject anything
-          // else anyway, but drawing the fetcher's boundary at the same
-          // place avoids spending a fetch on a format we can never
-          // actually store (e.g. an SVG site-logo fallback).
-          allowedContentTypePrefixes: ['image/jpeg', 'image/png', 'image/webp'],
-          maxBytes: 8 * 1024 * 1024,
-          timeoutMs: 10_000,
-        });
-        const extension = CONTENT_TYPE_EXTENSIONS[imageResult.contentType] ?? 'jpg';
-        const path = `${job.household_id}/${crypto.randomUUID()}.${extension}`;
-        const { error: uploadError } = await supabase.storage
-          .from('recipe-images')
-          .upload(path, imageResult.bytes, { contentType: imageResult.contentType, upsert: false });
-        if (!uploadError) heroImagePath = path;
-      } catch {
-        // best-effort — leave heroImagePath null
-      }
-    }
-
-    const sourceAttribution = new URL(finalUrl).hostname;
+    const sourceAttribution = finalUrl ? new URL(finalUrl).hostname : null;
 
     const { data: recipe, error: saveError } = await supabase
       .rpc('save_recipe', {
         payload: {
           title: extraction.title,
           heroImagePath,
+          originalPhotoPath,
           activeTimeMinutes: extraction.activeTimeMinutes,
           totalTimeMinutes: extraction.totalTimeMinutes,
           yieldText: extraction.yield,
           permanentNotes: null,
-          sourceUrl: finalUrl,
+          sourceUrl: finalUrl ?? null,
           sourceAttribution,
           tags: extraction.suggestedTags,
           categoryIds,

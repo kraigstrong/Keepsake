@@ -264,6 +264,20 @@ export function RecipeDetailScreen({
         >
           <Text style={styles.editButtonLabel}>History</Text>
         </Pressable>
+        {recipe.originalPhotoPath && (
+          <Pressable
+            style={styles.editButton}
+            accessibilityRole="button"
+            onPress={() =>
+              router.push(
+                `/recipe/${recipeId}/original-photo?path=${encodeURIComponent(recipe.originalPhotoPath!)}`,
+              )
+            }
+            testID="recipe-detail-original-photo-button"
+          >
+            <Text style={styles.editButtonLabel}>Original Photo</Text>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );

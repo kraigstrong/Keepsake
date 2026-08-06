@@ -31,10 +31,10 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | IMP-01 | Website URL import | 8 | Done (tested) |
-| IMP-02 | Safari Share Sheet import | 9 | Done (untested) |
+| IMP-02 | Safari Share Sheet import | 9 | Done (untested) — Simulator-verified live, physical-device confirmation pending |
 | IMP-03 | Bulk URL import | 9 | Done (tested) |
-| IMP-04 | Camera import | 10 | Not Started |
-| IMP-05 | Existing photo import | 10 | Not Started |
+| IMP-04 | Camera import | 10 | Done (tested) |
+| IMP-05 | Existing photo import | 10 | Done (tested) |
 | IMP-06 | Manual creation | 4 | Done (tested) |
 | IMP-07 | No mandatory review step after import | 8 | Done (tested) |
 
@@ -56,8 +56,8 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | IMG-01 | Website recipe images stored locally, never hotlinked | 8 | Done (tested) |
-| IMG-02 | Photo import preserves the original image | 10 | Not Started |
-| IMG-03 | Original photo viewable later | 10 | Not Started |
+| IMG-02 | Photo import preserves the original image | 10 | Done (tested) |
+| IMG-03 | Original photo viewable later | 10 | Done (tested) |
 | IMG-04 | Replace / crop-square / remove image | 4 / 10 | Done (tested) |
 
 ## Units and Scaling (UNIT)

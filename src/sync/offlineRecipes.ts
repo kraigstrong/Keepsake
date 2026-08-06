@@ -26,6 +26,7 @@ interface LocalRecipeRow {
   version: number;
   title: string;
   hero_image_path: string | null;
+  original_photo_path: string | null;
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
@@ -44,6 +45,7 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
     version: row.version,
     title: row.title,
     heroImagePath: row.hero_image_path,
+    originalPhotoPath: row.original_photo_path,
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,

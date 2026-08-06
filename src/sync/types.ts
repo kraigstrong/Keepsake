@@ -9,6 +9,7 @@ export interface SyncedRecipe {
   version: number;
   title: string;
   heroImagePath: string | null;
+  originalPhotoPath: string | null;
   activeTimeMinutes: number | null;
   totalTimeMinutes: number | null;
   yieldText: string | null;
