@@ -1,6 +1,13 @@
 -- Mirrors save_recipe_rpc.test.sql's fixture/pattern (ADR-0015): alice
 -- and bob share household 1, carol is the sole member of household 2,
 -- eve has no household at all.
+--
+-- ADR-0020 (Phase 11.5): complete_import_job/fail_import_job now
+-- require a claim_token, so every call here claims the job first via
+-- claim_import_job to get one — the atomic save_recipe+completion path
+-- itself moved to finalize_import_job.test.sql; this file covers
+-- complete_import_job's remaining role (the duplicate-URL short-
+-- circuit, which never calls save_recipe) and fail_import_job.
 
 begin;
 
@@ -63,10 +70,14 @@ select throws_ok(
   'writes denied: import_jobs has no insert grant for authenticated — creation is RPC-only'
 );
 
+create temporary table alice_job_claim as
+select * from public.claim_import_job((select id from alice_job));
+
 select lives_ok(
   format(
-    $$ select public.complete_import_job(%L, %L) $$,
+    $$ select public.complete_import_job(%L, %L, %L) $$,
     (select id from alice_job),
+    (select claim_token from alice_job_claim),
     (select id from alice_recipe)
   ),
   'complete_import_job: succeeds for a recipe in the caller''s own household'
@@ -92,11 +103,12 @@ select is(
 
 select throws_ok(
   format(
-    $$ select public.complete_import_job(%L, %L) $$,
+    $$ select public.complete_import_job(%L, %L, %L) $$,
     (select id from alice_job),
+    (select claim_token from alice_job_claim),
     (select id from alice_recipe)
   ),
-  'import job not found or already closed',
+  'import job not found, already closed, or claim no longer held',
   'complete_import_job: cannot be called twice on the same job'
 );
 
@@ -126,10 +138,14 @@ select set_config(
 create temporary table alice_job_2 as
 select * from public.create_import_job('https://example.test/duplicate', 'https://example.test/duplicate');
 
+create temporary table alice_job_2_claim as
+select * from public.claim_import_job((select id from alice_job_2));
+
 select lives_ok(
   format(
-    $$ select public.complete_import_job(%L, %L, %L) $$,
+    $$ select public.complete_import_job(%L, %L, %L, %L) $$,
     (select id from alice_job_2),
+    (select claim_token from alice_job_2_claim),
     (select id from alice_recipe),
     (select id from alice_recipe)
   ),
@@ -155,8 +171,16 @@ select set_config(
 create temporary table alice_job_3 as
 select * from public.create_import_job('https://example.test/broken', 'https://example.test/broken');
 
+create temporary table alice_job_3_claim as
+select * from public.claim_import_job((select id from alice_job_3));
+
 select lives_ok(
-  format($$ select public.fail_import_job(%L, %L) $$, (select id from alice_job_3), 'fetch timed out'),
+  format(
+    $$ select public.fail_import_job(%L, %L, %L) $$,
+    (select id from alice_job_3),
+    (select claim_token from alice_job_3_claim),
+    'fetch timed out'
+  ),
   'fail_import_job: succeeds for the caller''s own job'
 );
 
@@ -184,18 +208,20 @@ select results_eq(
   'RLS: carol (a different household) sees none of alice''s import jobs'
 );
 
--- complete_import_job checks recipe ownership before job ownership, so
--- a cross-household caller referencing both someone else's job *and*
--- someone else's recipe sees "recipe not found" here, not "import job
--- not found" — equally valid as a denial (carol is blocked either way,
--- neither message confirms alice's data exists), just the message this
--- particular combination actually produces. This exact assertion never
--- ran until the two other bugs earlier in this file were fixed — the
--- script always aborted before reaching it.
+-- complete_import_job checks recipe ownership before job ownership (or
+-- claim_token), so a cross-household caller referencing both someone
+-- else's job *and* someone else's recipe sees "recipe not found" here,
+-- not the claim/job-state error — equally valid as a denial (carol is
+-- blocked either way, neither message confirms alice's data exists),
+-- just the message this particular combination actually produces.
+-- claim_token's actual value doesn't matter for this case; alice's own
+-- (already-spent, job 3 is already 'failed') token is reused rather
+-- than fetching a fresh one, since it's never reached.
 select throws_ok(
   format(
-    $$ select public.complete_import_job(%L, %L) $$,
+    $$ select public.complete_import_job(%L, %L, %L) $$,
     (select id from alice_job_3),
+    (select claim_token from alice_job_3_claim),
     (select id from alice_recipe)
   ),
   'recipe not found',

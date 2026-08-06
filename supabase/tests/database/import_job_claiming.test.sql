@@ -6,10 +6,19 @@
 -- import. Fixture jobs are inserted directly (bypassing
 -- create_import_job) so each case starts from a precise, isolated
 -- claimed_at/status state.
+--
+-- ADR-0020 (Phase 11.5): claim_import_job now also generates a fresh
+-- claim_token on every successful claim, and the staleness window
+-- moved from 60s to 180s (fencing, not the window's length, is what
+-- makes a late/duplicate completion harmless now). The last block
+-- below proves the fencing property itself: a claim superseded by a
+-- reclaim can no longer close out the job with its old token — the
+-- specific gap KS-004 named (a stale worker completing/failing a job
+-- another worker has since reclaimed).
 
 begin;
 
-select plan(7);
+select plan(10);
 
 insert into auth.users (id, email)
 values
@@ -39,10 +48,10 @@ values
   ('10000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    '11111111-1111-1111-1111-111111111111', 'https://example.test/b', 'https://example.test/b',
    'processing', now()),
-  -- claimed over 60s ago — assumed abandoned, reclaimable
+  -- claimed over 180s ago — assumed abandoned, reclaimable
   ('10000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    '11111111-1111-1111-1111-111111111111', 'https://example.test/c', 'https://example.test/c',
-   'processing', now() - interval '61 seconds'),
+   'processing', now() - interval '181 seconds'),
   -- already resolved — not claimable regardless of claimed_at
   ('10000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    '11111111-1111-1111-1111-111111111111', 'https://example.test/d', 'https://example.test/d',
@@ -50,6 +59,10 @@ values
   -- unclaimed, belongs to household aaaa — used for the cross-household check
   ('10000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    '11111111-1111-1111-1111-111111111111', 'https://example.test/e', 'https://example.test/e',
+   'processing', null),
+  -- unclaimed — used for the fencing/reclaim scenario below
+  ('10000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   '11111111-1111-1111-1111-111111111111', 'https://example.test/f', 'https://example.test/f',
    'processing', null);
 
 set local role authenticated;
@@ -70,6 +83,12 @@ select is(
   'claim_import_job: sets claimed_at on success'
 );
 
+select is(
+  (select claim_token is not null from public.import_jobs where id = '10000000-0000-0000-0000-000000000001'),
+  true,
+  'claim_import_job: sets a claim_token on success'
+);
+
 select throws_ok(
   $$ select public.claim_import_job('10000000-0000-0000-0000-000000000002') $$,
   'import already in progress for this request',
@@ -78,7 +97,7 @@ select throws_ok(
 
 select lives_ok(
   $$ select public.claim_import_job('10000000-0000-0000-0000-000000000003') $$,
-  'claim_import_job: a job claimed over 60 seconds ago is reclaimable (assumed abandoned)'
+  'claim_import_job: a job claimed over 180 seconds ago is reclaimable (assumed abandoned)'
 );
 
 select throws_ok(
@@ -109,6 +128,52 @@ select throws_ok(
   $$ select public.claim_import_job('10000000-0000-0000-0000-000000000005') $$,
   'caller does not belong to a household',
   'claim_import_job: a user with no household cannot claim anything'
+);
+
+-- Fencing: a claim superseded by a reclaim (KS-004). alice claims job 6,
+-- her claim is then simulated stale (backdated past the 180s window,
+-- the same technique import_jobs.test.sql uses for the abuse-control
+-- cooldown), and a second claim succeeds with a brand new token. The
+-- first (now-superseded) token must no longer be able to close out the
+-- job — proving a worker that stalled past the window can't clobber
+-- whatever the reclaiming worker does.
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+
+create temporary table job6_first_claim as
+select * from public.claim_import_job('10000000-0000-0000-0000-000000000006');
+
+reset role;
+update public.import_jobs set claimed_at = now() - interval '181 seconds'
+where id = '10000000-0000-0000-0000-000000000006';
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+
+create temporary table job6_second_claim as
+select * from public.claim_import_job('10000000-0000-0000-0000-000000000006');
+
+select isnt(
+  (select claim_token from job6_first_claim),
+  (select claim_token from job6_second_claim),
+  'claim_import_job: a reclaim generates a new claim_token, distinct from the superseded one'
+);
+
+select throws_ok(
+  format(
+    $$ select public.fail_import_job(%L, %L, 'stale worker, should be rejected') $$,
+    '10000000-0000-0000-0000-000000000006',
+    (select claim_token from job6_first_claim)
+  ),
+  'import job not found, already closed, or claim no longer held',
+  'fail_import_job: a superseded claim_token cannot close out a job a reclaim now holds'
 );
 
 select * from finish();
