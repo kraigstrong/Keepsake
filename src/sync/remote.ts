@@ -22,6 +22,7 @@ interface FetchedRecipeRow {
   version: number;
   title: string;
   hero_image_path: string | null;
+  original_photo_path: string | null;
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
@@ -47,6 +48,7 @@ function toSyncedRecipe(row: FetchedRecipeRow): SyncedRecipe {
     version: row.version,
     title: row.title,
     heroImagePath: row.hero_image_path,
+    originalPhotoPath: row.original_photo_path,
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,
@@ -82,8 +84,9 @@ export async function fetchChangedRecipes(
   limit: number = SYNC_PAGE_SIZE,
 ): Promise<SyncedRecipe[]> {
   let query = supabase.from('recipes').select(
-    `id, household_id, version, title, hero_image_path, active_time_minutes, total_time_minutes,
-       yield_text, permanent_notes, source_url, source_attribution, tags, created_at, updated_at,
+    `id, household_id, version, title, hero_image_path, original_photo_path, active_time_minutes,
+       total_time_minutes, yield_text, permanent_notes, source_url, source_attribution, tags,
+       created_at, updated_at,
        recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
        recipe_categories ( category_id )`,

@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -124,4 +124,11 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
       updated_at text not null
     )`,
   ],
+  // Camera/photo import (Phase 10, ADR-0017). No resync-cursor-reset
+  // needed here, unlike schema v3's created_at backfill — photo import
+  // doesn't exist before this phase ships, so no pre-existing recipe row
+  // could have a real value to backfill; every row that ever gets one is
+  // freshly created afterward and syncs down complete through the normal
+  // incremental pull.
+  5: [`alter table recipes add column original_photo_path text`],
 };

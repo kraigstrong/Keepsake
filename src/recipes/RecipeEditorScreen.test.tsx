@@ -152,6 +152,7 @@ describe('RecipeEditorScreen — edit mode', () => {
     version: 1,
     title: 'Herb Roast Chicken',
     heroImagePath: 'household-1/existing.jpg',
+    originalPhotoPath: null,
     activeTimeMinutes: 20,
     totalTimeMinutes: 70,
     yieldText: 'Serves 4',

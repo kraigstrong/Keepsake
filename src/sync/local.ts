@@ -114,16 +114,17 @@ export async function upsertRecipes(
     for (const recipe of recipes) {
       await db.runAsync(
         `insert into recipes
-           (id, household_id, version, title, hero_image_path, active_time_minutes,
-            total_time_minutes, yield_text, permanent_notes, source_url, source_attribution,
-            tags, category_ids, ingredient_sections, instruction_sections, created_at, updated_at,
-            synced_at)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (id, household_id, version, title, hero_image_path, original_photo_path,
+            active_time_minutes, total_time_minutes, yield_text, permanent_notes, source_url,
+            source_attribution, tags, category_ids, ingredient_sections, instruction_sections,
+            created_at, updated_at, synced_at)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          on conflict (id) do update set
            household_id = excluded.household_id,
            version = excluded.version,
            title = excluded.title,
            hero_image_path = excluded.hero_image_path,
+           original_photo_path = excluded.original_photo_path,
            active_time_minutes = excluded.active_time_minutes,
            total_time_minutes = excluded.total_time_minutes,
            yield_text = excluded.yield_text,
@@ -142,6 +143,7 @@ export async function upsertRecipes(
         recipe.version,
         recipe.title,
         recipe.heroImagePath,
+        recipe.originalPhotoPath,
         recipe.activeTimeMinutes,
         recipe.totalTimeMinutes,
         recipe.yieldText,

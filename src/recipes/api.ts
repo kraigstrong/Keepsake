@@ -23,6 +23,12 @@ export interface Recipe {
   version: number;
   title: string;
   heroImagePath: string | null;
+  // IMG-02/IMG-03 (Phase 10, ADR-0017): the preserved original a photo
+  // import was created from, set only at creation — never editable
+  // through save_recipe's update branch, so replacing/removing the hero
+  // image (Phase 4) never touches it. Read-only here for that reason;
+  // absent from RecipeSavePayload below.
+  originalPhotoPath: string | null;
   activeTimeMinutes: number | null;
   totalTimeMinutes: number | null;
   yieldText: string | null;
@@ -117,6 +123,7 @@ interface FetchedRecipeRow {
   version: number;
   title: string;
   hero_image_path: string | null;
+  original_photo_path: string | null;
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
@@ -137,7 +144,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      `id, version, title, hero_image_path, active_time_minutes, total_time_minutes, yield_text,
+      `id, version, title, hero_image_path, original_photo_path, active_time_minutes, total_time_minutes, yield_text,
        permanent_notes, source_url, source_attribution, tags,
        recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
@@ -154,6 +161,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     version: row.version,
     title: row.title,
     heroImagePath: row.hero_image_path,
+    originalPhotoPath: row.original_photo_path,
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,

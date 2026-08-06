@@ -37,6 +37,7 @@ const recipe: api.Recipe = {
   version: 1,
   title: 'Herb Roast Chicken',
   heroImagePath: 'household-1/existing.jpg',
+  originalPhotoPath: null,
   activeTimeMinutes: 20,
   totalTimeMinutes: 70,
   yieldText: 'Serves 4',
@@ -112,6 +113,29 @@ it('navigates to the history screen', async () => {
   await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/history');
+});
+
+it('does not show an Original Photo button when the recipe has no original_photo_path', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  expect(screen.queryByTestId('recipe-detail-original-photo-button')).toBeNull();
+});
+
+it('navigates to the original photo screen, url-encoding the path, when one exists', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue({
+    ...recipe,
+    originalPhotoPath: 'household-1/originals/photo one.jpg',
+  });
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  await fireEvent.press(screen.getByTestId('recipe-detail-original-photo-button'));
+
+  expect(push).toHaveBeenCalledWith(
+    '/recipe/recipe-1/original-photo?path=household-1%2Foriginals%2Fphoto%20one.jpg',
+  );
 });
 
 it('opens the source url in the browser', async () => {
