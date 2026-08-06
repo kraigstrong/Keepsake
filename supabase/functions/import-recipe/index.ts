@@ -25,7 +25,7 @@
  * outcome is returned as-is, never re-fetching or re-charging Anthropic
  * for the same job.
  *
- * ADR-0018 adds a JSON-LD structured-data hint to the URL path: when a
+ * ADR-0019 adds a JSON-LD structured-data hint to the URL path: when a
  * page's own schema.org Recipe markup is found, it's prepended to the
  * reduced text handed to Claude — the AI call itself is never skipped.
  */
@@ -402,7 +402,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const reducedText = reduceHtmlToText(html);
-      // ADR-0018: schema.org Recipe structured data (JSON-LD), when
+      // ADR-0019: schema.org Recipe structured data (JSON-LD), when
       // present, becomes a sanitized hint prepended to what Claude sees
       // — never a bypass of the AI call itself (prd.md §8's documented
       // workflow runs on every import). A page whose visible text is

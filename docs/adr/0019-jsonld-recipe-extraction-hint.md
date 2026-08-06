@@ -1,4 +1,4 @@
-# ADR-0018: JSON-LD structured data as an AI extraction hint, not a bypass
+# ADR-0019: JSON-LD structured data as an AI extraction hint, not a bypass
 
 - **Status:** Accepted
 - **Date:** 2026-08-06

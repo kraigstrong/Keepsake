@@ -3,7 +3,7 @@
  * `<script type="application/ld+json">` blocks and formats it as a
  * plain-text hint to prepend to reduceHtmlToText's output before the AI
  * extraction call (server/ai/extractRecipe.ts) — never a replacement
- * for that call. See ADR-0018: the PRD's own documented import workflow
+ * for that call. See ADR-0019: the PRD's own documented import workflow
  * (prd.md §8: "Page reduced to relevant text -> AI parses ->
  * Uncertainties highlighted -> Save") runs on every import regardless
  * of what this module finds; a richer hint just makes Claude's own
