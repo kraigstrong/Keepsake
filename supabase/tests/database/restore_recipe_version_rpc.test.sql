@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(9);
 
 insert into auth.users (id, email)
 values
@@ -113,6 +113,51 @@ select is(
   (select version from public.recipes where id = (select id from alice_recipe)),
   4,
   'cross-household restore attempt above left the recipe untouched'
+);
+
+-- ADR-0018: a recipe_versions snapshot taken before the Phase 11
+-- ingredient-line shape change (plain string, not an object carrying
+-- structured quantity fields) must still restore correctly.
+create temporary table bob_recipe as
+select * from public.save_recipe(
+  jsonb_build_object(
+    'title', 'Old Shape Soup',
+    'tags', jsonb_build_array(),
+    'categoryIds', jsonb_build_array(),
+    'ingredientSections',
+      jsonb_build_array(jsonb_build_object('title', null, 'lines', jsonb_build_array('2 cups broth')))
+  )
+);
+
+select public.save_recipe(
+  jsonb_build_object(
+    'id', (select id from bob_recipe), 'baseVersion', 1,
+    'title', 'Old Shape Soup (updated)', 'tags', jsonb_build_array(), 'categoryIds', jsonb_build_array(),
+    'ingredientSections',
+      jsonb_build_array(
+        jsonb_build_object(
+          'title', null,
+          'lines', jsonb_build_array(
+            jsonb_build_object(
+              'lineText', '4 cups broth', 'quantityMin', 4, 'quantityMax', 4, 'unit', 'cup', 'ingredientText', 'broth'
+            )
+          )
+        )
+      )
+  )
+);
+
+select public.restore_recipe_version(
+  (select id from public.recipe_versions
+     where recipe_id = (select id from bob_recipe) and version_number = 1)
+);
+
+select results_eq(
+  $$ select ri.line_text, ri.quantity_min, ri.unit from public.recipe_ingredients ri
+       join public.recipe_ingredient_sections ris on ris.id = ri.section_id
+     where ris.recipe_id = (select id from bob_recipe) $$,
+  $$ values ('2 cups broth'::text, null::numeric, null::text) $$,
+  'restore: a pre-Phase-11 string-shaped snapshot restores as an unparsed line, not a constraint violation'
 );
 
 select * from finish();
