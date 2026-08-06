@@ -49,10 +49,24 @@ const HTML_ENTITIES: Record<string, string> = {
   frac34: '¾',
 };
 
+// A numeric entity outside the valid Unicode code point range (e.g. a
+// deliberately malformed &#x110000;) makes String.fromCodePoint throw —
+// caught per-match so one bad entity degrades to left-as-is text
+// instead of aborting extraction for the whole page.
+function codePointOrOriginal(match: string, codePoint: number): string {
+  try {
+    return String.fromCodePoint(codePoint);
+  } catch {
+    return match;
+  }
+}
+
 function decodeEntities(text: string): string {
   return text
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex: string) =>
+      codePointOrOriginal(match, parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (match, dec: string) => codePointOrOriginal(match, parseInt(dec, 10)))
     .replace(
       /&([a-z0-9]+);/gi,
       (match, name: string) => HTML_ENTITIES[name.toLowerCase()] ?? match,
@@ -68,10 +82,19 @@ function sanitizeText(value: unknown): string | null {
   return text.length > MAX_FIELD_LENGTH ? `${text.slice(0, MAX_FIELD_LENGTH)}…` : text;
 }
 
+// Accepts both the compact term ("Recipe") and an expanded schema.org
+// IRI ("https://schema.org/Recipe" / "http://schema.org/Recipe#Recipe"
+// and similar) — both are legal JSON-LD for the same type, and real
+// pages use either depending on how their markup was generated.
+function matchesRecipeTypeString(type: string): boolean {
+  const lastSegment = type.split(/[/#]/).pop() ?? type;
+  return lastSegment.toLowerCase() === 'recipe';
+}
+
 function isRecipeType(type: unknown): boolean {
-  if (typeof type === 'string') return type.toLowerCase() === 'recipe';
+  if (typeof type === 'string') return matchesRecipeTypeString(type);
   if (Array.isArray(type)) {
-    return type.some((t) => typeof t === 'string' && t.toLowerCase() === 'recipe');
+    return type.some((t) => typeof t === 'string' && matchesRecipeTypeString(t));
   }
   return false;
 }
@@ -119,10 +142,15 @@ function flattenInstructions(value: unknown, depth = 0): string[] {
       .filter((line): line is string => line !== null)
       .slice(0, MAX_LIST_ITEMS);
   }
-  if (!Array.isArray(value)) return [];
+  // A single HowToStep/HowToSection object (not wrapped in an array) is
+  // legal JSON-LD — schema.org properties accept a singular value in
+  // place of a one-item array — so it's normalized into one here rather
+  // than falling through and silently dropping the only instruction.
+  const items = Array.isArray(value) ? value : typeof value === 'object' && value !== null ? [value] : null;
+  if (!items) return [];
 
   const lines: string[] = [];
-  for (const item of value) {
+  for (const item of items) {
     if (typeof item === 'string') {
       const text = sanitizeText(item);
       if (text) lines.push(text);

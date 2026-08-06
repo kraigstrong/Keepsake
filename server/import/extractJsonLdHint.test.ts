@@ -274,4 +274,55 @@ describe('extractJsonLdHint', () => {
     });
     expect(() => extractJsonLdHint(html)).not.toThrow();
   });
+
+  it('does not throw on an out-of-range numeric HTML entity', () => {
+    const html =
+      '<script type="application/ld+json">' +
+      '{"@type":"Recipe","name":"Bad Entity &#x110000; Recipe","recipeIngredient":["x"]}' +
+      '</script>';
+    expect(() => extractJsonLdHint(html)).not.toThrow();
+    expect(extractJsonLdHint(html)).toContain('Bad Entity');
+  });
+
+  it('accepts a single HowToStep object (not wrapped in an array) for recipeInstructions', () => {
+    const html = withScript({
+      '@type': 'Recipe',
+      name: 'Single Step Recipe',
+      recipeInstructions: { '@type': 'HowToStep', text: 'Just do the one thing.' },
+    });
+    expect(extractJsonLdHint(html)).toContain('- Just do the one thing.');
+  });
+
+  it('accepts a single HowToSection object (not wrapped in an array) for recipeInstructions', () => {
+    const html = withScript({
+      '@type': 'Recipe',
+      name: 'Single Section Recipe',
+      recipeInstructions: {
+        '@type': 'HowToSection',
+        name: 'For the sauce',
+        itemListElement: [{ '@type': 'HowToStep', text: 'Simmer.' }],
+      },
+    });
+    const hint = extractJsonLdHint(html);
+    expect(hint).toContain('For the sauce:');
+    expect(hint).toContain('- Simmer.');
+  });
+
+  it('matches an expanded schema.org Recipe type IRI', () => {
+    const html = withScript({
+      '@type': 'https://schema.org/Recipe',
+      name: 'Expanded IRI Recipe',
+      recipeIngredient: ['x'],
+    });
+    expect(extractJsonLdHint(html)).toContain('Title: Expanded IRI Recipe');
+  });
+
+  it('matches an expanded schema.org Recipe type IRI within an @type array', () => {
+    const html = withScript({
+      '@type': ['http://schema.org/Recipe'],
+      name: 'Expanded IRI Array Recipe',
+      recipeIngredient: ['x'],
+    });
+    expect(extractJsonLdHint(html)).toContain('Title: Expanded IRI Array Recipe');
+  });
 });
