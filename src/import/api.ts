@@ -1,3 +1,4 @@
+import { preserveOriginalPhoto, uploadOriginalPhoto } from '../photoImport/photoImport';
 import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
@@ -9,14 +10,18 @@ export interface ImportRecipeResult {
 }
 
 export interface ImportJobRequest {
-  // Either url (Phase 8's original shape, creates a fresh job) or jobId
-  // (a job create_import_batch already reserved, ADR-0016 decision 4) —
-  // the Edge Function itself enforces exactly one is required.
+  // Exactly one of url (Phase 8's original shape), photoPath (Phase 10,
+  // ADR-0017 — a Storage object path already uploaded), or jobId (a job
+  // create_import_batch already reserved, ADR-0016 decision 4) — the
+  // Edge Function itself enforces this.
   url?: string;
+  photoPath?: string;
   jobId?: string;
   // The durable Share Extension outbox's idempotency key (ADR-0016
   // decision 2) — omitted for the plain single-URL screen and for
-  // batch items, which are already idempotent via jobId.
+  // batch items, which are already idempotent via jobId. Never used by
+  // the photo path (ADR-0017 decision 4: camera/photo import is
+  // synchronous and interactive, not routed through the outbox).
   clientImportId?: string;
 }
 
@@ -78,6 +83,35 @@ export async function submitImportJob(request: ImportJobRequest): Promise<Import
 
 export async function importRecipeFromUrl(url: string): Promise<ImportRecipeResult> {
   return submitImportJob({ url });
+}
+
+/**
+ * Upload-before-processing (ADR-0017 decision 2): preserves (strips
+ * metadata, resizes) and uploads the captured/picked photo to Storage
+ * first, then submits the job with a path rather than image bytes — the
+ * original is durably saved even if extraction itself fails afterward.
+ * The preserve/upload steps are wrapped in their own timing/failure
+ * telemetry (distinct from submitImportJob's own import_completed/
+ * import_failed) so a Storage failure here is observable the same way a
+ * fetch or extraction failure already is on the URL path — this is a
+ * real, reachable failure mode (e.g. offline, Storage quota), not a
+ * hypothetical worth leaving silent.
+ */
+export async function importRecipeFromPhoto(
+  householdId: string,
+  localUri: string,
+): Promise<ImportRecipeResult> {
+  const startedAt = Date.now();
+  let photoPath: string;
+  try {
+    const preservedUri = await preserveOriginalPhoto(localUri);
+    photoPath = await uploadOriginalPhoto(householdId, preservedUri);
+  } catch (error) {
+    trackEvent('photo_import_upload_failed', { durationMs: Date.now() - startedAt });
+    throw error;
+  }
+
+  return submitImportJob({ photoPath });
 }
 
 export interface BatchJobStub {
