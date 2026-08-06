@@ -24,6 +24,10 @@
  * — in which case the pipeline is skipped entirely and the stored
  * outcome is returned as-is, never re-fetching or re-charging Anthropic
  * for the same job.
+ *
+ * ADR-0018 adds a JSON-LD structured-data hint to the URL path: when a
+ * page's own schema.org Recipe markup is found, it's prepended to the
+ * reduced text handed to Claude — the AI call itself is never skipped.
  */
 import { Anthropic } from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
@@ -34,6 +38,7 @@ import {
   type RecipeExtraction,
 } from '../../../server/ai/extractRecipe.ts';
 import { extractHeroImageUrl } from '../../../server/import/extractHeroImageUrl.ts';
+import { extractJsonLdHint } from '../../../server/import/extractJsonLdHint.ts';
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
 import { secureFetch, SecureFetchError } from '../../../server/import/secureFetch.ts';
@@ -397,12 +402,21 @@ Deno.serve(async (req: Request) => {
       }
 
       const reducedText = reduceHtmlToText(html);
-      if (reducedText.length < MIN_USEFUL_REDUCED_TEXT_LENGTH) {
+      // ADR-0018: schema.org Recipe structured data (JSON-LD), when
+      // present, becomes a sanitized hint prepended to what Claude sees
+      // — never a bypass of the AI call itself (prd.md §8's documented
+      // workflow runs on every import). A page whose visible text is
+      // too thin to clear the usual bar can still be worth extracting
+      // if it has real structured data underneath (a common pattern on
+      // JS-rendered sites that still server-render JSON-LD for SEO).
+      const jsonLdHint = extractJsonLdHint(html);
+      if (reducedText.length < MIN_USEFUL_REDUCED_TEXT_LENGTH && !jsonLdHint) {
         return await fail(422, 'Could not find enough recipe content on this page');
       }
+      const pageText = jsonLdHint ? `${jsonLdHint}\n\n${reducedText}` : reducedText;
 
       try {
-        extraction = await extractRecipe(anthropic, reducedText, { useProductionModels });
+        extraction = await extractRecipe(anthropic, pageText, { useProductionModels });
       } catch (error) {
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
