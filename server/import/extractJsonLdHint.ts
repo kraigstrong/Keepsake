@@ -15,7 +15,7 @@
  * relies on for <head> content reduceHtmlToText also drops.
  *
  * JSON-LD is exactly as untrusted as the rest of the page
- * (threat-model.md T5/T16): a malformed block, a missing/wrong
+ * (threat-model.md T5/T17): a malformed block, a missing/wrong
  * `Recipe` type, or a node with nothing usable in it all resolve to
  * null rather than throwing — the caller falls back to
  * reduceHtmlToText's output alone, same as if this module didn't run.

@@ -8,13 +8,17 @@ import {
   fetchCategories,
   fetchDraft,
   fetchRecipe,
+  type IngredientSection,
   isRecipeConflictError,
+  type Recipe,
   type RecipeDraftPayload,
   type RecipeSavePayload,
   type RecipeSection,
   saveDraft,
   saveRecipe,
 } from './api';
+import { parseQuantity } from '../../server/units/parseQuantity';
+import { parseServings } from '../../server/units/parseServings';
 import {
   getHeroImageUrl,
   pickHeroImage,
@@ -40,6 +44,22 @@ const GROUP_LABELS: Record<CategoryGroup, string> = {
 };
 
 const EMPTY_SECTIONS: RecipeSection[] = [{ title: null, lines: [''] }];
+
+// A loaded recipe's ingredient lines are parsed objects; a draft's are
+// still plain edited text (ADR-0018 — parsing happens once, at the
+// actual save). The editor's own state is always plain text either
+// way, so a fetched recipe's lines collapse back to lineText here.
+// Module-scope and pure (no component state) — kept out of the
+// component body so it's a stable reference, not one recreated (and
+// needing to be re-listed as a hook dependency) on every render.
+function toEditableIngredientSections(
+  sections: IngredientSection[] | RecipeSection[],
+): RecipeSection[] {
+  return sections.map((section) => ({
+    title: section.title,
+    lines: section.lines.map((line) => (typeof line === 'string' ? line : line.lineText)),
+  }));
+}
 
 /**
  * Single screen for both create (no recipeId) and edit (recipeId set) —
@@ -80,7 +100,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
   const [ingredientSections, setIngredientSections] = useState<RecipeSection[]>(EMPTY_SECTIONS);
   const [instructionSections, setInstructionSections] = useState<RecipeSection[]>(EMPTY_SECTIONS);
 
-  function applyFormFields(fields: RecipeDraftPayload) {
+  function applyFormFields(fields: RecipeDraftPayload | Recipe) {
     setTitle(fields.title);
     setHeroImagePath(fields.heroImagePath ?? null);
     setActiveTimeMinutes(fields.activeTimeMinutes?.toString() ?? '');
@@ -92,7 +112,9 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
     setTags(fields.tags);
     setCategoryIds(fields.categoryIds);
     setIngredientSections(
-      fields.ingredientSections.length > 0 ? fields.ingredientSections : EMPTY_SECTIONS,
+      fields.ingredientSections.length > 0
+        ? toEditableIngredientSections(fields.ingredientSections)
+        : EMPTY_SECTIONS,
     );
     setInstructionSections(
       fields.instructionSections.length > 0 ? fields.instructionSections : EMPTY_SECTIONS,
@@ -270,12 +292,16 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         activeTimeMinutes: parseMinutes(activeTimeMinutes),
         totalTimeMinutes: parseMinutes(totalTimeMinutes),
         yieldText: yieldText.trim() || null,
+        servingsCount: parseServings(yieldText.trim() || null),
         permanentNotes: permanentNotes.trim() || null,
         sourceUrl: sourceUrl.trim() || null,
         sourceAttribution: sourceAttribution.trim() || null,
         tags,
         categoryIds,
-        ingredientSections: cleanSections(ingredientSections),
+        ingredientSections: cleanSections(ingredientSections).map((section) => ({
+          title: section.title,
+          lines: section.lines.map(parseQuantity),
+        })),
         instructionSections: cleanSections(instructionSections),
       };
       const { id } = await saveRecipe(payload);

@@ -19,8 +19,8 @@ describe('flattenRecipeForSearch', () => {
     const row = flattenRecipeForSearch(
       recipe({
         ingredientSections: [
-          { title: 'Soup', lines: ['2 tomatoes', '1 onion'] },
-          { title: null, lines: ['salt'] },
+          { title: 'Soup', lines: [{ lineText: '2 tomatoes' }, { lineText: '1 onion' }] },
+          { title: null, lines: [{ lineText: 'salt' }] },
         ],
       }),
       new Map(),
