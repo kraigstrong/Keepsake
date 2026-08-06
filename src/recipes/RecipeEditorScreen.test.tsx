@@ -71,7 +71,20 @@ describe('RecipeEditorScreen — create mode', () => {
         title: 'Herb Roast Chicken',
         categoryIds: ['cat-protein-chicken'],
         tags: ['weeknight'],
-        ingredientSections: [{ title: null, lines: ['1 whole chicken'] }],
+        ingredientSections: [
+          {
+            title: null,
+            lines: [
+              {
+                lineText: '1 whole chicken',
+                quantityMin: 1,
+                quantityMax: 1,
+                unit: null,
+                ingredientText: 'whole chicken',
+              },
+            ],
+          },
+        ],
         instructionSections: [{ title: null, lines: ['Roast it.'] }],
       }),
     );
@@ -156,12 +169,26 @@ describe('RecipeEditorScreen — edit mode', () => {
     activeTimeMinutes: 20,
     totalTimeMinutes: 70,
     yieldText: 'Serves 4',
+    servingsCount: 4,
     permanentNotes: 'Great with potatoes.',
     sourceUrl: 'https://example.com/recipe',
     sourceAttribution: 'Grandma',
     tags: ['weeknight'],
     categoryIds: ['cat-protein-chicken'],
-    ingredientSections: [{ title: null, lines: ['1 whole chicken'] }],
+    ingredientSections: [
+      {
+        title: null,
+        lines: [
+          {
+            lineText: '1 whole chicken',
+            quantityMin: 1,
+            quantityMax: 1,
+            unit: null,
+            ingredientText: 'whole chicken',
+          },
+        ],
+      },
+    ],
     instructionSections: [{ title: null, lines: ['Roast it.'] }],
   };
 

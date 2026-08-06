@@ -37,6 +37,8 @@ import { extractHeroImageUrl } from '../../../server/import/extractHeroImageUrl.
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
 import { secureFetch, SecureFetchError } from '../../../server/import/secureFetch.ts';
+import { parseQuantity } from '../../../server/units/parseQuantity.ts';
+import { parseServings } from '../../../server/units/parseServings.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -464,14 +466,21 @@ Deno.serve(async (req: Request) => {
           activeTimeMinutes: extraction.activeTimeMinutes,
           totalTimeMinutes: extraction.totalTimeMinutes,
           yieldText: extraction.yield,
+          servingsCount: parseServings(extraction.yield),
           permanentNotes: null,
           sourceUrl: finalUrl ?? null,
           sourceAttribution,
           tags: extraction.suggestedTags,
           categoryIds,
+          // Quantity parsing (ADR-0018) runs here too, not just on
+          // manual entry — an AI-extracted ingredient line is still
+          // just text ("2 lb baby potatoes") until this same parser
+          // reads it. A line the AI phrased ambiguously fails safely
+          // the same way a hand-typed one would: every structured
+          // field null, displayed as the extracted text verbatim.
           ingredientSections: extraction.ingredientSections.map((s) => ({
             title: s.heading,
-            lines: s.items,
+            lines: s.items.map(parseQuantity),
           })),
           instructionSections: extraction.instructionSections.map((s) => ({
             title: s.heading,

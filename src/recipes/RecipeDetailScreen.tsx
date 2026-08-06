@@ -2,13 +2,25 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
+import { convertToSystem } from '../../server/units/convertUnit';
+import { formatIngredientLine } from '../../server/units/formatIngredientLine';
+import type { UnitSystem } from '../../server/units/quantityVocabulary';
+import { scaleQuantity } from '../../server/units/scaleQuantity';
+import {
+  type Category,
+  fetchCategories,
+  fetchRecipe,
+  type IngredientSection,
+  type Recipe,
+} from './api';
 import { getHeroImageUrl } from './heroImage';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
+import { fetchProfile } from '../household/api';
+import { useSession } from '../session/SessionProvider';
 import {
   cacheHeroImage,
   readCachedImageUri,
@@ -16,6 +28,35 @@ import {
   readLocalRecipe,
 } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
+
+// ADR-0018: presets are screen-local and reset every visit — a recipe
+// never "remembers" a prior scaling, Original is always one tap away.
+const SCALE_PRESETS: { label: string; multiplier: number }[] = [
+  { label: '½×', multiplier: 0.5 },
+  { label: '1×', multiplier: 1 },
+  { label: '1½×', multiplier: 1.5 },
+  { label: '2×', multiplier: 2 },
+  { label: '3×', multiplier: 3 },
+  { label: '4×', multiplier: 4 },
+];
+
+function scaledIngredientSections(
+  sections: IngredientSection[],
+  multiplier: number,
+  displayMode: 'original' | 'preferred',
+  preferredUnitSystem: UnitSystem | null,
+): { title: string | null; lines: string[] }[] {
+  return sections.map((section) => ({
+    title: section.title,
+    lines: section.lines.map((line) => {
+      let quantity = scaleQuantity(line, multiplier);
+      if (displayMode === 'preferred' && preferredUnitSystem) {
+        quantity = convertToSystem(quantity, preferredUnitSystem);
+      }
+      return formatIngredientLine({ ...line, ...quantity });
+    }),
+  }));
+}
 
 export interface RecipeDetailScreenProps {
   recipeId: string;
@@ -44,12 +85,27 @@ export function RecipeDetailScreen({
   wasDuplicate = false,
 }: RecipeDetailScreenProps) {
   const router = useRouter();
+  const { session } = useSession();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+  // Both screen-local, reset every visit (ADR-0018) — never persisted.
+  const [displayMode, setDisplayMode] = useState<'original' | 'preferred'>('preferred');
+  const [multiplier, setMultiplier] = useState(1);
+  // Resets scaling state when navigating to a different recipe, without a
+  // setState-in-effect render cascade — adjusting state during render
+  // itself (React's own documented pattern for "reset state when a prop
+  // changes") rather than in a useEffect.
+  const [scaleStateRecipeId, setScaleStateRecipeId] = useState(recipeId);
+  if (recipeId !== scaleStateRecipeId) {
+    setScaleStateRecipeId(recipeId);
+    setDisplayMode('preferred');
+    setMultiplier(1);
+  }
   // Crossfades the hero image in over the placeholder once it's ready,
   // rather than an instant swap — the placeholder never unmounts, it
   // just gets covered, so there's no layout jump alongside the fade.
@@ -66,6 +122,18 @@ export function RecipeDetailScreen({
     // not again if the same recipeId is somehow revisited later.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchProfile(userId).then((profile) => {
+      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,11 +226,29 @@ export function RecipeDetailScreen({
     .map((id) => categories.find((category) => category.id === id)?.value)
     .filter((value): value is string => value != null);
 
+  const scaledServings =
+    recipe.servingsCount != null
+      ? Math.max(1, Math.round(recipe.servingsCount * multiplier))
+      : null;
+
   const timingParts = [
     recipe.activeTimeMinutes != null ? `Active ${recipe.activeTimeMinutes} min` : null,
     recipe.totalTimeMinutes != null ? `Total ${recipe.totalTimeMinutes} min` : null,
-    recipe.yieldText,
+    scaledServings != null && multiplier !== 1 ? `Serves ${scaledServings}` : recipe.yieldText,
   ].filter((part): part is string => part != null);
+
+  const displayedIngredientSections = scaledIngredientSections(
+    recipe.ingredientSections,
+    multiplier,
+    displayMode,
+    preferredUnitSystem,
+  );
+
+  function adjustServings(delta: number) {
+    if (!recipe?.servingsCount || scaledServings == null) return;
+    const nextServings = Math.max(1, scaledServings + delta);
+    setMultiplier(nextServings / recipe.servingsCount);
+  }
 
   return (
     <ScrollView
@@ -203,7 +289,60 @@ export function RecipeDetailScreen({
         </View>
       )}
 
-      {recipe.ingredientSections.map((section, sectionIndex) => (
+      <View style={styles.scalingControls} testID="recipe-scaling-controls">
+        <View style={styles.chipRow}>
+          {SCALE_PRESETS.map((preset) => (
+            <Chip
+              key={preset.label}
+              label={preset.label}
+              selected={multiplier === preset.multiplier}
+              onPress={() => setMultiplier(preset.multiplier)}
+              testID={`recipe-scale-preset-${preset.multiplier}`}
+            />
+          ))}
+        </View>
+
+        {scaledServings != null && (
+          <View style={styles.servingsRow} testID="recipe-servings-stepper">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Fewer servings"
+              onPress={() => adjustServings(-1)}
+              testID="recipe-servings-decrement"
+            >
+              <Text style={styles.servingsButton}>−</Text>
+            </Pressable>
+            <Text style={styles.servingsLabel}>{scaledServings} servings</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="More servings"
+              onPress={() => adjustServings(1)}
+              testID="recipe-servings-increment"
+            >
+              <Text style={styles.servingsButton}>+</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {preferredUnitSystem && (
+          <View style={styles.chipRow}>
+            <Chip
+              label="Original"
+              selected={displayMode === 'original'}
+              onPress={() => setDisplayMode('original')}
+              testID="recipe-display-original"
+            />
+            <Chip
+              label="Preferred"
+              selected={displayMode === 'preferred'}
+              onPress={() => setDisplayMode('preferred')}
+              testID="recipe-display-preferred"
+            />
+          </View>
+        )}
+      </View>
+
+      {displayedIngredientSections.map((section, sectionIndex) => (
         <View key={sectionIndex} style={styles.section}>
           <Text style={styles.sectionHeading}>{section.title ?? 'Ingredients'}</Text>
           {section.lines.map((line, lineIndex) => (
@@ -323,6 +462,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
+  },
+  scalingControls: {
+    gap: spacing.sm,
+  },
+  servingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  servingsButton: {
+    ...typography.heading,
+    color: colors.accent,
+    paddingHorizontal: spacing.sm,
+  },
+  servingsLabel: {
+    ...typography.body,
+    color: colors.textPrimary,
   },
   section: {
     gap: spacing.xs,

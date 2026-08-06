@@ -64,12 +64,12 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| UNIT-01 | Original quantity values are always stored | 11 | Not Started |
-| UNIT-02 | Display toggle: Original vs. Preferred (global user preference) | 11 | Not Started |
-| UNIT-03 | Only safe conversions are offered | 11 | Not Started |
-| UNIT-04 | Scaling presets ½×, 1×, 1½×, 2×, 3×, 4× | 11 | Not Started |
-| UNIT-05 | Arbitrary serving count for recipes with servings | 11 | Not Started |
-| UNIT-06 | Kitchen-friendly rounding | 11 | Not Started |
+| UNIT-01 | Original quantity values are always stored | 11 | Done (tested) |
+| UNIT-02 | Display toggle: Original vs. Preferred (global user preference) | 11 | Done (tested) |
+| UNIT-03 | Only safe conversions are offered | 11 | Done (tested) |
+| UNIT-04 | Scaling presets ½×, 1×, 1½×, 2×, 3×, 4× | 11 | Done (tested) |
+| UNIT-05 | Arbitrary serving count for recipes with servings | 11 | Done (tested) |
+| UNIT-06 | Kitchen-friendly rounding | 11 | Done (tested) |
 
 ## Organization (ORG)
 

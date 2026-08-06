@@ -1,3 +1,4 @@
+import type { ParsedIngredientLine } from '../../server/units/parseQuantity';
 import { supabase } from '../supabase/instance';
 
 export interface RecipeSummary {
@@ -5,9 +6,21 @@ export interface RecipeSummary {
   title: string;
 }
 
+// Plain-text lines — instructions always, and ingredients while being
+// edited (ADR-0010: no structured input form; ADR-0018: parsing only
+// happens at the save_recipe call site, not in the editor's own
+// state).
 export interface RecipeSection {
   title: string | null;
   lines: string[];
+}
+
+// A saved/fetched ingredient section: each line carries its parsed
+// quantity fields alongside the original text (ADR-0018). A line the
+// parser couldn't confidently read has every structured field null.
+export interface IngredientSection {
+  title: string | null;
+  lines: ParsedIngredientLine[];
 }
 
 export type CategoryGroup = 'protein' | 'dish_type' | 'preparation';
@@ -32,18 +45,43 @@ export interface Recipe {
   activeTimeMinutes: number | null;
   totalTimeMinutes: number | null;
   yieldText: string | null;
+  // Parsed from yieldText (ADR-0018) — null unless yieldText clearly
+  // names a single serving count. Recipes without one still scale via
+  // the 1/2x-4x presets, just not an arbitrary serving-count stepper.
+  servingsCount: number | null;
   permanentNotes: string | null;
   sourceUrl: string | null;
   sourceAttribution: string | null;
   tags: string[];
   categoryIds: string[];
-  ingredientSections: RecipeSection[];
+  ingredientSections: IngredientSection[];
   instructionSections: RecipeSection[];
 }
 
 export interface RecipeSavePayload {
   id?: string;
   baseVersion?: number;
+  title: string;
+  heroImagePath?: string | null;
+  activeTimeMinutes?: number | null;
+  totalTimeMinutes?: number | null;
+  yieldText?: string | null;
+  servingsCount?: number | null;
+  permanentNotes?: string | null;
+  sourceUrl?: string | null;
+  sourceAttribution?: string | null;
+  tags: string[];
+  categoryIds: string[];
+  ingredientSections: IngredientSection[];
+  instructionSections: RecipeSection[];
+}
+
+// Everything an in-progress edit needs to persist as a draft. Distinct
+// from RecipeSavePayload (rather than an Omit of it) because a draft's
+// ingredient lines are still plain edited text — parsing only happens
+// once, at the actual save_recipe call (ADR-0018) — and servingsCount
+// is derived from yieldText at that same point, not stored mid-edit.
+export interface RecipeDraftPayload {
   title: string;
   heroImagePath?: string | null;
   activeTimeMinutes?: number | null;
@@ -57,12 +95,6 @@ export interface RecipeSavePayload {
   ingredientSections: RecipeSection[];
   instructionSections: RecipeSection[];
 }
-
-// Everything an in-progress edit needs to persist as a draft — same
-// shape as a save, minus the two fields that only make sense for an
-// actual save (id is implied by which draft this is; baseVersion has
-// no meaning for a draft that was never checked against the server).
-export type RecipeDraftPayload = Omit<RecipeSavePayload, 'id' | 'baseVersion'>;
 
 export interface RecipeVersionSummary {
   id: string;
@@ -118,6 +150,12 @@ interface FetchedLine {
   line_text: string;
   sort_order: number;
 }
+interface FetchedIngredientLine extends FetchedLine {
+  quantity_min: number | null;
+  quantity_max: number | null;
+  unit: string | null;
+  ingredient_text: string | null;
+}
 interface FetchedRecipeRow {
   id: string;
   version: number;
@@ -127,11 +165,12 @@ interface FetchedRecipeRow {
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
+  servings_count: number | null;
   permanent_notes: string | null;
   source_url: string | null;
   source_attribution: string | null;
   tags: string[];
-  recipe_ingredient_sections: FetchedSection<FetchedLine>[];
+  recipe_ingredient_sections: FetchedSection<FetchedIngredientLine>[];
   recipe_instruction_sections: FetchedSection<FetchedLine>[];
   recipe_categories: { category_id: string }[];
 }
@@ -145,8 +184,11 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     .from('recipes')
     .select(
       `id, version, title, hero_image_path, original_photo_path, active_time_minutes, total_time_minutes, yield_text,
-       permanent_notes, source_url, source_attribution, tags,
-       recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
+       servings_count, permanent_notes, source_url, source_attribution, tags,
+       recipe_ingredient_sections (
+         title, sort_order,
+         recipe_ingredients ( line_text, quantity_min, quantity_max, unit, ingredient_text, sort_order )
+       ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
        recipe_categories ( category_id )`,
     )
@@ -165,6 +207,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,
+    servingsCount: row.servings_count,
     permanentNotes: row.permanent_notes,
     sourceUrl: row.source_url,
     sourceAttribution: row.source_attribution,
@@ -172,7 +215,13 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     categoryIds: row.recipe_categories.map((c) => c.category_id),
     ingredientSections: bySortOrder(row.recipe_ingredient_sections).map((section) => ({
       title: section.title,
-      lines: bySortOrder(section.recipe_ingredients ?? []).map((line) => line.line_text),
+      lines: bySortOrder(section.recipe_ingredients ?? []).map((line) => ({
+        lineText: line.line_text,
+        quantityMin: line.quantity_min,
+        quantityMax: line.quantity_max,
+        unit: line.unit as ParsedIngredientLine['unit'],
+        ingredientText: line.ingredient_text,
+      })),
     })),
     instructionSections: bySortOrder(row.recipe_instruction_sections).map((section) => ({
       title: section.title,
@@ -192,6 +241,7 @@ export async function saveRecipe(payload: RecipeSavePayload): Promise<{ id: stri
         activeTimeMinutes: payload.activeTimeMinutes ?? null,
         totalTimeMinutes: payload.totalTimeMinutes ?? null,
         yieldText: payload.yieldText ?? null,
+        servingsCount: payload.servingsCount ?? null,
         permanentNotes: payload.permanentNotes ?? null,
         sourceUrl: payload.sourceUrl ?? null,
         sourceAttribution: payload.sourceAttribution ?? null,

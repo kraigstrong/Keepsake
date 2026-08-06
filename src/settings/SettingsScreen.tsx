@@ -2,10 +2,17 @@ import * as Linking from 'expo-linking';
 import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import { Button } from '../components/Button';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
-import { createInvitation, fetchHouseholdMembers, type HouseholdMember } from '../household/api';
+import {
+  createInvitation,
+  fetchHouseholdMembers,
+  fetchProfile,
+  type HouseholdMember,
+  updateProfile,
+} from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
 import { colors, spacing, typography } from '../theme/tokens';
@@ -18,12 +25,15 @@ import { colors, spacing, typography } from '../theme/tokens';
 // keeps working either way, this just adds an alternative for whoever
 // wants one.
 export function SettingsScreen() {
-  const { signOut, setPassword } = useSession();
+  const { session, signOut, setPassword } = useSession();
   const { household } = useHousehold();
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+  const [isSavingUnitSystem, setIsSavingUnitSystem] = useState(false);
 
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -44,6 +54,33 @@ export function SettingsScreen() {
       cancelled = true;
     };
   }, [household]);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchProfile(userId).then((profile) => {
+      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  const handleSetUnitSystem = async (system: UnitSystem) => {
+    const userId = session?.user.id;
+    if (!userId || system === preferredUnitSystem) return;
+    const previous = preferredUnitSystem;
+    setPreferredUnitSystem(system);
+    setIsSavingUnitSystem(true);
+    try {
+      await updateProfile(userId, { preferredUnitSystem: system });
+    } catch {
+      setPreferredUnitSystem(previous);
+    } finally {
+      setIsSavingUnitSystem(false);
+    }
+  };
 
   const handleInvite = async () => {
     setInviteError(null);
@@ -123,6 +160,26 @@ export function SettingsScreen() {
             {inviteError}
           </Text>
         )}
+      </View>
+
+      <Text style={styles.sectionTitle}>Units</Text>
+      <View style={styles.unitSystemSection}>
+        <View style={styles.unitSystemRow} testID="settings-unit-system-row">
+          <Button
+            testID="settings-unit-system-us-customary"
+            title="US Customary"
+            variant={preferredUnitSystem === 'us_customary' ? 'primary' : 'secondary'}
+            onPress={() => handleSetUnitSystem('us_customary')}
+            disabled={isSavingUnitSystem || preferredUnitSystem == null}
+          />
+          <Button
+            testID="settings-unit-system-metric"
+            title="Metric"
+            variant={preferredUnitSystem === 'metric' ? 'primary' : 'secondary'}
+            onPress={() => handleSetUnitSystem('metric')}
+            disabled={isSavingUnitSystem || preferredUnitSystem == null}
+          />
+        </View>
       </View>
 
       <Text style={styles.sectionTitle}>Security</Text>
@@ -216,6 +273,14 @@ const styles = StyleSheet.create({
   inviteSection: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  unitSystemSection: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+  },
+  unitSystemRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
   passwordSection: {

@@ -1,5 +1,5 @@
 import { getDatabase } from '../db/database';
-import type { Category, Recipe, RecipeSection } from '../recipes/api';
+import type { Category, IngredientSection, Recipe, RecipeSection } from '../recipes/api';
 import { defaultImageStore, ensureImageCached, type ImageStore } from './imageCache';
 
 // What Library's sort/filter (Phase 7) needs beyond a bare id/title —
@@ -30,6 +30,7 @@ interface LocalRecipeRow {
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
+  servings_count: number | null;
   permanent_notes: string | null;
   source_url: string | null;
   source_attribution: string | null;
@@ -49,12 +50,13 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,
+    servingsCount: row.servings_count,
     permanentNotes: row.permanent_notes,
     sourceUrl: row.source_url,
     sourceAttribution: row.source_attribution,
     tags: JSON.parse(row.tags) as string[],
     categoryIds: JSON.parse(row.category_ids) as string[],
-    ingredientSections: JSON.parse(row.ingredient_sections) as RecipeSection[],
+    ingredientSections: JSON.parse(row.ingredient_sections) as IngredientSection[],
     instructionSections: JSON.parse(row.instruction_sections) as RecipeSection[],
   };
 }

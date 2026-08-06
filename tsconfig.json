@@ -4,7 +4,14 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "types": ["jest"]
+    "types": ["jest"],
+    // server/units/*.ts files import each other with explicit .ts
+    // extensions (Deno, which bundles the import-recipe Edge Function,
+    // requires it on every local relative import — unlike every other
+    // server/ module so far, this is the first one where files import
+    // each other rather than being self-contained). Safe here since the
+    // base config already sets noEmit: true.
+    "allowImportingTsExtensions": true
   },
   "exclude": [
     "node_modules",

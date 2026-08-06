@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(19);
 
 insert into auth.users (id, email)
 values
@@ -33,6 +33,7 @@ select * from public.save_recipe(
     'activeTimeMinutes', 20,
     'totalTimeMinutes', 70,
     'yieldText', 'Serves 4',
+    'servingsCount', 4,
     'tags', jsonb_build_array('quick', 'weeknight'),
     'categoryIds',
       jsonb_build_array((select id from public.categories where group_name = 'protein' and value = 'Chicken')),
@@ -40,7 +41,16 @@ select * from public.save_recipe(
       jsonb_build_array(
         jsonb_build_object(
           'title', null,
-          'lines', jsonb_build_array('1 whole chicken (4 lb)', '2 lb baby potatoes')
+          'lines', jsonb_build_array(
+            jsonb_build_object(
+              'lineText', '1 whole chicken (4 lb)',
+              'quantityMin', 4, 'quantityMax', 4, 'unit', 'lb', 'ingredientText', 'whole chicken'
+            ),
+            jsonb_build_object(
+              'lineText', 'a pinch of saffron',
+              'quantityMin', null, 'quantityMax', null, 'unit', null, 'ingredientText', null
+            )
+          )
         )
       ),
     'instructionSections',
@@ -62,6 +72,24 @@ select is(
    where ris.recipe_id = (select id from alice_recipe)),
   2,
   'create: both ingredient lines were inserted'
+);
+
+select results_eq(
+  $$ select ri.line_text, ri.quantity_min, ri.quantity_max, ri.unit, ri.ingredient_text
+       from public.recipe_ingredients ri
+       join public.recipe_ingredient_sections ris on ris.id = ri.section_id
+     where ris.recipe_id = (select id from alice_recipe)
+     order by ri.sort_order $$,
+  $$ values
+       ('1 whole chicken (4 lb)'::text, 4::numeric, 4::numeric, 'lb'::text, 'whole chicken'::text),
+       ('a pinch of saffron'::text, null::numeric, null::numeric, null::text, null::text) $$,
+  'create: a parsed line stores structured quantity fields; an unparsed line stores line_text only'
+);
+
+select is(
+  (select servings_count from public.recipes where id = (select id from alice_recipe)),
+  4,
+  'create: servings_count parsed from yieldText was stored'
 );
 
 select is(

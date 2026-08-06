@@ -1,4 +1,4 @@
-import type { RecipeSection } from '../recipes/api';
+import type { IngredientSection, RecipeSection } from '../recipes/api';
 
 // Same flattened shape as recipes/api.ts's Recipe, plus the two columns
 // only sync itself needs (household_id for local scoping, updated_at as
@@ -13,12 +13,13 @@ export interface SyncedRecipe {
   activeTimeMinutes: number | null;
   totalTimeMinutes: number | null;
   yieldText: string | null;
+  servingsCount: number | null;
   permanentNotes: string | null;
   sourceUrl: string | null;
   sourceAttribution: string | null;
   tags: string[];
   categoryIds: string[];
-  ingredientSections: RecipeSection[];
+  ingredientSections: IngredientSection[];
   instructionSections: RecipeSection[];
   createdAt: string;
   updatedAt: string;

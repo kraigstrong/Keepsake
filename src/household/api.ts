@@ -1,3 +1,4 @@
+import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import { supabase } from '../supabase/instance';
 
 /**
@@ -19,6 +20,9 @@ interface CreateInvitationRow {
 export interface Profile {
   id: string;
   displayName: string;
+  // Global unit-system preference (ADR-0018, UNIT-02) — drives the
+  // Original/Preferred toggle on a recipe's detail screen.
+  preferredUnitSystem: UnitSystem;
 }
 
 export interface Household {
@@ -33,20 +37,38 @@ export interface HouseholdMember {
 export async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name')
+    .select('id, display_name, preferred_unit_system')
     .eq('id', userId)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
 
-  return { id: data.id, displayName: data.display_name };
+  return {
+    id: data.id,
+    displayName: data.display_name,
+    preferredUnitSystem: data.preferred_unit_system as UnitSystem,
+  };
 }
 
 export async function createProfile(userId: string, displayName: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')
     .insert({ id: userId, display_name: displayName });
+  if (error) throw error;
+}
+
+// The first UPDATE this app has ever needed against profiles (every
+// prior interaction was fetch/insert-only) — the existing "update own
+// row" RLS policy (Phase 3) already covers it, no RPC needed.
+export async function updateProfile(
+  userId: string,
+  updates: { preferredUnitSystem: UnitSystem },
+): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ preferred_unit_system: updates.preferredUnitSystem })
+    .eq('id', userId);
   if (error) throw error;
 }
 

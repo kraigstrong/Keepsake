@@ -1,3 +1,4 @@
+import type { ParsedIngredientLine } from '../../server/units/parseQuantity';
 import { supabase } from '../supabase/instance';
 import type { Category } from '../recipes/api';
 import { SYNC_PAGE_SIZE, type DeletedRecipeTombstone, type SyncedRecipe } from './types';
@@ -16,6 +17,12 @@ interface FetchedLine {
   line_text: string;
   sort_order: number;
 }
+interface FetchedIngredientLine extends FetchedLine {
+  quantity_min: number | null;
+  quantity_max: number | null;
+  unit: string | null;
+  ingredient_text: string | null;
+}
 interface FetchedRecipeRow {
   id: string;
   household_id: string;
@@ -26,13 +33,14 @@ interface FetchedRecipeRow {
   active_time_minutes: number | null;
   total_time_minutes: number | null;
   yield_text: string | null;
+  servings_count: number | null;
   permanent_notes: string | null;
   source_url: string | null;
   source_attribution: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;
-  recipe_ingredient_sections: FetchedSection<FetchedLine>[];
+  recipe_ingredient_sections: FetchedSection<FetchedIngredientLine>[];
   recipe_instruction_sections: FetchedSection<FetchedLine>[];
   recipe_categories: { category_id: string }[];
 }
@@ -52,6 +60,7 @@ function toSyncedRecipe(row: FetchedRecipeRow): SyncedRecipe {
     activeTimeMinutes: row.active_time_minutes,
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,
+    servingsCount: row.servings_count,
     permanentNotes: row.permanent_notes,
     sourceUrl: row.source_url,
     sourceAttribution: row.source_attribution,
@@ -59,7 +68,13 @@ function toSyncedRecipe(row: FetchedRecipeRow): SyncedRecipe {
     categoryIds: row.recipe_categories.map((c) => c.category_id),
     ingredientSections: bySortOrder(row.recipe_ingredient_sections).map((section) => ({
       title: section.title,
-      lines: bySortOrder(section.recipe_ingredients ?? []).map((line) => line.line_text),
+      lines: bySortOrder(section.recipe_ingredients ?? []).map((line) => ({
+        lineText: line.line_text,
+        quantityMin: line.quantity_min,
+        quantityMax: line.quantity_max,
+        unit: line.unit as ParsedIngredientLine['unit'],
+        ingredientText: line.ingredient_text,
+      })),
     })),
     instructionSections: bySortOrder(row.recipe_instruction_sections).map((section) => ({
       title: section.title,
@@ -85,9 +100,12 @@ export async function fetchChangedRecipes(
 ): Promise<SyncedRecipe[]> {
   let query = supabase.from('recipes').select(
     `id, household_id, version, title, hero_image_path, original_photo_path, active_time_minutes,
-       total_time_minutes, yield_text, permanent_notes, source_url, source_attribution, tags,
+       total_time_minutes, yield_text, servings_count, permanent_notes, source_url, source_attribution, tags,
        created_at, updated_at,
-       recipe_ingredient_sections ( title, sort_order, recipe_ingredients ( line_text, sort_order ) ),
+       recipe_ingredient_sections (
+         title, sort_order,
+         recipe_ingredients ( line_text, quantity_min, quantity_max, unit, ingredient_text, sort_order )
+       ),
        recipe_instruction_sections ( title, sort_order, recipe_instructions ( line_text, sort_order ) ),
        recipe_categories ( category_id )`,
   );
