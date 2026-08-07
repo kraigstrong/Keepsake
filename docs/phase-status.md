@@ -4,11 +4,28 @@ The single source of truth for "where are we." Update this at the start and end 
 
 ## Current
 
-- **Phase:** 11.5 — Import Concurrency and Local Data Isolation
-- **Status:** In progress, branch `phase-11.5-hardening`.
-- **Branch:** `phase-11.5-hardening`, off `main` (Phase 11 merged via [PR #31](https://github.com/kraigstrong/Keepsake/pull/31); JSON-LD extraction hint merged via [PR #32](https://github.com/kraigstrong/Keepsake/pull/32)). Inserted ahead of Phase 12 to close three confirmed defects (ADR-0020) surfaced by code review before more import/sync work stacks on top: the invitation-redemption race (KS-002), non-atomic/unfenced import job finalization (KS-003/KS-004), and unscoped local recipe cache/outbox data (KS-005).
-- **Next action:** Work the commit plan in ADR-0020 — invitation row lock, `finalize_import_job` + claim fencing, household-scoped local reads/outbox — then `security-check` and `exit-phase` before starting Phase 12.
+- **Phase:** 12 — This Week Planning
+- **Status:** Not started.
+- **Branch:** none yet — start from `main` once Phase 11.5's branch is merged. `phase-11.5-hardening` is ready for PR (Conditional Pass, developer decision, 2026-08-06 — see follow-ups below).
+- **Next action:** Push `phase-11.5-hardening`, open its PR, confirm CI runs pgTAP clean for real (the actual missing verification, not a formality — Phase 11's equivalent gap let a real bug through), get it merged, then run `start-phase` for Phase 12.
 - **Blocked on:** Nothing.
+
+## Phase 11.5 Conditional Pass follow-ups (tracked until closed)
+
+Phase 11.5 exited **Conditional Pass** (developer decision, 2026-08-06) — build scope and client-side automated evidence (82 suites/654 passed/1 skipped, typecheck/lint/format clean, `check:client-secrets` clean on every commit) are real and complete, and every SQL migration/RPC change got a careful manual syntax/logic re-review given Phase 11's own precedent of a bug slipping through this exact sandbox limitation. Two things couldn't be verified in this sandboxed environment:
+
+1. **Migrations/pgTAP unexecuted against real Postgres** (no Docker here). New/updated: `20260806090000_invitation_acceptance_fencing.sql`, `20260806100000_import_job_claim_token.sql`, `20260806100100_import_job_fencing_rpcs.sql`, and their corresponding test files (`finalize_import_job.test.sql` new; `import_job_claiming.test.sql`, `import_jobs.test.sql`, `invitation_acceptance_rpc.test.sql` updated). CI's first real run against these is the actual verification step — treat a clean run as a genuine gate, not a formality.
+2. **True two-connection concurrency** (the invitation-redemption race, KS-002; import-claim fencing, KS-004) isn't provable inside pgTAP's single-transaction model. Documented in the test files as a manual staging check (two `psql` sessions racing the same call) rather than claimed as automated — worth actually running once staging is reachable, before considering T18/T19 fully closed.
+
+## Phase 11.5 summary (for reference — see History below once exited)
+
+5 commits on `phase-11.5-hardening`. ADR-0020 resolved three fixes for defects an external code review surfaced (KS-002, KS-003/KS-004, KS-005), inserted as its own phase — following the Phase 3.5 precedent — rather than folded into Phase 12, since none of them belong to a numbered phase's build scope and all three needed closing before more import/sync work stacked on top. KS-001 (a fourth defect from the same review, `original_photo_path` dropped from `save_recipe`'s create branch) turned out to already be fixed — Phase 11's own real-Postgres CI run had independently caught and fixed the identical regression before merge (commit `c5158b3` on PR #31).
+
+`accept_invitation` (Phase 3, already shipped) gained `for update` on its initial invitation lookup — closes a read-check-then-write race where two different users racing the same single-use token could both redeem it. `import-recipe`'s `save_recipe`+`complete_import_job` two-call sequence (a recurring atomicity gap in this codebase — the same bug class as KS-001) is replaced by one call to a new `finalize_import_job`, which calls `save_recipe` directly from inside its own transaction (nested `security definer` calls share the outer transaction, no logic duplicated) so a failure partway through rolls back both together instead of leaving a real recipe paired with a stuck job. `claim_import_job` now generates a `claim_token` fencing value on every claim, checked by `finalize_import_job`/`complete_import_job`/`fail_import_job` alike, so a worker superseded by a reclaim can no longer act on a job it no longer holds; the staleness window moved 60s → 180s since fencing, not the window, is what makes a late completion harmless now.
+
+Local SQLite reads (`offlineRecipes.ts`, and `recipe_fts`/`recipe_trigram` search, which now join back to `recipes` for the first time) are household-scoped, making that filter — not a successful sign-out wipe — the real local-data authorization boundary; `LibraryScreen`/`RecipeDetailScreen` now wait for the live household context before any local read, a deliberate tradeoff over a locally-cached fallback that would reopen a smaller version of the same leak. `import_outbox` (local schema v7) gained a nullable `household_id`, stamped when drained while a household is known — a null value (signed-out capture) preserves Phase 9's existing "submits under whoever signs in next" design unchanged, but a row already stamped for one household can no longer auto-submit under a different one.
+
+Threat-model gained T18 (invitation race), T19 (import finalization atomicity/fencing), T20 (local cross-account data isolation). No PRD requirement ID maps cleanly to any of the three fixes — they're internal correctness/security properties, not new product requirements — so `prd-traceability.md` is unchanged. A `security-check` pass found no blocking findings, explicitly framing KS-005 as client-side defense-in-depth against stale-cache disclosure on a shared/reused device, not a substitute for server-side RLS (unchanged, still the real enforcement boundary). 82 suites, 654 passed, 1 skipped; typecheck/lint/format clean; `check:client-secrets` clean on every commit. Migrations/pgTAP unexecuted until real CI runs them (no Docker in this environment) — see Conditional Pass follow-ups above.
 
 ## Phase 11 Conditional Pass follow-ups (tracked until closed)
 
