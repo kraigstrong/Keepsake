@@ -10,6 +10,7 @@ function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
     createdAt: '2026-01-01T00:00:00.000Z',
     categoryIds: [],
     tags: [],
+    plannedCount: 0,
     ...overrides,
   };
 }
@@ -56,6 +57,63 @@ describe('sortRecipes: smart', () => {
       recipe({ id: 'r2', title: 'Chili', createdAt: '2020-01-01T00:00:00.000Z' }),
     ];
     expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['r2', 'r1']);
+  });
+
+  it('puts frequently-selected recipes (planned > 0) ahead of everything but recently-added', () => {
+    const recipes = [
+      recipe({ id: 'never-planned', title: 'Aardvark Stew', createdAt: '2020-01-01T00:00:00.000Z' }),
+      recipe({
+        id: 'planned',
+        title: 'Zucchini Bread',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 3,
+      }),
+    ];
+    // "planned" is alphabetically after "never-planned" and neither is
+    // recently added, but a planned_count > 0 still outranks it.
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['planned', 'never-planned']);
+  });
+
+  it('orders the frequently-selected tier by planned count descending, ties alphabetically', () => {
+    const recipes = [
+      recipe({
+        id: 'a',
+        title: 'B Recipe',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 2,
+      }),
+      recipe({
+        id: 'b',
+        title: 'A Recipe',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 5,
+      }),
+      recipe({
+        id: 'c',
+        title: 'A Tie',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 2,
+      }),
+    ];
+    // b (5) leads; a and c tie at 2, broken alphabetically by title
+    // ("A Tie" < "B Recipe"), so c comes before a.
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('keeps a recently-added recipe in the recently-added tier even if it has also been planned', () => {
+    const recipes = [
+      recipe({
+        id: 'new-and-planned',
+        title: 'Zucchini Bread',
+        createdAt: '2026-08-10T00:00:00.000Z',
+        plannedCount: 10,
+      }),
+      recipe({ id: 'old-unplanned', title: 'Aardvark Stew', createdAt: '2020-01-01T00:00:00.000Z' }),
+    ];
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual([
+      'new-and-planned',
+      'old-unplanned',
+    ]);
   });
 
   it('treats a recipe created exactly 2 weeks ago as still within the window', () => {

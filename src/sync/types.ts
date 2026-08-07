@@ -14,6 +14,10 @@ export interface SyncedRecipe {
   totalTimeMinutes: number | null;
   yieldText: string | null;
   servingsCount: number | null;
+  // FREQ-01 / ADR-0021: cumulative count of confirmed weekly plans this
+  // recipe has appeared in — Library's Smart sort reads this for its
+  // Frequently Selected tier.
+  plannedCount: number;
   permanentNotes: string | null;
   sourceUrl: string | null;
   sourceAttribution: string | null;
