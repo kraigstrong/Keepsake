@@ -1,3 +1,14 @@
+-- ADR-0020 (Phase 11.5): accept_invitation now takes `for update` on its
+-- initial select, closing a read-check-then-write race where two
+-- different users could both redeem the same single-use token
+-- concurrently. That's a genuine two-connection race and isn't
+-- expressible inside one pgTAP script (a single transaction can't
+-- observe its own lock blocking a concurrent session) -- the
+-- assertions below cover the unchanged sequential/idempotent-retry
+-- logic; the concurrent-redemption property itself needs a manual
+-- staging check (two psql sessions racing accept_invitation for the
+-- same token, confirming exactly one succeeds) rather than a claim
+-- this suite alone proves it.
 begin;
 
 select plan(10);

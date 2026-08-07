@@ -39,16 +39,20 @@ function toResults(rows: SearchRow[]): SearchResult[] {
  * from analytics by default" privacy requirement) so a real regression
  * at real-world library sizes is observable in production.
  */
-export async function searchRecipes(query: string, limit = 20): Promise<SearchResult[]> {
+export async function searchRecipes(
+  query: string,
+  householdId: string,
+  limit = 20,
+): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (trimmed.length === 0) return [];
 
   const startedAt = Date.now();
   const db = await getDatabase();
 
-  const title = buildTitleMatchQuery(trimmed, limit);
-  const ingredients = buildIngredientsMatchQuery(trimmed, limit);
-  const everything = buildEverythingMatchQuery(trimmed, limit);
+  const title = buildTitleMatchQuery(trimmed, householdId, limit);
+  const ingredients = buildIngredientsMatchQuery(trimmed, householdId, limit);
+  const everything = buildEverythingMatchQuery(trimmed, householdId, limit);
 
   const [titleRows, ingredientRows, everythingRows] = await Promise.all([
     db.getAllAsync<SearchRow>(title.sql, title.params),
@@ -61,7 +65,7 @@ export async function searchRecipes(query: string, limit = 20): Promise<SearchRe
   if (merged.length > 0) {
     results = toResults(merged);
   } else {
-    const fuzzy = buildFuzzyMatchQuery(trimmed, limit);
+    const fuzzy = buildFuzzyMatchQuery(trimmed, householdId, limit);
     const fuzzyRows = await db.getAllAsync<SearchRow>(fuzzy.sql, fuzzy.params);
     results = toResults(fuzzyRows);
   }

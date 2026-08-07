@@ -19,6 +19,7 @@ export interface OutboxItem {
   status: OutboxStatus;
   serverJobId: string | null;
   errorMessage: string | null;
+  householdId: string | null;
 }
 
 interface OutboxRow {
@@ -28,6 +29,7 @@ interface OutboxRow {
   status: OutboxStatus;
   server_job_id: string | null;
   error_message: string | null;
+  household_id: string | null;
 }
 
 function fromRow(row: OutboxRow): OutboxItem {
@@ -38,6 +40,7 @@ function fromRow(row: OutboxRow): OutboxItem {
     status: row.status,
     serverJobId: row.server_job_id,
     errorMessage: row.error_message,
+    householdId: row.household_id,
   };
 }
 
@@ -48,16 +51,30 @@ function fromRow(row: OutboxRow): OutboxItem {
  * deleted — on conflict do nothing makes seeing it again safe, which is
  * exactly what makes that commit-before-delete ordering safe
  * (durable-import-submission.md decision 2).
+ *
+ * ADR-0020 (Phase 11.5): householdId is whatever household (if any) is
+ * currently signed in at drain time — null when captured/drained while
+ * signed out, which is the common, expected case for a Share-Extension
+ * capture (ADR-0016 decision 1: it must survive until sign-in). A null
+ * household_id keeps today's behavior unchanged (submits under
+ * whichever household signs in next); a stamped one is what lets
+ * submitPendingOutboxItems refuse to submit it under a *different*
+ * household later (a device signed into household A, then B).
  */
-export async function insertOutboxItemIfNew(db: LocalDb, share: SharedImport): Promise<void> {
+export async function insertOutboxItemIfNew(
+  db: LocalDb,
+  share: SharedImport,
+  householdId: string | null,
+): Promise<void> {
   const now = new Date().toISOString();
   await db.runAsync(
-    `insert into import_outbox (id, url, received_at, status, created_at, updated_at)
-     values (?, ?, ?, 'pending', ?, ?)
+    `insert into import_outbox (id, url, received_at, status, household_id, created_at, updated_at)
+     values (?, ?, ?, 'pending', ?, ?, ?)
      on conflict (id) do nothing`,
     share.id,
     share.url,
     new Date(share.receivedAt).toISOString(),
+    householdId,
     now,
     now,
   );
@@ -72,11 +89,25 @@ export async function insertOutboxItemIfNew(db: LocalDb, share: SharedImport): P
  * excluded: a definitive negative answer from the server is terminal
  * for this automatic engine, not silently retried forever. Oldest
  * first, so a backlog drains in the order it was captured.
+ *
+ * ADR-0020: also excludes any row already stamped with a *different*
+ * household_id than the caller's — a share captured/drained under one
+ * household must never auto-submit under a different one that later
+ * signs in on the same device. An unstamped (null) row is untouched by
+ * this filter, preserving the existing "submits under whichever
+ * household signs in next" behavior for a genuinely signed-out capture.
  */
-export async function listSubmittableOutboxItems(db: LocalDb): Promise<OutboxItem[]> {
+export async function listSubmittableOutboxItems(
+  db: LocalDb,
+  householdId: string,
+): Promise<OutboxItem[]> {
   const rows = await db.getAllAsync<OutboxRow>(
-    `select id, url, received_at, status, server_job_id, error_message
-     from import_outbox where status in ('pending', 'submitting') order by received_at asc`,
+    `select id, url, received_at, status, server_job_id, error_message, household_id
+     from import_outbox
+     where status in ('pending', 'submitting')
+       and (household_id is null or household_id = ?)
+     order by received_at asc`,
+    householdId,
   );
   return rows.map(fromRow);
 }

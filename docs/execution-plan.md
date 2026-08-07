@@ -984,6 +984,44 @@ The quantity fixture corpus passes and displayed values are practical and trustw
 
 ---
 
+# Phase 11.5 — Import Concurrency and Local Data Isolation
+
+## Objective
+
+Close three confirmed correctness/security defects surfaced by code review (ADR-0020) before Phase 12 stacks more work on top of the import pipeline and local sync model: an invitation token that isn't actually single-use under concurrency, an import job whose recipe-save and completion aren't atomic (and whose claim has no fencing against a stale worker), and local cached data/outbox entries that aren't scoped by household — so a wipe failure or a different account signing in on the same device can expose or auto-submit another account's data.
+
+This phase retrofits safety onto existing, already-shipped mechanisms — it does not change what any of them do from a product perspective. No new screens, no new user-facing behavior beyond error messages staying correct under conditions that were previously silently wrong.
+
+## Build scope
+
+- `accept_invitation`: row-locked, genuinely single-winner redemption
+- `import_jobs`: `claim_token` fencing column; `claim_import_job` generates and returns it
+- New `finalize_import_job` RPC: `save_recipe` + job completion in one transaction
+- `fail_import_job` and the duplicate-URL `complete_import_job` path: `claim_token` check
+- `import-recipe/index.ts`: updated to the fenced, atomic finalization flow
+- Local recipe/category reads (`offlineRecipes.ts`): filtered by current household
+- `import_outbox`: nullable `household_id`, stamped on drain, gates auto-submission
+- Signed-out-capture adoption policy on next sign-in
+
+## Security validation
+
+- Two concurrent `accept_invitation` calls for the same token: exactly one succeeds
+- A `finalize_import_job`/`fail_import_job` call with a superseded `claim_token` is rejected
+- A `finalize_import_job` failure partway through leaves the job `processing`, not half-completed, and never produces a second recipe for one job
+- Household-A local recipe rows are unreadable after household-B signs in, even with a forced wipe failure
+- Household-A outbox entries do not auto-submit under household-B
+- A signed-out-captured outbox entry follows the adoption policy, not silent auto-submit or silent loss
+
+## Exit gate
+
+All three defects have a pgTAP or Jest test proving the fix, existing test suites for the touched RPCs/modules stay green, and the true-concurrency cases (invitation race, job fencing) are either provable in CI's real-Postgres run or explicitly flagged as a manual staging verification step rather than claimed as automated.
+
+## Non-goals
+
+No heartbeat-based lease renewal for import claims (fencing token plus a conservative static window is judged sufficient at this app's scale — see ADR-0020 "Alternatives considered"). No household-namespacing of `cached_images` or `import_batches` (not load-bearing — see the same ADR). No rate-limit atomicity, error-message sanitization, or other P1/P2 findings from the same review — tracked separately, out of scope here.
+
+---
+
 # Phase 12 — This Week Planning
 
 ## Objective

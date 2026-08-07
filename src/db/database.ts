@@ -63,9 +63,15 @@ export function getDatabase(): Promise<SQLiteDatabase> {
 // file, so import_outbox (Phase 9) survives sign-out — an unsent Share
 // Extension submission is the only copy of that share until the server
 // confirms it, unlike everything else here, which is a rebuildable
-// server mirror. Not a per-household filtered delete — MVP is one
-// household per user (ADR-0004), so there's never a second household's
-// cache to preserve.
+// server mirror. Best-effort cleanup, not the authorization boundary
+// (ADR-0020, Phase 11.5): a wipe failure here used to mean a different
+// account signing in next could read the previous one's cached recipes
+// outright, since reads were never filtered by household either. Reads
+// are now household-scoped (src/sync/offlineRecipes.ts,
+// src/search/buildSearchQuery.ts) so a failed wipe leaves stale,
+// unreadable rows behind rather than a real leak — this wipe is what
+// keeps local storage tidy, not what keeps one account's data out of
+// another's view.
 const RECIPE_MIRROR_TABLES = [
   'recipes',
   'categories',

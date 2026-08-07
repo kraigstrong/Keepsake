@@ -1,0 +1,11 @@
+-- ADR-0020 (Phase 11.5): claim_import_job (Phase 9 follow-up,
+-- 20260805120000_import_job_claiming.sql, already shipped) only ever
+-- recorded *when* a job was claimed, never *by which claim* — so a
+-- worker whose claim had since been superseded by a reclaim (its own
+-- request stalled past the staleness window, then a second caller
+-- reclaimed and started its own pipeline run) could still successfully
+-- call complete_import_job/fail_import_job on a job it no longer
+-- owned, racing the new claimant's own completion. claim_token is the
+-- fencing value that closes that gap: generated fresh on every
+-- successful claim, required by every RPC that can close out a job.
+alter table public.import_jobs add column claim_token uuid;

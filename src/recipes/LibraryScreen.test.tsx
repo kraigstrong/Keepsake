@@ -106,13 +106,14 @@ it('syncs in the background without surfacing an error when the sync itself fail
   await waitFor(() => expect(mockedSyncHousehold).toHaveBeenCalledWith('h1'));
 });
 
-it('does not attempt to sync when there is no household yet', async () => {
+it('does not read local data or attempt to sync when there is no household yet (ADR-0020: local reads are household-scoped)', async () => {
   mockedUseHousehold.mockReturnValue({ household: null });
   mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
   await render(<LibraryScreen />);
 
-  await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+  await waitFor(() => expect(screen.getByTestId('library-loading')).toBeTruthy());
+  expect(mockedReadLocalLibraryRecipes).not.toHaveBeenCalled();
   expect(mockedSyncHousehold).not.toHaveBeenCalled();
 });
 
@@ -204,7 +205,7 @@ describe('search', () => {
 
     fireEvent.changeText(screen.getByTestId('library-search-input'), 'chick');
 
-    await waitFor(() => expect(mockedSearchRecipes).toHaveBeenCalledWith('chick'), {
+    await waitFor(() => expect(mockedSearchRecipes).toHaveBeenCalledWith('chick', 'h1'), {
       timeout: 2000,
     });
     await waitFor(() => expect(screen.getByText('Chicken Tikka')).toBeTruthy(), { timeout: 2000 });

@@ -28,6 +28,15 @@
  * ADR-0019 adds a JSON-LD structured-data hint to the URL path: when a
  * page's own schema.org Recipe markup is found, it's prepended to the
  * reduced text handed to Claude — the AI call itself is never skipped.
+ *
+ * ADR-0020 (Phase 11.5): claim_import_job now returns a claim_token
+ * that every RPC able to close out a job (finalize_import_job,
+ * complete_import_job, fail_import_job) must present and that gets
+ * checked against the job's current claim — a worker whose claim has
+ * since been superseded by a reclaim can no longer act on the job. The
+ * AI-extraction path's save_recipe + complete_import_job two-call
+ * sequence is also gone, replaced by one call to finalize_import_job,
+ * which does both inside a single transaction.
  */
 import { Anthropic } from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
@@ -63,6 +72,7 @@ interface ImportJobRow {
   recipe_id: string | null;
   duplicate_of_recipe_id: string | null;
   error_message: string | null;
+  claim_token: string | null;
 }
 
 interface CategoryRow {
@@ -288,7 +298,15 @@ Deno.serve(async (req: Request) => {
   }
 
   async function fail(status: number, message: string): Promise<Response> {
-    await supabase.rpc('fail_import_job', { job_id: job.id, error_message: message });
+    // ADR-0020: claim_token proves this call still holds the claim it
+    // was given — a worker whose claim has since been superseded by a
+    // reclaim can no longer mark the job failed out from under the new
+    // claimant.
+    await supabase.rpc('fail_import_job', {
+      job_id: job.id,
+      claim_token: job.claim_token,
+      error_message: message,
+    });
     return jsonResponse({ jobId: job.id, error: message }, status);
   }
 
@@ -315,6 +333,7 @@ Deno.serve(async (req: Request) => {
           const { data: completed, error } = await supabase
             .rpc('complete_import_job', {
               job_id: job.id,
+              claim_token: job.claim_token,
               recipe_id: existing.id,
               duplicate_of_recipe_id: existing.id,
             })
@@ -471,9 +490,18 @@ Deno.serve(async (req: Request) => {
 
     const sourceAttribution = finalUrl ? new URL(finalUrl).hostname : null;
 
-    const { data: recipe, error: saveError } = await supabase
-      .rpc('save_recipe', {
-        payload: {
+    // ADR-0020: save_recipe and closing out the job used to be two
+    // independent RPCs here — if the first succeeded and the second
+    // failed (or the process died in between), a real recipe existed
+    // while the job stayed 'processing' forever, reclaimable and
+    // reprocessable. finalize_import_job runs both in one transaction
+    // (and checks claim_token), so they now commit or roll back
+    // together.
+    const { data: finalizedJob, error: finalizeError } = await supabase
+      .rpc('finalize_import_job', {
+        job_id: job.id,
+        claim_token: job.claim_token,
+        recipe_payload: {
           title: extraction.title,
           heroImagePath,
           originalPhotoPath,
@@ -504,22 +532,16 @@ Deno.serve(async (req: Request) => {
       })
       .single();
 
-    if (saveError || !recipe) {
-      return await fail(502, saveError?.message ?? 'Could not save the imported recipe');
+    if (finalizeError || !finalizedJob) {
+      return await fail(502, finalizeError?.message ?? 'Could not save the imported recipe');
     }
 
-    const savedRecipe = recipe as { id: string };
-    const { error: completeError } = await supabase
-      .rpc('complete_import_job', { job_id: job.id, recipe_id: savedRecipe.id })
-      .single();
-    if (completeError) {
-      return jsonResponse({ jobId: job.id, error: completeError.message }, 500);
-    }
+    const finalized = finalizedJob as ImportJobRow;
 
     return jsonResponse(
       {
         jobId: job.id,
-        recipeId: savedRecipe.id,
+        recipeId: finalized.recipe_id ?? undefined,
         duplicate: false,
         uncertainFields: extraction.uncertainFields,
       },
