@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
 import { Button } from '../components/Button';
@@ -8,7 +8,7 @@ import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
 import { colors, radii, spacing, typography } from '../theme/tokens';
-import { addRecipeToThisWeek } from './api';
+import { addRecipesToThisWeek } from './api';
 
 // Same "typical household" default RecipeDetailScreen falls back to
 // when a recipe has no parseable serving count — this flow has no
@@ -74,31 +74,27 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     }));
   }
 
-  // Sequential, not Promise.all — add_to_weekly_plan computes each
-  // entry's position from the current max at call time, so concurrent
-  // calls could race and land in an inconsistent order; sequential
-  // awaits guarantee the added order matches the list the user just
-  // reviewed.
+  // One batch RPC call, not a client-side loop (Codex review, PR #36):
+  // the previous sequential-per-recipe approach left a partially-applied
+  // selection on a mid-loop failure, and retrying it risked duplicating
+  // whichever recipes had already succeeded. add_recipes_to_weekly_plan
+  // validates and inserts the whole selection in one transaction — it's
+  // all or nothing, so there's no partial state to reconcile on retry.
   async function handleSubmit() {
     setIsSubmitting(true);
-    let addedCount = 0;
     try {
-      for (const id of selectedIds) {
-        await addRecipeToThisWeek(planId, id, servingsById[id] ?? DEFAULT_SERVINGS);
-        addedCount += 1;
-      }
+      await addRecipesToThisWeek(
+        planId,
+        selectedIds.map((id) => ({ recipeId: id, servings: servingsById[id] ?? DEFAULT_SERVINGS })),
+      );
       showToast(
-        addedCount === 1
+        selectedIds.length === 1
           ? 'Added 1 recipe to This Week'
-          : `Added ${addedCount} recipes to This Week`,
+          : `Added ${selectedIds.length} recipes to This Week`,
       );
       router.back();
     } catch {
-      showToast(
-        addedCount > 0
-          ? `Added ${addedCount} of ${selectedIds.length} before running into a problem`
-          : "Couldn't add those recipes",
-      );
+      showToast("Couldn't add those recipes");
     } finally {
       setIsSubmitting(false);
     }
@@ -147,7 +143,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
                 clearButtonMode="while-editing"
                 testID="add-to-this-week-search"
               />
-              <View style={styles.list}>
+              <ScrollView style={styles.list}>
                 {visibleRecipes.map((recipe) => {
                   const selected = selectedIds.includes(recipe.id);
                   return (
@@ -168,7 +164,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
                     </Pressable>
                   );
                 })}
-              </View>
+              </ScrollView>
             </>
           )}
           <View style={styles.footer}>
@@ -182,7 +178,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
         </>
       ) : (
         <>
-          <View style={styles.list}>
+          <ScrollView style={styles.list}>
             {selectedRecipes.map((recipe) => (
               <View
                 key={recipe.id}
@@ -217,7 +213,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
                 </View>
               </View>
             ))}
-          </View>
+          </ScrollView>
           <View style={styles.footer}>
             <Button
               title="Add to This Week"

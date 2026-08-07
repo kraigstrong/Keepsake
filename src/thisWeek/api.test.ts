@@ -1,4 +1,5 @@
 import {
+  addRecipesToThisWeek,
   addRecipeToThisWeek,
   confirmThisWeek,
   fetchCurrentWeeklyPlan,
@@ -96,6 +97,19 @@ describe('mutations', () => {
       plan_id: 'plan-1',
       recipe_id: 'recipe-1',
       servings: 4,
+    });
+  });
+
+  it('addRecipesToThisWeek calls add_recipes_to_weekly_plan with parallel arrays', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+    await addRecipesToThisWeek('plan-1', [
+      { recipeId: 'r1', servings: 4 },
+      { recipeId: 'r2', servings: 2 },
+    ]);
+    expect(mockedRpc).toHaveBeenCalledWith('add_recipes_to_weekly_plan', {
+      plan_id: 'plan-1',
+      recipe_ids: ['r1', 'r2'],
+      servings_list: [4, 2],
     });
   });
 

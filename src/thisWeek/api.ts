@@ -82,6 +82,29 @@ export async function addRecipeToThisWeek(
   if (error) throw new Error(error.message);
 }
 
+export interface ThisWeekSelection {
+  recipeId: string;
+  servings: number;
+}
+
+// Batch counterpart of addRecipeToThisWeek — one atomic RPC call for the
+// whole reviewed selection (Codex review, PR #36), not a client-side
+// loop: a mid-loop failure used to leave a partially-applied selection
+// that could duplicate entries on retry. Parallel arrays match
+// add_recipes_to_weekly_plan's own parameter shape (PostgREST has no
+// array-of-objects RPC parameter type).
+export async function addRecipesToThisWeek(
+  planId: string,
+  selections: ThisWeekSelection[],
+): Promise<void> {
+  const { error } = await supabase.rpc('add_recipes_to_weekly_plan', {
+    plan_id: planId,
+    recipe_ids: selections.map((s) => s.recipeId),
+    servings_list: selections.map((s) => s.servings),
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function reorderThisWeek(planId: string, orderedEntryIds: string[]): Promise<void> {
   const { error } = await supabase.rpc('reorder_planning_entries', {
     plan_id: planId,

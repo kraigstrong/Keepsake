@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   addRecipeToThisWeek,
@@ -343,15 +343,15 @@ export function ThisWeekScreen() {
             testID="this-week-placeholder"
           />
         ) : isConfirmed ? (
-          <View testID="this-week-confirmed-list">
+          <ScrollView testID="this-week-confirmed-list">
             {plan.entries.map((entry) => renderConfirmedItem(entry))}
-          </View>
+          </ScrollView>
         ) : (
-          <View testID="this-week-planning-list">
+          <ScrollView testID="this-week-planning-list">
             {plan.entries.map((item, index) =>
               renderPlanningItem(item, index, plan.entries.length),
             )}
-          </View>
+          </ScrollView>
         )}
       </View>
 

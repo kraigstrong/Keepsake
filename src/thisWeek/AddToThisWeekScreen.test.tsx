@@ -32,7 +32,7 @@ beforeEach(() => {
     { id: 'r1', title: 'Herb Roast Chicken' },
     { id: 'r2', title: 'Tacos' },
   ]);
-  mockedThisWeekApi.addRecipeToThisWeek.mockResolvedValue(undefined);
+  mockedThisWeekApi.addRecipesToThisWeek.mockResolvedValue(undefined);
 });
 
 it('shows an error state when recipes fail to load', async () => {
@@ -101,7 +101,7 @@ it('going back from the servings step preserves the selection', async () => {
   );
 });
 
-it('submits each selected recipe at its chosen servings, in order, then navigates back', async () => {
+it('submits the whole selection in one batch call, then navigates back', async () => {
   await renderScreen();
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
@@ -112,17 +112,16 @@ it('submits each selected recipe at its chosen servings, in order, then navigate
   await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));
 
   await waitFor(() => expect(back).toHaveBeenCalled());
-  expect(mockedThisWeekApi.addRecipeToThisWeek.mock.calls).toEqual([
-    ['plan-1', 'r1', 4],
-    ['plan-1', 'r2', 5],
+  expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledTimes(1);
+  expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledWith('plan-1', [
+    { recipeId: 'r1', servings: 4 },
+    { recipeId: 'r2', servings: 5 },
   ]);
   expect(screen.getByText('Added 2 recipes to This Week')).toBeTruthy();
 });
 
-it('reports a partial failure without navigating back', async () => {
-  mockedThisWeekApi.addRecipeToThisWeek
-    .mockResolvedValueOnce(undefined)
-    .mockRejectedValueOnce(new Error('boom'));
+it('reports a failure without navigating back — the batch is all-or-nothing, no partial state to describe', async () => {
+  mockedThisWeekApi.addRecipesToThisWeek.mockRejectedValue(new Error('boom'));
 
   await renderScreen();
 
@@ -132,9 +131,7 @@ it('reports a partial failure without navigating back', async () => {
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));
 
-  await waitFor(() =>
-    expect(screen.getByText('Added 1 of 2 before running into a problem')).toBeTruthy(),
-  );
+  await waitFor(() => expect(screen.getByText("Couldn't add those recipes")).toBeTruthy());
   expect(back).not.toHaveBeenCalled();
 });
 
@@ -145,5 +142,5 @@ it('Cancel on the select step navigates back without adding anything', async () 
   await fireEvent.press(screen.getByTestId('add-to-this-week-back'));
 
   expect(back).toHaveBeenCalled();
-  expect(mockedThisWeekApi.addRecipeToThisWeek).not.toHaveBeenCalled();
+  expect(mockedThisWeekApi.addRecipesToThisWeek).not.toHaveBeenCalled();
 });
