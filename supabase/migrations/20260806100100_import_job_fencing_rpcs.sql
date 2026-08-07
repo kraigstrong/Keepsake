@@ -4,6 +4,23 @@
 -- merges save_recipe and job completion into one transaction so a
 -- failure between them can never leave a real recipe paired with a
 -- job stuck 'processing' forever.
+--
+-- DEPLOY ORDER (Codex review, PR #33): redeploy the import-recipe Edge
+-- Function BEFORE applying this migration, not after. complete_import_job
+-- and fail_import_job's old signatures are dropped below -- if this
+-- migration lands first while the OLD function is still serving
+-- requests, an in-flight request that already ran save_recipe under the
+-- old two-call flow would find complete_import_job(job_id, recipe_id)
+-- gone, reproducing the exact orphaned-recipe/stuck-job bug this
+-- migration exists to fix, and the old fail_import_job call silently
+-- errors too (the old fail() helper never checked its result). Deploying
+-- the function first is safe in the other direction: its only
+-- completion path becomes finalize_import_job, which simply doesn't
+-- exist yet -- a clean "function does not exist" error, no recipe
+-- created, job stays 'processing' and self-heals via reclaim once this
+-- migration lands. No RPC versioning scheme is used to soften this --
+-- deploys here are manual, developer-triggered, and low-traffic enough
+-- that "redeploy the function first" is the whole mitigation.
 
 -- claim_import_job: now generates and returns a fresh claim_token on
 -- every successful claim, and the staleness window moves from 60s to
@@ -200,7 +217,14 @@ begin
     raise exception 'import job claim no longer held' using errcode = 'P0001';
   end if;
 
-  select public.save_recipe(recipe_payload) into result_recipe;
+  -- Composite-returning function call as a bare scalar expression in
+  -- SELECT INTO does not decompose column-by-column -- Postgres crams
+  -- the whole stringified tuple into result_recipe's first field
+  -- (id, a uuid) and fails to parse it. `select * from func() into
+  -- row_var` (function as a FROM-clause row source) is the correct
+  -- idiom, matching every other composite-capturing call in this
+  -- codebase (e.g. create_import_job's own call sites).
+  select * into result_recipe from public.save_recipe(recipe_payload);
 
   update public.import_jobs set
     status = 'complete',
