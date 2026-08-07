@@ -14,6 +14,7 @@ import {
   type Recipe,
 } from './api';
 import { getHeroImageUrl } from './heroImage';
+import { Button } from '../components/Button';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
@@ -29,6 +30,13 @@ import {
   readLocalRecipe,
 } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
+import { addRecipeToThisWeek, fetchCurrentWeeklyPlan } from '../thisWeek/api';
+
+// A recipe whose yield doesn't parse to a serving count (free text like
+// "1 loaf") still needs some positive servings value to plan with —
+// this default is the same "typical household" assumption the design
+// doc's own seed recipes use throughout ("Serves 4").
+const DEFAULT_SERVINGS_WHEN_UNKNOWN = 4;
 
 // ADR-0018: presets are screen-local and reset every visit — a recipe
 // never "remembers" a prior scaling, Original is always one tap away.
@@ -259,6 +267,23 @@ export function RecipeDetailScreen({
     setMultiplier(nextServings / recipe.servingsCount);
   }
 
+  // Adds at whatever serving count is currently on screen (WEEK-02's
+  // "choose servings" step is already satisfied by this screen's own
+  // scaler — no separate servings step needed for this entry point,
+  // developer decision 2026-08-07). get_or_create_current_weekly_plan is
+  // idempotent, so resolving the current plan here rather than caching
+  // it is cheap and always correct even if the household's current week
+  // rolled over since this screen loaded.
+  async function handleAddToThisWeek() {
+    try {
+      const plan = await fetchCurrentWeeklyPlan();
+      await addRecipeToThisWeek(plan.id, recipeId, scaledServings ?? DEFAULT_SERVINGS_WHEN_UNKNOWN);
+      showToast('Added to This Week');
+    } catch {
+      showToast("Couldn't add to This Week");
+    }
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -427,6 +452,12 @@ export function RecipeDetailScreen({
           </Pressable>
         )}
       </View>
+
+      <Button
+        title="Add to This Week"
+        onPress={handleAddToThisWeek}
+        testID="recipe-detail-add-to-this-week"
+      />
     </ScrollView>
   );
 }

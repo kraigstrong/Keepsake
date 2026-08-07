@@ -10,6 +10,7 @@ import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
 import * as offlineRecipes from '../sync/offlineRecipes';
+import * as thisWeekApi from '../thisWeek/api';
 
 function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
   return render(
@@ -25,6 +26,7 @@ jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../sync/offlineRecipes');
+jest.mock('../thisWeek/api');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
@@ -37,6 +39,7 @@ const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
 const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes>;
+const mockedThisWeekApi = thisWeekApi as jest.Mocked<typeof thisWeekApi>;
 const mockedUseRouter = useRouter as jest.Mock;
 
 const push = jest.fn();
@@ -104,6 +107,12 @@ beforeEach(() => {
   mockedOfflineRecipes.cacheHeroImage.mockImplementation(
     async (_heroImagePath, signedUrl) => signedUrl,
   );
+  mockedThisWeekApi.fetchCurrentWeeklyPlan.mockResolvedValue({
+    id: 'plan-1',
+    status: 'planning',
+    entries: [],
+  });
+  mockedThisWeekApi.addRecipeToThisWeek.mockResolvedValue(undefined);
   jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
 });
 
@@ -321,4 +330,46 @@ it('shows no toast when navigated to normally (not from an import)', async () =>
 
   expect(screen.queryByText('Recipe imported')).toBeNull();
   expect(screen.queryByText('Already in your library')).toBeNull();
+});
+
+it('adds the recipe to This Week at the currently displayed serving count', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 4);
+  expect(screen.getByText('Added to This Week')).toBeTruthy();
+});
+
+it('adds at the scaled serving count after adjusting the stepper', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  await fireEvent.press(screen.getByTestId('recipe-servings-increment'));
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 5);
+});
+
+it('falls back to a default serving count when the recipe has none', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, servingsCount: null, yieldText: '1 loaf' });
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 4);
+});
+
+it('shows an error toast when adding to This Week fails', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+  mockedThisWeekApi.fetchCurrentWeeklyPlan.mockRejectedValue(new Error('offline'));
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() => expect(screen.getByText("Couldn't add to This Week")).toBeTruthy());
 });
