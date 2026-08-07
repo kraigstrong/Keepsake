@@ -1,8 +1,8 @@
-# Pantry
+# Keepsake
 
-A calm, opinionated recipe app. iOS, Expo/React Native + TypeScript, Supabase backend, Anthropic Claude API for AI cleanup — server-side only.
+A calm, opinionated recipe app. iOS, Expo/React Native + TypeScript, Supabase backend, Anthropic Claude API for AI cleanup — server-side only. (Some older docs still call it "Pantry" — same app, renamed since; `package.json`'s `name` and this file are the canonical spelling.)
 
-Active development, well past scaffolding — see `docs/current.md` for exactly which phase is in progress right now.
+Active development, well past scaffolding — see [`docs/current.md`](docs/current.md) for exactly which phase is in progress right now.
 
 ## Start here
 
@@ -13,6 +13,26 @@ Active development, well past scaffolding — see `docs/current.md` for exactly 
 - [`docs/adr/`](docs/adr/) — recorded decisions and their rationale.
 - [`AGENTS.md`](AGENTS.md) — cross-agent baseline (repo map, security invariants, commands) any coding agent should work from.
 - [`CLAUDE.md`](CLAUDE.md) — operating instructions for Claude sessions working in this repo (commit discipline, when to ask vs. proceed, security rules).
+
+## Getting started
+
+```bash
+npm install
+npm run db:start   # local Supabase (Docker) — needed for anything that touches the backend
+npm start          # Expo dev server
+```
+
+Backend-touching work also needs a local Supabase instance linked and (for AI import) an `ANTHROPIC_API_KEY` — see `CONTRIBUTING.md` and the relevant phase's security notes in `docs/adr/` for secret handling; nothing goes in `.env` files committed to this repo.
+
+Common commands (all in `package.json`):
+
+```bash
+npm run typecheck
+npm run lint
+npm run format:check
+npm test
+npm run db:reset && npm run db:test   # migrations + pgTAP, needs npm run db:start first
+```
 
 ## Working on this project
 
