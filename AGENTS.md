@@ -2,6 +2,8 @@
 
 Cross-agent source of truth. Any coding agent working in this repo — including automated PR review (Codex) — should be able to work from this file alone without loading `docs/prd.md`, `docs/execution-plan.md`, or the full `docs/phase-status.md` history. Load those only for cross-cutting product/architecture work; for a routine change or review, this file plus the specific files you're touching is enough.
 
+Claude Code specifically should also read [`CLAUDE.md`](CLAUDE.md) for Claude-specific workflow (how to resume a session, when to interrupt the developer, the skills in `.claude/skills/`) — this file is the shared baseline any agent needs, that one is Claude's own operating instructions on top of it.
+
 Keepsake (product name "Pantry" internally in some docs — same app) is a calm, opinionated recipe app: Expo/React Native + TypeScript client, Supabase (Postgres + RLS + Storage + Edge Functions) backend, Anthropic Claude API called server-side only.
 
 ## Repo map
@@ -58,7 +60,7 @@ A change is done when: the canonical commands above pass, the phase's (or PR's) 
 
 Codex reviews every PR on this repo. Beyond general code quality, weight these specifically, since they're the bug classes that have actually shipped here:
 
-1. **Atomicity of multi-step `security definer` functions and multi-RPC request handlers.** A partial failure between two separate database calls that should have been one transaction is a recurring defect class in this repo — flag any Edge Function or client code that performs a "create X, then separately mark Y complete" sequence without a single transaction or a compensating rollback path.
+1. **Atomicity of multi-step `security definer` functions and multi-RPC request handlers.** A partial failure between two separate database calls that should have been one transaction is a recurring defect class in this repo — flag any Edge Function or client code that performs a "create X, then separately mark Y complete" sequence without a single transaction or a compensating rollback path. `docs/adr/0020-import-fencing-and-local-data-isolation.md` (`finalize_import_job`) is the canonical fix pattern to compare against: merge the steps into one function, call the existing save/create RPC directly rather than duplicating its body (nested `security definer` calls share the outer transaction), and fence any claim/lease with a token, not just a timestamp.
 2. **Household/RLS boundary correctness** on any new table, column, or RPC — does a new query or function actually get scoped by the caller's household, or does it only look like it does?
 3. **Server-only code crossing into client bundles** — a new import in `src/` or `app/` reaching into `server/ai`, `server/import`'s network/secret-touching modules, or anything that would put a credential in the Metro bundle.
 4. **Concurrency assumptions stated as comments but not enforced in SQL** — e.g. "this is idempotent" or "single-winner" claims that aren't backed by a unique constraint, row lock, or atomic `UPDATE ... WHERE ... RETURNING`.
