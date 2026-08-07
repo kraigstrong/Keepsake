@@ -103,15 +103,28 @@ export interface OutboxSubmissionOutcome {
  * for a reason unrelated to the import itself, so it's the caller's job
  * not to invoke this until they hold, and to pass that household's id.
  *
+ * getCurrentHouseholdId (ADR-0020, Codex review PR #33) closes a TOCTOU
+ * gap: the submittable list is fetched once up front, but this loop is
+ * async and submitImportJob authenticates each call with whatever
+ * Supabase session is live *at that moment* — a fast account switch
+ * mid-drain (sign out household A, sign in household B while several
+ * items are still queued) could otherwise submit a later item under B's
+ * session even though it was selected because it belonged to A or was
+ * unowned. Checked before every item, not just once; defaults to the
+ * household this call started with, so a caller that can't observe a
+ * live account switch (e.g. a test) gets today's behavior unchanged.
+ *
  * Returns what happened to each item attempted (not the ones left
- * 'pending' by a rate-limit guard, and not the ones excluded because
- * they belong to a different household) so a caller can surface it — a
+ * 'pending' by a rate-limit guard, not the ones excluded because they
+ * belong to a different household, and not the ones left untouched
+ * because the account changed mid-run) so a caller can surface it — a
  * Share-Extension-originated import has no screen of its own to land on
  * or show an inline error the way the single-URL import screen does, so
  * without this, "I shared something, then what?" has no answer at all.
  */
 export async function submitPendingOutboxItems(
   householdId: string,
+  getCurrentHouseholdId: () => string | null = () => householdId,
 ): Promise<OutboxSubmissionOutcome[]> {
   const db = await getDatabase();
   const items = await listSubmittableOutboxItems(db, householdId);
@@ -119,6 +132,8 @@ export async function submitPendingOutboxItems(
   const outcomes: OutboxSubmissionOutcome[] = [];
 
   for (const item of items) {
+    if (getCurrentHouseholdId() !== householdId) break;
+
     if (isExpired(item, now)) {
       const errorMessage = 'This import was never completed and has expired.';
       await markOutboxItemFailed(db, item.id, errorMessage);

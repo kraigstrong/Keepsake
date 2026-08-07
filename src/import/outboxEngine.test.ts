@@ -305,6 +305,37 @@ describe('submitPendingOutboxItems', () => {
       { id: 'o1', status: 'submitted', recipeId: undefined, duplicate: false },
     ]);
   });
+
+  it('stops the run if the current household changes mid-drain, submitting nothing under the new one (ADR-0020, Codex review PR #33)', async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending' },
+      { id: 'o2', url: 'https://example.com/b', status: 'pending' },
+    ]);
+    mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-1', duplicate: false });
+    // Simulates a sign-out/sign-in racing the drain: the live getter
+    // reports a different household than the one this run started with.
+    const getCurrentHouseholdId = jest.fn(() => 'a-different-household');
+
+    const outcomes = await submitPendingOutboxItems(HOUSEHOLD_ID, getCurrentHouseholdId);
+
+    expect(outcomes).toEqual([]);
+    expect(mockedSubmitImportJob).not.toHaveBeenCalled();
+  });
+
+  it('keeps submitting while the current household still matches the one this run started with', async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/a', status: 'pending' },
+    ]);
+    mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-1', duplicate: false });
+    const getCurrentHouseholdId = jest.fn(() => HOUSEHOLD_ID);
+
+    const outcomes = await submitPendingOutboxItems(HOUSEHOLD_ID, getCurrentHouseholdId);
+
+    expect(outcomes).toEqual([
+      { id: 'o1', status: 'submitted', recipeId: undefined, duplicate: false },
+    ]);
+    expect(getCurrentHouseholdId).toHaveBeenCalled();
+  });
 });
 
 describe('summarizeOutboxOutcomes', () => {

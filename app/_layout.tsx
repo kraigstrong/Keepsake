@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -58,15 +58,32 @@ function ConnectivityAwareApp() {
   const householdId = household?.id ?? null;
   const { showToast } = useToast();
 
+  // ADR-0020 (Codex review, PR #33): always-fresh ref, not state — an
+  // in-flight outbox drain reads this mid-loop to notice an account
+  // switch that happened after the drain started, which a value closed
+  // over at call time never could. Updated in an effect (never during
+  // render, per this project's react-hooks/refs rule), so it always
+  // reflects the most recently committed householdId by the time any
+  // async callback reads it.
+  const householdIdRef = useRef(householdId);
+  useEffect(() => {
+    householdIdRef.current = householdId;
+  }, [householdId]);
+  const getCurrentHouseholdId = useCallback(() => householdIdRef.current, []);
+
   return (
     <ConnectivityProvider
       onReconnect={() => {
         triggerHouseholdSync(householdId);
-        triggerImportOutboxWork(householdId, showToast);
+        triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
       }}
     >
       <HouseholdSyncOnMount householdId={householdId} />
-      <ImportOutboxLifecycle householdId={householdId} showToast={showToast} />
+      <ImportOutboxLifecycle
+        householdId={householdId}
+        getCurrentHouseholdId={getCurrentHouseholdId}
+        showToast={showToast}
+      />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -108,10 +125,11 @@ function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
 // indistinguishable from one that silently vanished.
 function triggerImportOutboxWork(
   householdId: string | null,
+  getCurrentHouseholdId: () => string | null,
   showToast: (message: string) => void,
 ): void {
   drainAppGroupQueueIntoOutbox(householdId)
-    .then(() => (householdId ? submitPendingOutboxItems(householdId) : []))
+    .then(() => (householdId ? submitPendingOutboxItems(householdId, getCurrentHouseholdId) : []))
     .then((outcomes) => {
       const message = summarizeOutboxOutcomes(outcomes);
       if (message) showToast(message);
@@ -129,22 +147,24 @@ function triggerImportOutboxWork(
 // "mobile backgrounding breaks timer-based assumptions" reason.
 function ImportOutboxLifecycle({
   householdId,
+  getCurrentHouseholdId,
   showToast,
 }: {
   householdId: string | null;
+  getCurrentHouseholdId: () => string | null;
   showToast: (message: string) => void;
 }) {
   useEffect(() => {
-    triggerImportOutboxWork(householdId, showToast);
+    triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        triggerImportOutboxWork(householdId, showToast);
+        triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
       }
     });
 
     return () => subscription.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable (useCallback in ToastProvider); only householdId should re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast/getCurrentHouseholdId are stable identities across renders; only householdId should re-trigger this.
   }, [householdId]);
   return null;
 }
