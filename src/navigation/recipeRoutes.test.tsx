@@ -33,7 +33,26 @@ jest.mock('../supabase/instance', () => ({
         .fn()
         .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
     },
+    // This Week (Phase 12) get-or-creates the current plan via RPC on
+    // mount — an empty planning-status plan, matching the "empty list"
+    // convention the recipes/categories table branches below already use.
+    rpc: jest.fn((fn: string) => {
+      if (fn === 'get_or_create_current_weekly_plan') {
+        return {
+          single: () =>
+            Promise.resolve({ data: { id: 'plan-1', status: 'planning' }, error: null }),
+        };
+      }
+      return { single: () => Promise.resolve({ data: null, error: new Error('not mocked') }) };
+    }),
     from: jest.fn((table: string) => {
+      if (table === 'planning_entries') {
+        return {
+          select: () => ({
+            eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+          }),
+        };
+      }
       if (table === 'profiles') {
         return {
           select: () => ({
