@@ -18,10 +18,20 @@ import { MIGRATIONS } from '../db/schema';
  * — a plausible regression risk given this phase's move from blended
  * bm25 weights to strict per-column tiering (ADR-0014). Same node:sqlite
  * methodology as the other search test files.
+ *
+ * ADR-0020 (Phase 11.5): the tier queries now join recipe_fts back to
+ * recipes for household scoping, so this file also creates a matching
+ * `recipes` row per fixture (migration 1, not just migration 2's FTS
+ * tables) and has one dedicated cross-household test proving the join
+ * actually excludes another household's row, not just that same-
+ * household search still works.
  */
+
+const HOUSEHOLD_ID = 'hh-search-correctness';
 
 function createSearchDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
+  for (const statement of MIGRATIONS[1]!) db.exec(statement);
   for (const statement of MIGRATIONS[2]!) db.exec(statement);
   return db;
 }
@@ -31,6 +41,7 @@ function insertRecipe(
   row: {
     recipeId: string;
     title: string;
+    householdId?: string;
     ingredients?: string;
     notes?: string;
     sourceAttribution?: string;
@@ -39,6 +50,15 @@ function insertRecipe(
     tags?: string;
   },
 ): void {
+  const householdId = row.householdId ?? HOUSEHOLD_ID;
+
+  db.prepare(
+    `insert into recipes
+       (id, household_id, version, title, tags, category_ids, ingredient_sections,
+        instruction_sections, updated_at, synced_at)
+     values (?, ?, 1, ?, '[]', '[]', '[]', '[]', '2026-08-06T00:00:00.000Z', '2026-08-06T00:00:00.000Z')`,
+  ).run(row.recipeId, householdId, row.title);
+
   db.prepare(
     `insert into recipe_fts
        (recipe_id, title, ingredients, notes, source_attribution, source_url, categories, tags)
@@ -59,11 +79,11 @@ function runTierQuery(db: DatabaseSync, query: TierMatchQuery): SearchRow[] {
   return db.prepare(query.sql).all(...query.params) as unknown as SearchRow[];
 }
 
-function searchIds(db: DatabaseSync, query: string): string[] {
+function searchIds(db: DatabaseSync, query: string, householdId = HOUSEHOLD_ID): string[] {
   const merged = mergeTiers([
-    runTierQuery(db, buildTitleMatchQuery(query)),
-    runTierQuery(db, buildIngredientsMatchQuery(query)),
-    runTierQuery(db, buildEverythingMatchQuery(query)),
+    runTierQuery(db, buildTitleMatchQuery(query, householdId)),
+    runTierQuery(db, buildIngredientsMatchQuery(query, householdId)),
+    runTierQuery(db, buildEverythingMatchQuery(query, householdId)),
   ]);
   return merged.map((row) => row.recipe_id);
 }
@@ -120,5 +140,18 @@ describe('search correctness against the real schema and tokenizer', () => {
     });
 
     expect(searchIds(db, 'weeknight')).toContain('r1');
+  });
+
+  it('ADR-0020: excludes a recipe_fts row belonging to a different household, even on an otherwise-matching title', () => {
+    insertRecipe(db, {
+      recipeId: 'other-household',
+      title: 'Grandma Herb Roast Chicken',
+      householdId: 'hh-someone-else',
+    });
+
+    expect(searchIds(db, 'Grandma Herb Roast Chicken')).toEqual([]);
+    expect(searchIds(db, 'Grandma Herb Roast Chicken', 'hh-someone-else')).toEqual([
+      'other-household',
+    ]);
   });
 });

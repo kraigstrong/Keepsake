@@ -110,8 +110,8 @@ function triggerImportOutboxWork(
   householdId: string | null,
   showToast: (message: string) => void,
 ): void {
-  drainAppGroupQueueIntoOutbox()
-    .then(() => (householdId ? submitPendingOutboxItems() : []))
+  drainAppGroupQueueIntoOutbox(householdId)
+    .then(() => (householdId ? submitPendingOutboxItems(householdId) : []))
     .then((outcomes) => {
       const message = summarizeOutboxOutcomes(outcomes);
       if (message) showToast(message);

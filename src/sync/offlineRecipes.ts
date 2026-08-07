@@ -65,10 +65,21 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
 // is what screens read from, kept fresh by the sync engine — never a
 // direct server fetch, so browsing works offline with no special-casing
 // at the call site.
-export async function readLocalLibraryRecipes(): Promise<LibraryRecipe[]> {
+//
+// ADR-0020 (Phase 11.5): both reads require the caller's current
+// household_id and filter on it. The local mirror only ever gets
+// written for the signed-in household's own data, but a failed
+// sign-out wipe (SessionProvider's wipeOfflineData is best-effort) can
+// leave a previous account's rows sitting in this same table — without
+// this filter, a different account signing in next would read them.
+// household-scoped filtering, not a successful wipe, is the actual
+// local-data authorization boundary; the wipe stays as best-effort
+// cleanup on top of it.
+export async function readLocalLibraryRecipes(householdId: string): Promise<LibraryRecipe[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<LibraryRecipeRow>(
-    'select id, title, created_at, category_ids, tags from recipes order by title',
+    'select id, title, created_at, category_ids, tags from recipes where household_id = ? order by title',
+    householdId,
   );
   return rows.map((row) => ({
     id: row.id,
@@ -83,9 +94,13 @@ export async function readLocalLibraryRecipes(): Promise<LibraryRecipe[]> {
   }));
 }
 
-export async function readLocalRecipe(id: string): Promise<Recipe | null> {
+export async function readLocalRecipe(id: string, householdId: string): Promise<Recipe | null> {
   const db = await getDatabase();
-  const row = await db.getFirstAsync<LocalRecipeRow>('select * from recipes where id = ?', id);
+  const row = await db.getFirstAsync<LocalRecipeRow>(
+    'select * from recipes where id = ? and household_id = ?',
+    id,
+    householdId,
+  );
   return row ? parseLocalRecipeRow(row) : null;
 }
 

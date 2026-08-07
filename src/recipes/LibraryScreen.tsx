@@ -93,28 +93,38 @@ export function LibraryScreen() {
   // effect body.
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0 || !household) return;
 
     const timeout = setTimeout(() => {
-      searchRecipes(trimmed)
+      searchRecipes(trimmed, household.id)
         .then(setSearchResults)
         .catch(() => setSearchResults([]));
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
-  }, [query]);
+  }, [query, household]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
 
-      Promise.all([readLocalLibraryRecipes(), readLocalCategories()])
+      // ADR-0020: local reads are household-scoped, so this now waits
+      // for the live household context rather than reading unfiltered
+      // local rows immediately. Deliberate tradeoff — a fully-offline
+      // cold launch (household never fetched) shows a loading state
+      // instead of an instant (but unfilterable) local paint; the
+      // alternative, falling back to a locally-cached "last known
+      // household id," would reopen the exact cross-account leak this
+      // scoping exists to close if a wipe failure left a previous
+      // account's household id behind too.
+      if (!household) return;
+
+      Promise.all([readLocalLibraryRecipes(household.id), readLocalCategories()])
         .then(async ([local, localCategories]) => {
           if (cancelled) return;
           setRecipes(local);
           setCategories(localCategories);
           setLoadError(false);
 
-          if (!household) return;
           await syncHousehold(household.id).catch(() => {
             // Offline or a transient failure — the list stays at
             // whatever was already cached locally.
@@ -122,7 +132,7 @@ export function LibraryScreen() {
           if (cancelled) return;
 
           const [refreshed, refreshedCategories] = await Promise.all([
-            readLocalLibraryRecipes().catch(() => null),
+            readLocalLibraryRecipes(household.id).catch(() => null),
             readLocalCategories().catch(() => null),
           ]);
           if (cancelled) return;

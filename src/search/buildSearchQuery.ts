@@ -20,46 +20,80 @@ export interface SearchRow {
 
 export interface TierMatchQuery {
   sql: string;
-  params: [string];
+  params: [string, string];
 }
 
 /**
  * FTS5 column filter (`col:(...)`) restricts the match to one column
  * while still using porter-stemmed matching (SRCH-04 singular/plural),
  * ranked by bm25 within that column alone.
+ *
+ * ADR-0020 (Phase 11.5): recipe_fts has no household_id column of its
+ * own (and a bm25-ranked FTS5 match can't be expressed as a plain
+ * column filter either), so the household scope is applied as an outer
+ * join against recipes — bm25() itself still runs unfiltered/unaliased
+ * inside the subquery (its argument must name the FTS5 table directly),
+ * with the join+limit applied after ranking.
  */
-function buildColumnMatchQuery(column: string, query: string, limit: number): TierMatchQuery {
+function buildColumnMatchQuery(
+  column: string,
+  query: string,
+  householdId: string,
+  limit: number,
+): TierMatchQuery {
   return {
     sql: `
-      select recipe_id, title, bm25(recipe_fts) as rank
-        from recipe_fts
-       where recipe_fts match ?
-       order by rank
+      select t.recipe_id, t.title, t.rank
+        from (
+          select recipe_id, title, bm25(recipe_fts) as rank
+            from recipe_fts
+           where recipe_fts match ?
+        ) t
+        join recipes r on r.id = t.recipe_id
+       where r.household_id = ?
+       order by t.rank
        limit ${limit}
     `,
-    params: [`${column}:(${toFts5MatchLiteral(query)})`],
+    params: [`${column}:(${toFts5MatchLiteral(query)})`, householdId],
   };
 }
 
-export function buildTitleMatchQuery(query: string, limit = 20): TierMatchQuery {
-  return buildColumnMatchQuery('title', query, limit);
+export function buildTitleMatchQuery(
+  query: string,
+  householdId: string,
+  limit = 20,
+): TierMatchQuery {
+  return buildColumnMatchQuery('title', query, householdId, limit);
 }
 
-export function buildIngredientsMatchQuery(query: string, limit = 20): TierMatchQuery {
-  return buildColumnMatchQuery('ingredients', query, limit);
+export function buildIngredientsMatchQuery(
+  query: string,
+  householdId: string,
+  limit = 20,
+): TierMatchQuery {
+  return buildColumnMatchQuery('ingredients', query, householdId, limit);
 }
 
 /** Tier 3: any column at all (notes, source, categories, tags, plus title/ingredients again — duplicates are dropped by mergeTiers). */
-export function buildEverythingMatchQuery(query: string, limit = 20): TierMatchQuery {
+export function buildEverythingMatchQuery(
+  query: string,
+  householdId: string,
+  limit = 20,
+): TierMatchQuery {
   return {
     sql: `
-      select recipe_id, title, bm25(recipe_fts) as rank
-        from recipe_fts
-       where recipe_fts match ?
-       order by rank
+      select t.recipe_id, t.title, t.rank
+        from (
+          select recipe_id, title, bm25(recipe_fts) as rank
+            from recipe_fts
+           where recipe_fts match ?
+        ) t
+        join recipes r on r.id = t.recipe_id
+       where r.household_id = ?
+       order by t.rank
        limit ${limit}
     `,
-    params: [toFts5MatchLiteral(query)],
+    params: [toFts5MatchLiteral(query), householdId],
   };
 }
 
@@ -88,7 +122,7 @@ export function mergeTiers(tiers: SearchRow[][], limit = 20): SearchRow[] {
 
 export interface FuzzyMatchQuery {
   sql: string;
-  params: [string];
+  params: string[];
 }
 
 /**
@@ -102,8 +136,17 @@ export interface FuzzyMatchQuery {
  * still fails to match) — this works by OR-ing the query's trigrams
  * together instead, then ranking by how many distinct trigrams a
  * candidate shares with the query.
+ *
+ * ADR-0020: same household-scoping join as the tiered queries above.
+ * The guaranteed-empty guard below stays parameter-free (`where 0`
+ * never touches household_id) rather than padding it with an unused
+ * bind value.
  */
-export function buildFuzzyMatchQuery(query: string, limit = 20): FuzzyMatchQuery {
+export function buildFuzzyMatchQuery(
+  query: string,
+  householdId: string,
+  limit = 20,
+): FuzzyMatchQuery {
   const grams = [...new Set(trigramsOf(query.toLowerCase()))];
   // Guard: FTS5 has no useful trigram signal below 3 characters — the
   // caller should treat this as "no fuzzy fallback available" rather than
@@ -111,20 +154,25 @@ export function buildFuzzyMatchQuery(query: string, limit = 20): FuzzyMatchQuery
   if (grams.length === 0) {
     return {
       sql: `select recipe_id, title, 0 as shared from recipe_trigram where 0`,
-      params: [''],
+      params: [],
     };
   }
   const orExpr = grams.map((g) => JSON.stringify(g)).join(' OR ');
   return {
     sql: `
-      select recipe_id, title, count(*) as shared
-        from recipe_trigram
-       where recipe_trigram match ?
-       group by recipe_id
-       order by shared desc
+      select t.recipe_id, t.title, t.shared
+        from (
+          select recipe_id, title, count(*) as shared
+            from recipe_trigram
+           where recipe_trigram match ?
+           group by recipe_id
+        ) t
+        join recipes r on r.id = t.recipe_id
+       where r.household_id = ?
+       order by t.shared desc
        limit ${limit}
     `,
-    params: [orExpr],
+    params: [orExpr, householdId],
   };
 }
 

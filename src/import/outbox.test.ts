@@ -19,6 +19,8 @@ function createMockDb(
   } as unknown as LocalDb & { runAsync: jest.Mock; getAllAsync: jest.Mock };
 }
 
+const HOUSEHOLD_ID = 'hh1';
+
 const share: SharedImport = {
   id: '11111111-1111-1111-1111-111111111111',
   url: 'https://example.com/recipe',
@@ -26,31 +28,50 @@ const share: SharedImport = {
 };
 
 describe('insertOutboxItemIfNew', () => {
-  it('inserts the share as a pending row, keyed by its id', async () => {
+  it('inserts the share as a pending row, keyed by its id, stamped with the current household', async () => {
     const db = createMockDb();
 
-    await insertOutboxItemIfNew(db, share);
+    await insertOutboxItemIfNew(db, share, HOUSEHOLD_ID);
 
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('insert into import_outbox'),
       share.id,
       share.url,
       new Date(share.receivedAt).toISOString(),
+      HOUSEHOLD_ID,
       expect.any(String),
       expect.any(String),
     );
     expect(db.runAsync.mock.calls[0][0]).toContain('on conflict (id) do nothing');
   });
+
+  it('stamps a null household_id when captured while signed out (ADR-0020)', async () => {
+    const db = createMockDb();
+
+    await insertOutboxItemIfNew(db, share, null);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('insert into import_outbox'),
+      share.id,
+      share.url,
+      new Date(share.receivedAt).toISOString(),
+      null,
+      expect.any(String),
+      expect.any(String),
+    );
+  });
 });
 
 describe('listSubmittableOutboxItems', () => {
-  it('queries only pending and submitting rows, oldest first', async () => {
+  it('queries only pending and submitting rows, unowned or owned by the caller, oldest first', async () => {
     const db = createMockDb();
-    await listSubmittableOutboxItems(db);
+    await listSubmittableOutboxItems(db, HOUSEHOLD_ID);
 
     const query = db.getAllAsync.mock.calls[0][0] as string;
     expect(query).toContain("status in ('pending', 'submitting')");
+    expect(query).toContain('household_id is null or household_id = ?');
     expect(query).toContain('order by received_at asc');
+    expect(db.getAllAsync).toHaveBeenCalledWith(expect.any(String), HOUSEHOLD_ID);
   });
 
   it('maps rows from snake_case columns to the OutboxItem shape', async () => {
@@ -63,11 +84,12 @@ describe('listSubmittableOutboxItems', () => {
           status: 'pending' as const,
           server_job_id: null,
           error_message: null,
+          household_id: HOUSEHOLD_ID,
         },
       ]),
     });
 
-    await expect(listSubmittableOutboxItems(db)).resolves.toEqual([
+    await expect(listSubmittableOutboxItems(db, HOUSEHOLD_ID)).resolves.toEqual([
       {
         id: '1',
         url: 'https://example.com',
@@ -75,6 +97,7 @@ describe('listSubmittableOutboxItems', () => {
         status: 'pending',
         serverJobId: null,
         errorMessage: null,
+        householdId: HOUSEHOLD_ID,
       },
     ]);
   });

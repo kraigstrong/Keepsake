@@ -59,12 +59,15 @@ const INGREDIENT_WORDS = [
 ];
 const TAGS = ['weeknight', 'freezer-friendly', 'spicy', 'vegetarian', 'kid-friendly'];
 
+const HOUSEHOLD_ID = 'hh-search-performance';
+
 function pick<T>(words: readonly T[], n: number): T {
   return words[n % words.length]!;
 }
 
 function createSearchDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
+  for (const statement of MIGRATIONS[1]!) db.exec(statement);
   for (const statement of MIGRATIONS[2]!) db.exec(statement);
   return db;
 }
@@ -75,6 +78,12 @@ function createSearchDatabase(): DatabaseSync {
 // cycle, matching the risk spike's own worst case: a query term common
 // across the whole corpus, where bm25's IDF term is least helpful.
 function seedRecipes(db: DatabaseSync, count: number): void {
+  const insertRecipe = db.prepare(
+    `insert into recipes
+       (id, household_id, version, title, tags, category_ids, ingredient_sections,
+        instruction_sections, updated_at, synced_at)
+     values (?, ?, 1, ?, '[]', '[]', '[]', '[]', '2026-08-06T00:00:00.000Z', '2026-08-06T00:00:00.000Z')`,
+  );
   const insertFts = db.prepare(
     `insert into recipe_fts
        (recipe_id, title, ingredients, notes, source_attribution, source_url, categories, tags)
@@ -88,12 +97,16 @@ function seedRecipes(db: DatabaseSync, count: number): void {
       ' ',
     );
     const tags = `${pick(TAGS, i)} ${pick(TAGS, i + 2)}`;
+    insertRecipe.run(`r${i}`, HOUSEHOLD_ID, title);
     insertFts.run(`r${i}`, title, ingredients, '', '', '', '', tags);
     insertTrigram.run(`r${i}`, title);
   }
 }
 
-function runTierQuery(db: DatabaseSync, query: TierMatchQuery): SearchRow[] {
+function runTierQuery(
+  db: DatabaseSync,
+  query: TierMatchQuery | { sql: string; params: readonly string[] },
+): SearchRow[] {
   return db.prepare(query.sql).all(...query.params) as unknown as SearchRow[];
 }
 
@@ -112,9 +125,9 @@ describe.each([100, 1000, 5000])('search performance at %i recipes', (count) => 
   it('runs the full tiered query (title, ingredients, everything, merge) within budget', () => {
     const startedAt = Date.now();
 
-    const title = runTierQuery(db, buildTitleMatchQuery('tomato'));
-    const ingredients = runTierQuery(db, buildIngredientsMatchQuery('tomato'));
-    const everything = runTierQuery(db, buildEverythingMatchQuery('tomato'));
+    const title = runTierQuery(db, buildTitleMatchQuery('tomato', HOUSEHOLD_ID));
+    const ingredients = runTierQuery(db, buildIngredientsMatchQuery('tomato', HOUSEHOLD_ID));
+    const everything = runTierQuery(db, buildEverythingMatchQuery('tomato', HOUSEHOLD_ID));
     const merged = mergeTiers([title, ingredients, everything]);
 
     const durationMs = Date.now() - startedAt;
@@ -126,7 +139,7 @@ describe.each([100, 1000, 5000])('search performance at %i recipes', (count) => 
   it('runs the typo-tolerant fuzzy fallback within budget', () => {
     const startedAt = Date.now();
 
-    const fuzzy = runTierQuery(db, buildFuzzyMatchQuery('tomatto'));
+    const fuzzy = runTierQuery(db, buildFuzzyMatchQuery('tomatto', HOUSEHOLD_ID));
 
     const durationMs = Date.now() - startedAt;
 

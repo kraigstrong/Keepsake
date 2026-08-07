@@ -7,6 +7,7 @@ jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
 
 const mockedGetDatabase = getDatabase as jest.Mock;
 const mockedTrackEvent = trackEvent as jest.Mock;
+const HOUSEHOLD_ID = 'hh1';
 
 function mockDb(getAllAsyncImpl: (sql: string) => unknown[]) {
   return {
@@ -18,20 +19,22 @@ afterEach(() => jest.clearAllMocks());
 
 describe('searchRecipes', () => {
   it('returns an empty array without touching the database for a blank query', async () => {
-    await expect(searchRecipes('   ')).resolves.toEqual([]);
+    await expect(searchRecipes('   ', HOUSEHOLD_ID)).resolves.toEqual([]);
     expect(mockedGetDatabase).not.toHaveBeenCalled();
   });
 
   it('returns title-tier matches and never the raw query text in telemetry', async () => {
     mockedGetDatabase.mockResolvedValue(
       mockDb((sql) =>
-        sql.includes('bm25(recipe_fts)') && sql.includes('order by rank')
+        sql.includes('bm25(recipe_fts)') && sql.includes('order by t.rank')
           ? [{ recipe_id: 'r1', title: 'Tomato Soup', rank: -1 }]
           : [],
       ),
     );
 
-    await expect(searchRecipes('tomato')).resolves.toEqual([{ id: 'r1', title: 'Tomato Soup' }]);
+    await expect(searchRecipes('tomato', HOUSEHOLD_ID)).resolves.toEqual([
+      { id: 'r1', title: 'Tomato Soup' },
+    ]);
 
     expect(mockedTrackEvent).toHaveBeenCalledWith(
       'search_performed',
@@ -50,13 +53,15 @@ describe('searchRecipes', () => {
       ),
     );
 
-    await expect(searchRecipes('tomatto')).resolves.toEqual([{ id: 'r1', title: 'Tomato Soup' }]);
+    await expect(searchRecipes('tomatto', HOUSEHOLD_ID)).resolves.toEqual([
+      { id: 'r1', title: 'Tomato Soup' },
+    ]);
   });
 
   it('reports zero results without throwing when nothing matches at all', async () => {
     mockedGetDatabase.mockResolvedValue(mockDb(() => []));
 
-    await expect(searchRecipes('nonexistent')).resolves.toEqual([]);
+    await expect(searchRecipes('nonexistent', HOUSEHOLD_ID)).resolves.toEqual([]);
     expect(mockedTrackEvent).toHaveBeenCalledWith(
       'search_performed',
       expect.objectContaining({ resultCount: 0 }),

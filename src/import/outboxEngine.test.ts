@@ -45,6 +45,7 @@ const mockedMarkFailed = markOutboxItemFailed as jest.Mock;
 const mockedTrackEvent = trackEvent as jest.Mock;
 
 const fakeDb = { fake: 'db' };
+const HOUSEHOLD_ID = 'hh1';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -55,7 +56,7 @@ describe('drainAppGroupQueueIntoOutbox', () => {
   it('does nothing when the queue is empty, without opening the database', async () => {
     mockedReadQueuedShares.mockReturnValue([]);
 
-    await drainAppGroupQueueIntoOutbox();
+    await drainAppGroupQueueIntoOutbox(HOUSEHOLD_ID);
 
     expect(mockedGetDatabase).not.toHaveBeenCalled();
   });
@@ -72,11 +73,20 @@ describe('drainAppGroupQueueIntoOutbox', () => {
       return true;
     });
 
-    await drainAppGroupQueueIntoOutbox();
+    await drainAppGroupQueueIntoOutbox(HOUSEHOLD_ID);
 
-    expect(mockedInsertOutboxItemIfNew).toHaveBeenCalledWith(fakeDb, share);
+    expect(mockedInsertOutboxItemIfNew).toHaveBeenCalledWith(fakeDb, share, HOUSEHOLD_ID);
     expect(mockedDeleteQueuedShare).toHaveBeenCalledWith('s1');
     expect(callOrder).toEqual(['insert', 'delete']);
+  });
+
+  it('stamps a null household_id when draining while signed out (ADR-0020)', async () => {
+    const share = { id: 's1', url: 'https://example.com', receivedAt: 1 };
+    mockedReadQueuedShares.mockReturnValue([share]);
+
+    await drainAppGroupQueueIntoOutbox(null);
+
+    expect(mockedInsertOutboxItemIfNew).toHaveBeenCalledWith(fakeDb, share, null);
   });
 
   it('emits a count-only telemetry event, never a URL', async () => {
@@ -85,7 +95,7 @@ describe('drainAppGroupQueueIntoOutbox', () => {
       { id: 's2', url: 'https://secret.example.com/b', receivedAt: 2 },
     ]);
 
-    await drainAppGroupQueueIntoOutbox();
+    await drainAppGroupQueueIntoOutbox(HOUSEHOLD_ID);
 
     expect(mockedTrackEvent).toHaveBeenCalledWith('share_extension_drained', { count: 2 });
     for (const call of mockedTrackEvent.mock.calls) {
@@ -99,7 +109,7 @@ describe('drainAppGroupQueueIntoOutbox', () => {
     ]);
     mockedInsertOutboxItemIfNew.mockRejectedValue(new Error('disk full'));
 
-    await drainAppGroupQueueIntoOutbox();
+    await drainAppGroupQueueIntoOutbox(HOUSEHOLD_ID);
 
     expect(mockedDeleteQueuedShare).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalled();
@@ -114,7 +124,7 @@ describe('drainAppGroupQueueIntoOutbox', () => {
       .mockRejectedValueOnce(new Error('disk full'))
       .mockResolvedValueOnce(undefined);
 
-    await drainAppGroupQueueIntoOutbox();
+    await drainAppGroupQueueIntoOutbox(HOUSEHOLD_ID);
 
     expect(mockedDeleteQueuedShare).toHaveBeenCalledTimes(1);
     expect(mockedDeleteQueuedShare).toHaveBeenCalledWith('s2');
@@ -128,7 +138,7 @@ describe('submitPendingOutboxItems', () => {
     ]);
     mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-1', recipeId: 'r1', duplicate: false });
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedMarkSubmitting).toHaveBeenCalledWith(fakeDb, 'o1');
     expect(mockedSubmitImportJob).toHaveBeenCalledWith({
@@ -138,13 +148,21 @@ describe('submitPendingOutboxItems', () => {
     expect(mockedMarkSubmitted).toHaveBeenCalledWith(fakeDb, 'o1', 'job-1');
   });
 
+  it("passes the caller's household id through to the submittable-items query (ADR-0020)", async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([]);
+
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
+
+    expect(mockedListSubmittableOutboxItems).toHaveBeenCalledWith(fakeDb, HOUSEHOLD_ID);
+  });
+
   it('marks a definitive failure as failed, not retried automatically', async () => {
     mockedListSubmittableOutboxItems.mockResolvedValue([
       { id: 'o1', url: 'https://example.com/soup', status: 'pending' },
     ]);
     mockedSubmitImportJob.mockRejectedValue(new Error('Could not find enough recipe content'));
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedMarkFailed).toHaveBeenCalledWith(
       fakeDb,
@@ -167,7 +185,7 @@ describe('submitPendingOutboxItems', () => {
       ]);
       mockedSubmitImportJob.mockRejectedValue(new Error(message));
 
-      await submitPendingOutboxItems();
+      await submitPendingOutboxItems(HOUSEHOLD_ID);
 
       expect(mockedMarkPending).toHaveBeenCalledWith(fakeDb, 'o1');
       expect(mockedMarkFailed).not.toHaveBeenCalled();
@@ -185,7 +203,7 @@ describe('submitPendingOutboxItems', () => {
       .mockResolvedValueOnce({ jobId: 'job-1', duplicate: false })
       .mockResolvedValueOnce({ jobId: 'job-2', duplicate: false });
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedSubmitImportJob).toHaveBeenNthCalledWith(1, {
       url: 'https://example.com/a',
@@ -205,7 +223,7 @@ describe('submitPendingOutboxItems', () => {
       { id: 'o1', url: 'https://example.com/a', status: 'pending', receivedAt: thirtyOneDaysAgo },
     ]);
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedSubmitImportJob).not.toHaveBeenCalled();
     expect(mockedMarkSubmitting).not.toHaveBeenCalled();
@@ -223,7 +241,7 @@ describe('submitPendingOutboxItems', () => {
     ]);
     mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-1', duplicate: false });
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedSubmitImportJob).toHaveBeenCalledWith({
       url: 'https://example.com/a',
@@ -241,7 +259,7 @@ describe('submitPendingOutboxItems', () => {
     ]);
     mockedSubmitImportJob.mockResolvedValue({ jobId: 'job-2', duplicate: false });
 
-    await submitPendingOutboxItems();
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(mockedMarkFailed).toHaveBeenCalledWith(
       fakeDb,
@@ -264,7 +282,7 @@ describe('submitPendingOutboxItems', () => {
       .mockResolvedValueOnce({ jobId: 'job-1', recipeId: 'r1', duplicate: false })
       .mockRejectedValueOnce(new Error('Could not fetch the page'));
 
-    const outcomes = await submitPendingOutboxItems();
+    const outcomes = await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(outcomes).toEqual([
       { id: 'o1', status: 'submitted', recipeId: 'r1', duplicate: false },
@@ -281,7 +299,7 @@ describe('submitPendingOutboxItems', () => {
       .mockResolvedValueOnce({ jobId: 'job-1', duplicate: false })
       .mockRejectedValueOnce(new Error('please wait before importing another recipe'));
 
-    const outcomes = await submitPendingOutboxItems();
+    const outcomes = await submitPendingOutboxItems(HOUSEHOLD_ID);
 
     expect(outcomes).toEqual([
       { id: 'o1', status: 'submitted', recipeId: undefined, duplicate: false },

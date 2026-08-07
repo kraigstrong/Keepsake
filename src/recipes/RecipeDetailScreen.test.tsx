@@ -7,6 +7,7 @@ import * as heroImage from './heroImage';
 import { RecipeDetailScreen, type RecipeDetailScreenProps } from './RecipeDetailScreen';
 import { ToastProvider } from '../components/Toast';
 import * as householdApi from '../household/api';
+import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
 import * as offlineRecipes from '../sync/offlineRecipes';
 
@@ -21,6 +22,7 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 jest.mock('./api');
 jest.mock('./heroImage');
 jest.mock('../household/api');
+jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../sync/offlineRecipes');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
@@ -32,6 +34,7 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
 const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
+const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
 const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes>;
 const mockedUseRouter = useRouter as jest.Mock;
@@ -80,6 +83,7 @@ const recipe: api.Recipe = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
+  mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedHouseholdApi.fetchProfile.mockResolvedValue({
     id: 'user-1',

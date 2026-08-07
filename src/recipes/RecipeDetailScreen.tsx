@@ -20,6 +20,7 @@ import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
 import { fetchProfile } from '../household/api';
+import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
 import {
   cacheHeroImage,
@@ -86,6 +87,7 @@ export function RecipeDetailScreen({
 }: RecipeDetailScreenProps) {
   const router = useRouter();
   const { session } = useSession();
+  const { household } = useHousehold();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -167,17 +169,24 @@ export function RecipeDetailScreen({
     async function load() {
       let haveData = false;
 
-      const [localRecipe, localCategories] = await Promise.all([
-        readLocalRecipe(recipeId).catch(() => null),
-        readLocalCategories().catch(() => [] as Category[]),
-      ]);
-      if (cancelled) return;
-      if (localRecipe) {
-        haveData = true;
-        setRecipe(localRecipe);
-        setCategories(localCategories);
-        setIsLoading(false);
-        loadHeroImage(localRecipe.heroImagePath);
+      // ADR-0020: the local read is household-scoped — skip it entirely
+      // rather than reading unfiltered when the live household context
+      // hasn't resolved yet. The live fetchRecipe() call below is
+      // RLS-scoped server-side regardless, so it's unaffected and still
+      // covers a recipe not yet synced to this device.
+      if (household) {
+        const [localRecipe, localCategories] = await Promise.all([
+          readLocalRecipe(recipeId, household.id).catch(() => null),
+          readLocalCategories().catch(() => [] as Category[]),
+        ]);
+        if (cancelled) return;
+        if (localRecipe) {
+          haveData = true;
+          setRecipe(localRecipe);
+          setCategories(localCategories);
+          setIsLoading(false);
+          loadHeroImage(localRecipe.heroImagePath);
+        }
       }
 
       try {
@@ -206,7 +215,7 @@ export function RecipeDetailScreen({
     // heroOpacity's identity never changes (useState with no setter
     // call) — listed to satisfy exhaustive-deps, not because it should
     // ever actually re-trigger this effect.
-  }, [recipeId, heroOpacity]);
+  }, [recipeId, heroOpacity, household]);
 
   if (isLoading) {
     return <LoadingState label="Loading recipe…" testID="recipe-detail-loading" />;

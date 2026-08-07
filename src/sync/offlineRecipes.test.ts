@@ -21,6 +21,8 @@ function createMockDb(overrides: Record<string, jest.Mock> = {}) {
 
 afterEach(() => jest.clearAllMocks());
 
+const HOUSEHOLD_ID = 'hh1';
+
 describe('readLocalLibraryRecipes', () => {
   it('reads and deserializes the fields Library sort/filter needs, ordered by title', async () => {
     const db = createMockDb({
@@ -36,7 +38,7 @@ describe('readLocalLibraryRecipes', () => {
     });
     mockedGetDatabase.mockResolvedValue(db);
 
-    await expect(readLocalLibraryRecipes()).resolves.toEqual([
+    await expect(readLocalLibraryRecipes(HOUSEHOLD_ID)).resolves.toEqual([
       {
         id: 'r1',
         title: 'Chili',
@@ -46,7 +48,8 @@ describe('readLocalLibraryRecipes', () => {
       },
     ]);
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      'select id, title, created_at, category_ids, tags from recipes order by title',
+      'select id, title, created_at, category_ids, tags from recipes where household_id = ? order by title',
+      HOUSEHOLD_ID,
     );
   });
 
@@ -58,7 +61,7 @@ describe('readLocalLibraryRecipes', () => {
     });
     mockedGetDatabase.mockResolvedValue(db);
 
-    const [result] = await readLocalLibraryRecipes();
+    const [result] = await readLocalLibraryRecipes(HOUSEHOLD_ID);
     expect(result!.createdAt).toBe(new Date(0).toISOString());
   });
 });
@@ -68,7 +71,20 @@ describe('readLocalRecipe', () => {
     const db = createMockDb();
     mockedGetDatabase.mockResolvedValue(db);
 
-    await expect(readLocalRecipe('missing')).resolves.toBeNull();
+    await expect(readLocalRecipe('missing', HOUSEHOLD_ID)).resolves.toBeNull();
+  });
+
+  it('scopes the read to the given household_id, not id alone', async () => {
+    const db = createMockDb();
+    mockedGetDatabase.mockResolvedValue(db);
+
+    await readLocalRecipe('r1', HOUSEHOLD_ID);
+
+    expect(db.getFirstAsync).toHaveBeenCalledWith(
+      'select * from recipes where id = ? and household_id = ?',
+      'r1',
+      HOUSEHOLD_ID,
+    );
   });
 
   it('deserializes the JSON columns back into a full Recipe', async () => {
@@ -92,7 +108,7 @@ describe('readLocalRecipe', () => {
     });
     mockedGetDatabase.mockResolvedValue(db);
 
-    await expect(readLocalRecipe('r1')).resolves.toEqual({
+    await expect(readLocalRecipe('r1', HOUSEHOLD_ID)).resolves.toEqual({
       id: 'r1',
       version: 2,
       title: 'Chili',

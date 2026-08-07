@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -141,4 +141,14 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   // already-synced local row being null too is already consistent
   // with the server, not stale.
   6: [`alter table recipes add column servings_count integer`],
+  // Import concurrency and local data isolation (Phase 11.5, ADR-0020).
+  // household_id is nullable and deliberately NOT backfilled for
+  // existing rows — a row already in the outbox was captured before
+  // this column existed, so there's no real value to backfill (the
+  // outbox has never recorded who captured a share, on purpose, so it
+  // survives sign-out); it's treated exactly like a signed-out capture
+  // going forward (see outboxEngine.ts), not assumed to belong to
+  // whichever household happens to be signed in when this migration
+  // runs.
+  7: [`alter table import_outbox add column household_id text`],
 };
