@@ -61,7 +61,11 @@ describe('sortRecipes: smart', () => {
 
   it('puts frequently-selected recipes (planned > 0) ahead of everything but recently-added', () => {
     const recipes = [
-      recipe({ id: 'never-planned', title: 'Aardvark Stew', createdAt: '2020-01-01T00:00:00.000Z' }),
+      recipe({
+        id: 'never-planned',
+        title: 'Aardvark Stew',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      }),
       recipe({
         id: 'planned',
         title: 'Zucchini Bread',
@@ -71,7 +75,10 @@ describe('sortRecipes: smart', () => {
     ];
     // "planned" is alphabetically after "never-planned" and neither is
     // recently added, but a planned_count > 0 still outranks it.
-    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['planned', 'never-planned']);
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual([
+      'planned',
+      'never-planned',
+    ]);
   });
 
   it('orders the frequently-selected tier by planned count descending, ties alphabetically', () => {
@@ -108,7 +115,11 @@ describe('sortRecipes: smart', () => {
         createdAt: '2026-08-10T00:00:00.000Z',
         plannedCount: 10,
       }),
-      recipe({ id: 'old-unplanned', title: 'Aardvark Stew', createdAt: '2020-01-01T00:00:00.000Z' }),
+      recipe({
+        id: 'old-unplanned',
+        title: 'Aardvark Stew',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      }),
     ];
     expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual([
       'new-and-planned',

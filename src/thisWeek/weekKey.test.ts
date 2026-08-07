@@ -18,7 +18,7 @@ describe('currentWeekKey', () => {
     expect(currentWeekKey(new Date(2026, 0, 1))).toBe('2026-W01');
   });
 
-  it('assigns the last days of December to next year\'s week 1 when appropriate', () => {
+  it("assigns the last days of December to next year's week 1 when appropriate", () => {
     // 2025-12-31 is a Wednesday; its ISO week's Thursday is 2026-01-01,
     // so it belongs to 2026-W01, not 2025's own last week.
     expect(currentWeekKey(new Date(2025, 11, 31))).toBe('2026-W01');

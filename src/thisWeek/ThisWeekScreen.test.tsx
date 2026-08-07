@@ -140,7 +140,9 @@ it('confirms the plan and reloads', async () => {
 
 it('removes an entry, shows an Undo banner, and restores it on Undo', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
-    plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', recipeId: 'r1', servings: 4 })] }),
+    plan({
+      entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', recipeId: 'r1', servings: 4 })],
+    }),
   );
 
   renderThisWeekScreen();
@@ -161,9 +163,7 @@ it('removes an entry, shows an Undo banner, and restores it on Undo', async () =
 });
 
 it('reverts the optimistic remove if the server call fails', async () => {
-  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
-    plan({ entries: [entry({ id: 'e1' })] }),
-  );
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan({ entries: [entry({ id: 'e1' })] }));
   mockedApi.removeFromThisWeek.mockRejectedValue(new Error('boom'));
 
   renderThisWeekScreen();
@@ -216,12 +216,12 @@ it('disables move-up on the first entry and move-down on the last entry', async 
   expect(screen.getByTestId('this-week-entry-move-up-e1').props.accessibilityState.disabled).toBe(
     true,
   );
-  expect(
-    screen.getByTestId('this-week-entry-move-down-e2').props.accessibilityState.disabled,
-  ).toBe(true);
-  expect(
-    screen.getByTestId('this-week-entry-move-down-e1').props.accessibilityState.disabled,
-  ).toBe(false);
+  expect(screen.getByTestId('this-week-entry-move-down-e2').props.accessibilityState.disabled).toBe(
+    true,
+  );
+  expect(screen.getByTestId('this-week-entry-move-down-e1').props.accessibilityState.disabled).toBe(
+    false,
+  );
 });
 
 it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan link', async () => {

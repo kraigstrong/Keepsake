@@ -88,7 +88,9 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
         addedCount += 1;
       }
       showToast(
-        addedCount === 1 ? 'Added 1 recipe to This Week' : `Added ${addedCount} recipes to This Week`,
+        addedCount === 1
+          ? 'Added 1 recipe to This Week'
+          : `Added ${addedCount} recipes to This Week`,
       );
       router.back();
     } catch {
@@ -182,7 +184,11 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
         <>
           <View style={styles.list}>
             {selectedRecipes.map((recipe) => (
-              <View key={recipe.id} style={styles.row} testID={`add-to-this-week-servings-${recipe.id}`}>
+              <View
+                key={recipe.id}
+                style={styles.row}
+                testID={`add-to-this-week-servings-${recipe.id}`}
+              >
                 <Text style={styles.rowTitle} numberOfLines={1}>
                   {recipe.title}
                 </Text>

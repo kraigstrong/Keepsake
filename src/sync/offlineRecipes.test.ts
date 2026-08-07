@@ -58,7 +58,14 @@ describe('readLocalLibraryRecipes', () => {
   it('falls back a null created_at (pre-schema-v3-resync row) to the epoch, not "now"', async () => {
     const db = createMockDb({
       getAllAsync: jest.fn(async () => [
-        { id: 'r1', title: 'Chili', created_at: null, category_ids: '[]', tags: '[]', planned_count: 0 },
+        {
+          id: 'r1',
+          title: 'Chili',
+          created_at: null,
+          category_ids: '[]',
+          tags: '[]',
+          planned_count: 0,
+        },
       ]),
     });
     mockedGetDatabase.mockResolvedValue(db);

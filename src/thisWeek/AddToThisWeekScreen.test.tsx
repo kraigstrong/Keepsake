@@ -96,9 +96,9 @@ it('going back from the servings step preserves the selection', async () => {
   await fireEvent.press(screen.getByTestId('add-to-this-week-back'));
 
   expect(screen.getByText('Add Recipes')).toBeTruthy();
-  expect(
-    screen.getByTestId('add-to-this-week-recipe-r1').props.accessibilityState.checked,
-  ).toBe(true);
+  expect(screen.getByTestId('add-to-this-week-recipe-r1').props.accessibilityState.checked).toBe(
+    true,
+  );
 });
 
 it('submits each selected recipe at its chosen servings, in order, then navigates back', async () => {
