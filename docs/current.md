@@ -6,11 +6,11 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 
 ## Current
 
-- **Phase:** 12 — This Week Planning
+- **Phase:** 13 — Grocery Generation and Review
 - **Status:** Not started.
-- **Branch:** none yet. Phase 11.5 merged via [PR #33](https://github.com/kraigstrong/Keepsake/pull/33) (Conditional Pass, developer decision, 2026-08-06 — see `docs/history/phase-11.5-import-concurrency.md`).
-- **Next action:** Run `start-phase` for Phase 12.
-- **Blocked on:** Nothing.
+- **Branch:** none yet. Phase 12 merged via [PR #36](https://github.com/kraigstrong/Keepsake/pull/36) (Conditional Pass, developer decision, 2026-08-07 — see `docs/history/phase-12-this-week-planning.md`).
+- **Next action:** Run `start-phase` for Phase 13. Before that, a Share Extension crash (`logError`/`drainAppGroupQueue`, "undefined is not a function") found during Phase 12 device testing is still open — Phase 9 code, not this phase's — see the entry below.
+- **Blocked on:** Nothing for Phase 13 itself; the Share Extension bug is a separate active investigation.
 
 ## History
 
@@ -34,6 +34,7 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 | [JSON-LD hint](history/cross-cutting-jsonld-hint.md) | Merged | 2026-08-06 | JSON-LD structured-data import hint (ADR-0019) — cross-cutting, not a numbered phase. |
 | [11](history/phase-11-units-scaling.md) | Conditional Pass | 2026-08-05/06 | Units, Scaling, and Quantity Integrity — structured quantities, conversion, scaling UI. |
 | [11.5](history/phase-11.5-import-concurrency.md) | Conditional Pass | 2026-08-06/07 | Import Concurrency and Local Data Isolation (ADR-0020) — invitation race, import fencing, household-scoped local data. |
+| [12](history/phase-12-this-week-planning.md) | Conditional Pass | 2026-08-07 | This Week Planning (ADR-0021) — weekly plan schema/RLS/RPCs, multi-select add, tap-based reorder, Frequently Selected sort. |
 
 ## Open Conditional Pass follow-ups
 
@@ -42,6 +43,7 @@ Every phase's Conditional-Pass evidence gaps are recorded in that phase's own `d
 - **Phase 9 — no physical-device pass for the Share Extension confirmation UI.** ADR-0003 requires one specifically for this phase (Simulator isn't fully representative of Share Extension behavior). Unconfirmed: the 1.5s+checkmark+haptic confirmation animation. `IMP-02` stays `Done (untested)` in `prd-traceability.md` until this closes. See `docs/history/phase-09-share-extension.md`.
 - **Phase 10 — no live Anthropic vision call yet.** Photo-import extraction has Jest evidence only; needs a real `extractRecipeFromImage` call against a real photo, with the developer watching (per this project's live-API-test convention). See `docs/history/phase-10-camera-photo-import.md`.
 - **Phase 11.5 — true two-connection concurrency unverified.** The invitation-redemption race (KS-002) and import-claim fencing (KS-004) fixes are provable by pgTAP for their logic, but not for genuine two-connection concurrency, which pgTAP's single-transaction model can't express. Needs a manual staging check (two `psql` sessions racing the same call) before threat-model T18/T19 are fully closed. See `docs/history/phase-11.5-import-concurrency.md`.
+- **Phase 12 — no Simulator/device walkthrough of the This Week flow yet.** Not required by ADR-0003 for this phase, but not yet performed either. See `docs/history/phase-12-this-week-planning.md`.
 
 Older phases (4, 5, 7, 11) also exited Conditional Pass on a generic "no live Simulator demonstration" gap, never individually marked resolved. Not listed here as still-open: by Phase 6 onward, live Simulator/device sessions became routine and have exercised most of the same UI surfaces since, without a phase going back to formally close the earlier note. Treated as superseded in practice, not silently dropped — flagged here so that judgment call is visible rather than assumed.
 
