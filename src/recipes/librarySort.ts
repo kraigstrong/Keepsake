@@ -1,14 +1,22 @@
 import type { LibraryRecipe } from '../sync/offlineRecipes';
 
 /**
- * prd.md §14's "Additional sorts". Frequently Selected (FREQ-01) isn't
- * a selectable mode of its own — like Recently Added, it's a tier
- * *within* Smart sort (see smartSort below), not something a user picks
- * independently.
+ * prd.md §14's "Additional sorts": Smart, Alphabetical, Recently Added,
+ * Frequently Selected — all four independently selectable (Codex
+ * review, PR #36: an earlier version of this file read Frequently
+ * Selected as only a tier *within* Smart, per Recently Added's own
+ * dual role there — but the PRD lists it as its own standalone mode
+ * too, the same way Recently Added is both a Smart tier and its own
+ * mode).
  */
-export type SortMode = 'smart' | 'alphabetical' | 'recentlyAdded';
+export type SortMode = 'smart' | 'alphabetical' | 'recentlyAdded' | 'frequentlySelected';
 
-export const SORT_MODES: readonly SortMode[] = ['smart', 'alphabetical', 'recentlyAdded'];
+export const SORT_MODES: readonly SortMode[] = [
+  'smart',
+  'alphabetical',
+  'recentlyAdded',
+  'frequentlySelected',
+];
 
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -71,6 +79,8 @@ export function sortRecipes(
       return [...recipes].sort(byTitle);
     case 'recentlyAdded':
       return [...recipes].sort(byCreatedAtDescending);
+    case 'frequentlySelected':
+      return [...recipes].sort(byPlannedCountDescending);
     case 'smart':
       return smartSort(recipes, now);
   }

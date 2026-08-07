@@ -36,6 +36,7 @@ const SORT_LABELS: Record<SortMode, string> = {
   smart: 'Smart',
   alphabetical: 'Alphabetical',
   recentlyAdded: 'Recently Added',
+  frequentlySelected: 'Frequently Selected',
 };
 
 const CATEGORY_GROUP_LABELS: Record<CategoryGroup, string> = {

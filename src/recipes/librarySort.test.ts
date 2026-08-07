@@ -32,6 +32,44 @@ describe('sortRecipes: recentlyAdded', () => {
   });
 });
 
+describe('sortRecipes: frequentlySelected', () => {
+  it('orders the whole library by planned count descending, ties alphabetically', () => {
+    const recipes = [
+      recipe({ id: 'never', title: 'Never Planned', plannedCount: 0 }),
+      recipe({ id: 'most', title: 'Most Planned', plannedCount: 5 }),
+      recipe({ id: 'tie-a', title: 'B Tie', plannedCount: 2 }),
+      recipe({ id: 'tie-b', title: 'A Tie', plannedCount: 2 }),
+    ];
+    expect(sortRecipes(recipes, 'frequentlySelected', NOW).map((r) => r.id)).toEqual([
+      'most',
+      'tie-b',
+      'tie-a',
+      'never',
+    ]);
+  });
+
+  it('unlike Smart, does not put recently-added recipes ahead regardless of count', () => {
+    const recipes = [
+      recipe({
+        id: 'new-unplanned',
+        title: 'New',
+        createdAt: '2026-08-14T00:00:00.000Z',
+        plannedCount: 0,
+      }),
+      recipe({
+        id: 'old-planned',
+        title: 'Old',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 3,
+      }),
+    ];
+    expect(sortRecipes(recipes, 'frequentlySelected', NOW).map((r) => r.id)).toEqual([
+      'old-planned',
+      'new-unplanned',
+    ]);
+  });
+});
+
 describe('sortRecipes: smart', () => {
   it('puts recipes created within the last 2 weeks ahead of everything else', () => {
     const recipes = [
