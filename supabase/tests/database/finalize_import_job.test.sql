@@ -101,18 +101,33 @@ select is(
   'finalize_import_job: replay did not create a second recipe'
 );
 
--- Fencing: a superseded claim_token cannot finalize.
+-- Fencing: a superseded claim_token cannot finalize. Still alice
+-- (not a second user — the fencing/atomicity properties below don't
+-- need a different household), so her first job's created_at is
+-- backdated first to clear create_import_job's household-level 5s
+-- cooldown (import_job_abuse_controls.sql) — same technique
+-- import_jobs.test.sql uses for the same reason.
 
-create temporary table bob_job as
+reset role;
+update public.import_jobs set created_at = now() - interval '10 minutes'
+where id = (select id from alice_job);
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+
+create temporary table second_job as
 select * from public.create_import_job('https://example.test/soup', 'https://example.test/soup');
 
-create temporary table bob_claim as
-select * from public.claim_import_job((select id from bob_job));
+create temporary table second_claim as
+select * from public.claim_import_job((select id from second_job));
 
 select throws_ok(
   $$
     select public.finalize_import_job(
-      (select id from bob_job),
+      (select id from second_job),
       '00000000-0000-0000-0000-000000000000'::uuid,
       jsonb_build_object(
         'title', 'Should not save',
@@ -146,15 +161,15 @@ select throws_ok(
         )
       )
     $$,
-    (select id from bob_job),
-    (select claim_token from bob_claim)
+    (select id from second_job),
+    (select claim_token from second_claim)
   ),
   'insert or update on table "recipe_categories" violates foreign key constraint "recipe_categories_category_id_fkey"',
   'finalize_import_job: a save_recipe failure rolls back the whole call'
 );
 
 select is(
-  (select status from public.import_jobs where id = (select id from bob_job)),
+  (select status from public.import_jobs where id = (select id from second_job)),
   'processing',
   'finalize_import_job: a failed finalize leaves the job processing, not half-completed'
 );
