@@ -104,18 +104,22 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | WEEK-01 | This Week is the default screen | 2 / 12 | Done (tested) |
-| WEEK-02 | Select recipes → choose servings → review → confirm | 12 | Not Started |
-| WEEK-03 | Confirming increments planned count | 12 | Not Started |
-| WEEK-04 | Cards show image and title | 12 | Not Started |
-| WEEK-05 | Drag-to-reorder | 12 | Not Started |
-| WEEK-06 | Ordered shortlist, not a meal calendar (no weekday/meal assignment) | 12 | Not Started |
-| WEEK-07 | Multi-member synchronization of the shared plan | 12 | Not Started |
+| WEEK-02 | Select recipes → choose servings → review → confirm | 12 | Done (tested) |
+| WEEK-03 | Confirming increments planned count | 12 | Done (tested)† |
+| WEEK-04 | Cards show image and title | 12 | Done (tested) |
+| WEEK-05 | Drag-to-reorder | 12 | Done (tested)‡ |
+| WEEK-06 | Ordered shortlist, not a meal calendar (no weekday/meal assignment) | 12 | Done (untested) |
+| WEEK-07 | Multi-member synchronization of the shared plan | 12 | Done (tested)§ |
+
+† pgTAP evidence only (`supabase/tests/database/weekly_plan_rpcs.test.sql`) — not run locally (no Docker in this environment, see `docs/history/phase-12-this-week-planning.md`); CI is the real gate before merge.
+‡ Implemented as tap-based up/down move buttons, not literal drag-and-drop — `react-native-draggable-flatlist` is incompatible with this app's `react-native-reanimated` 4.5.1 (throws at module load); developer-approved pivot, see ADR-0021 and `docs/history/phase-12-this-week-planning.md`.
+§ Refetch-on-focus/reconnect, not a live subscription — no Realtime in this app yet (ADR-0021's own tradeoff, explicitly deferred, not an oversight).
 
 ## Frequently Selected (FREQ)
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| FREQ-01 | Based on planned count, not cooking count | 12 | Not Started |
+| FREQ-01 | Based on planned count, not cooking count | 12 | Done (tested) |
 | FREQ-02 | Archived recipes excluded | 16 | Not Started |
 
 ## Cooking Mode (COOK)
