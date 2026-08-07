@@ -1,6 +1,6 @@
 # Keepsake — Agent Baseline
 
-Cross-agent source of truth. Any coding agent working in this repo — including automated PR review (Codex) — should be able to work from this file alone without loading `docs/prd.md`, `docs/execution-plan.md`, or the full `docs/phase-status.md` history. Load those only for cross-cutting product/architecture work; for a routine change or review, this file plus the specific files you're touching is enough.
+Cross-agent source of truth. Any coding agent working in this repo — including automated PR review (Codex) — should be able to work from this file alone without loading `docs/prd.md`, `docs/execution-plan.md`, or the full `docs/history/` archive. Load those only for cross-cutting product/architecture work; for a routine change or review, this file plus the specific files you're touching is enough.
 
 Claude Code specifically should also read [`CLAUDE.md`](CLAUDE.md) for Claude-specific workflow (how to resume a session, when to interrupt the developer, the skills in `.claude/skills/`) — this file is the shared baseline any agent needs, that one is Claude's own operating instructions on top of it.
 
@@ -13,7 +13,7 @@ Keepsake (product name "Pantry" internally in some docs — same app) is a calm,
 - `server/` — runtime-neutral pure TypeScript, executes under both Node (for Jest) and Deno (the Edge Function): `server/units/` (quantity parsing/scaling), `server/import/` (URL fetch, HTML reduction, JSON-LD extraction), `server/ai/` (Claude extraction calls). No side effects at import time; keep it that way.
 - `supabase/functions/import-recipe/` — the one Deno Edge Function. Pinned import map in `deno.json`. Uses the caller's own JWT (never service-role) so RLS applies inside it same as anywhere else.
 - `supabase/migrations/` — forward-only SQL migrations. `supabase/tests/database/` — pgTAP tests, one file per migration/RPC group, run for real against Postgres in CI.
-- `docs/` — `prd.md` (product spec), `execution-plan.md` (phase-by-phase build plan, security checklists per phase), `phase-status.md` (current-state pointer — see below), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → phase → status), `adr/` (numbered decision records).
+- `docs/` — `prd.md` (product spec), `execution-plan.md` (phase-by-phase build plan, security checklists per phase), `current.md` (current-state pointer — see below), `history/` (one archive file per phase, load a specific one only when needed), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → phase → status), `adr/` (numbered decision records).
 - `.claude/skills/` — `start-phase`, `exit-phase`, `pr-ready`, `security-check` encode this project's recurring workflows.
 
 ## Durable security invariants
@@ -42,7 +42,7 @@ A PR touching `supabase/migrations/` or `supabase/tests/database/` needs the las
 
 ## Current-state pointer
 
-Read only the `## Current` section at the top of [`docs/phase-status.md`](docs/phase-status.md) (first ~10 lines) for the active phase, its status, and next action. The rest of that file is a historical log of every past phase — long, and not needed for a routine task or review. If you need decision rationale for a specific past phase, `docs/adr/` is indexed by number and faster to search than the log.
+Read [`docs/current.md`](docs/current.md) — short by design (Current phase/status/next-action, a trimmed history index, carried-forward items) — for the active phase, its status, and next action. Full phase-by-phase narrative lives in `docs/history/phase-NN-*.md`, one file per phase; load a specific one only when a task needs that phase's detail. If you need design rationale rather than a phase narrative, `docs/adr/` is indexed by number and faster to search.
 
 ## Git / PR flow
 
@@ -61,7 +61,7 @@ A change is done when: the canonical commands above pass, the phase's (or PR's) 
 Codex reviews every PR on this repo. In priority order:
 
 1. **Security.** Household/RLS boundary correctness on any new table, column, or RPC — does a query or function actually get scoped by the caller's household, or does it only look like it does? Server-only code crossing into client bundles — a new import in `src/` or `app/` reaching into `server/ai`, `server/import`'s network/secret-touching modules, or anything that would put a credential in the Metro bundle. Any new external-input surface (URL, upload, deep link, AI output) used before validation.
-2. **Maintainability.** Prefer this repo's established patterns over a new one for the same problem — pure runtime-neutral modules in `server/`, one RPC per write boundary, an ADR recorded before a non-obvious cross-cutting decision, not after. Flag complexity that isn't earning its keep, and duplicated logic that should be one shared call site instead.
+2. **Maintainability.** Prefer this repo's established patterns over a new one for the same problem — pure runtime-neutral modules in `server/`, one RPC per write boundary, an ADR recorded before a non-obvious cross-cutting decision, not after. Flag complexity that isn't earning its keep, and duplicated logic that should be one shared call site instead. This includes comment and doc weight: a comment or `docs/history/` entry that re-derives an ADR's whole decision inline instead of citing it, or that's grown longer than the code/decision it explains, is a maintainability finding — flag it the same as any other unearned complexity.
 3. **Race conditions.** Atomicity of multi-step `security definer` functions and multi-RPC request handlers — a partial failure between two separate database calls that should have been one transaction is a recurring defect class in this repo; `docs/adr/0020-import-fencing-and-local-data-isolation.md` (`finalize_import_job`) is the canonical fix pattern to compare against: merge the steps into one function, call the existing save/create RPC directly rather than duplicating its body (nested `security definer` calls share the outer transaction), and fence any claim/lease with a token, not just a timestamp. Also watch for concurrency assumptions stated as comments but not enforced in SQL — "idempotent" or "single-winner" claims that aren't backed by a unique constraint, row lock, or atomic `UPDATE ... WHERE ... RETURNING`.
 4. **Product requirements.** Does the change actually satisfy the PRD requirement ID(s) it claims (`docs/prd-traceability.md`), and does it match the phase's stated build scope in `docs/execution-plan.md` — not scope-creeping into a later phase's territory or silently dropping part of the current one?
 

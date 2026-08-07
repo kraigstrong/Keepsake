@@ -184,7 +184,7 @@ This project is developed primarily through Claude sessions (Claude Code CLI, ID
 
 **Where work happens.** Sessions operate on this checked-out repository on the developer's machine. Cowork sessions in particular can be resumed and answered from the Claude mobile app, so mid-flight questions are not a blocker on being at a desk.
 
-**Resuming state.** Every session starts by reading [`docs/phase-status.md`](./phase-status.md) to find the current phase, its status, and the next action, rather than re-deriving progress from scratch.
+**Resuming state.** Every session starts by reading [`docs/current.md`](./current.md) to find the current phase, its status, and the next action, rather than re-deriving progress from scratch. Full phase-by-phase history lives in `docs/history/*.md`.
 
 **Default to acting, not asking.** Routine implementation choices that the PRD, this plan, or an ADR already answer should be made without interrupting the developer. A session should only stop and ask (via `AskUserQuestion` in Cowork, or by pausing and stating the question in the CLI) for:
 

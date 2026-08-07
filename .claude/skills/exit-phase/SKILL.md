@@ -23,12 +23,12 @@ iOS Simulator is the default exit-gate environment (ADR-0003) — that's suffici
 
 ## 4. Produce the Phase Completion Report
 
-Fill out the template from `docs/execution-plan.md` ("Phase Completion Report Template") in full: product increment, PRD requirements covered, automated evidence, human evidence (mark what's still needed from the developer), security review, commit history summary, PR list, credential review, known limitations, and a proposed exit decision.
+Fill out the template from `docs/execution-plan.md` ("Phase Completion Report Template") in full: product increment, PRD requirements covered, automated evidence, human evidence (mark what's still needed from the developer), security review, commit history summary, PR list, credential review, known limitations, and a proposed exit decision. Keep it tight per `CLAUDE.md`'s "Comments and phase records" rule — what shipped, what broke and got fixed, the evidence numbers; link to an ADR for design rationale rather than re-narrating it here.
 
 ## 5. Get the human sign-off
 
-The exit decision (Pass / Conditional Pass / Fail) is always the developer's call, even if everything looks clean — this is one of the interrupt cases in `CLAUDE.md`. Present the completed report and ask for the decision via `AskUserQuestion` (Cowork) or by clearly pausing and presenting it (CLI). Don't advance `docs/phase-status.md` to the next phase until you have an explicit answer.
+The exit decision (Pass / Conditional Pass / Fail) is always the developer's call, even if everything looks clean — this is one of the interrupt cases in `CLAUDE.md`. Present the completed report and ask for the decision via `AskUserQuestion` (Cowork) or by clearly pausing and presenting it (CLI). Don't advance `docs/current.md` to the next phase until you have an explicit answer.
 
 ## 6. Record the result
 
-On Pass or Conditional Pass: update `docs/phase-status.md` with the result and set the next phase as current, noting any Conditional Pass follow-ups as tracked items. On Fail: keep the phase current, record what's blocking in `docs/phase-status.md`, and don't start the next phase's work.
+On Pass or Conditional Pass: write the Phase Completion Report to a new `docs/history/phase-N-<short-slug>.md` file (match the naming already in `docs/history/`), add a row for it to `docs/current.md`'s History table, and update `docs/current.md`'s `## Current` section to point at the next phase — noting any Conditional Pass follow-ups as tracked items in the new history file, not in `docs/current.md` itself. On Fail: keep the phase current in `docs/current.md`, record what's blocking there, and don't start the next phase's work or write a history file yet (there's no completed phase to archive).

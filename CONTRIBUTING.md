@@ -4,7 +4,7 @@ This is effectively a household of one developer plus Claude sessions doing the 
 
 ## The short version
 
-1. Read `docs/phase-status.md` to see what's current.
+1. Read `docs/current.md` to see what's current.
 2. Work on a feature branch, not `main`.
 3. Commit in small, coherent, independently-reviewable steps (see execution-plan.md §2.9–§2.10) — not one giant commit at the end.
 4. No secrets, ever, in any commit — see `CLAUDE.md` and execution-plan.md §2.7.

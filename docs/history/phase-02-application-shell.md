@@ -1,0 +1,7 @@
+# Phase 2 — Application Shell and Design Foundation
+
+**Result:** Pass | **Date:** 2026-08-02 | **PR:** [#14](https://github.com/kraigstrong/Keepsake/pull/14)
+
+9 commits, merged via PR #14. Migrated the app entry point to Expo Router (This Week/Library tabs, Settings via header action, matching prd.md §24's IA) — found and fixed a real missing `babel.config.js` the project never had, and worked around two genuine version-mismatch bugs between this expo-router version and `@testing-library/react-native` v14 (documented inline in `src/navigation/*.test.tsx`). Built the authenticated-route-boundary (`Stack.Protected`) backed by `expo-secure-store` (Keychain), verified live end-to-end including a real Keychain-persistence check across app kill/relaunch. Wired Sentry (redacted `beforeSend`) and PostHog (compile-time-enforced allowlist) per ADR-0006 — both real no-ops without credentials; deliberately didn't add Sentry's native config plugin yet since it fails builds without a real Sentry project. Added a plain design-tokens module and 8 primitive components (Button/Row/Chip/Sheet/confirm/Toast) plus 5 shared states (Empty/Loading/Error/Offline/ImagePlaceholder) and assembled them into the real This Week/Library/Settings screens with a working global add action (Sheet-based). All choices recorded in ADR-0007.
+
+28 suites, 137 passed; `npm audit --omit=dev --audit-level=high` exit 0. WEEK-01 and SEC-05 → `Done (tested)`. No physical-device requirement for this phase (ADR-0003) — Simulator evidence is sufficient and complete.
