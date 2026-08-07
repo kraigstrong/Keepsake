@@ -7,7 +7,13 @@
 -- partition key. The upsert is atomic, so two concurrent calls for the
 -- same not-yet-existing week can't race into a unique-constraint error —
 -- the loser just gets the winner's row back via ON CONFLICT ... RETURNING.
-create or replace function public.get_or_create_current_weekly_plan(week_key text)
+-- Parameter is week_key_param, not week_key — an ON CONFLICT target
+-- column list only ever names table columns (it can't be qualified the
+-- way a WHERE/VALUES reference can), so a same-named parameter makes
+-- "week_key" genuinely ambiguous there, not just a style nit. Matches
+-- this codebase's existing _param suffix convention for exactly this
+-- collision (see e.g. save_recipe's recipe_id_param).
+create or replace function public.get_or_create_current_weekly_plan(week_key_param text)
 returns public.weekly_plans
 language plpgsql
 security definer
@@ -17,7 +23,7 @@ declare
   caller_household_id uuid;
   result_plan public.weekly_plans;
 begin
-  if week_key !~ '^\d{4}-W\d{2}$' then
+  if week_key_param !~ '^\d{4}-W\d{2}$' then
     raise exception 'invalid week_key format' using errcode = 'P0001';
   end if;
 
@@ -27,7 +33,7 @@ begin
   end if;
 
   insert into public.weekly_plans (household_id, week_key)
-  values (caller_household_id, get_or_create_current_weekly_plan.week_key)
+  values (caller_household_id, week_key_param)
   on conflict (household_id, week_key) do update
     set updated_at = public.weekly_plans.updated_at
   returning * into result_plan;

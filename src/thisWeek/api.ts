@@ -39,7 +39,7 @@ interface PlanningEntryRow {
  */
 export async function fetchCurrentWeeklyPlan(): Promise<ThisWeekPlan> {
   const { data: plan, error: planError } = await supabase
-    .rpc('get_or_create_current_weekly_plan', { week_key: currentWeekKey() })
+    .rpc('get_or_create_current_weekly_plan', { week_key_param: currentWeekKey() })
     .single();
   if (planError || !plan) {
     throw new Error(planError?.message ?? "Could not load this week's plan");

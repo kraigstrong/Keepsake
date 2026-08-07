@@ -61,7 +61,7 @@ describe('fetchCurrentWeeklyPlan', () => {
     });
     expect(mockedRpc).toHaveBeenCalledWith(
       'get_or_create_current_weekly_plan',
-      expect.objectContaining({ week_key: expect.stringMatching(/^\d{4}-W\d{2}$/) }),
+      expect.objectContaining({ week_key_param: expect.stringMatching(/^\d{4}-W\d{2}$/) }),
     );
     expect(mockedFrom).toHaveBeenCalledWith('planning_entries');
   });
