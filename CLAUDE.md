@@ -1,5 +1,7 @@
 # Pantry — Agent Operating Instructions
 
+See [`AGENTS.md`](AGENTS.md) for the cross-agent baseline (repo map, security invariants, canonical commands, approval boundaries) — this file adds Claude-specific workflow on top of it.
+
 Pantry is a calm, opinionated recipe app (Expo/React Native + TypeScript, Supabase, Anthropic Claude API server-side). Full product spec: [`docs/prd.md`](docs/prd.md). Full engineering/phase spec: [`docs/execution-plan.md`](docs/execution-plan.md). Read both before doing product work if you haven't already loaded them this session.
 
 Every session, before doing anything else: read [`docs/phase-status.md`](docs/phase-status.md). It says which phase is active, its status, and the next concrete action. Update it before ending a session, or before handing off a decision to the developer.
