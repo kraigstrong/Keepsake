@@ -287,9 +287,20 @@ select is(
 -- regardless of whether confirm_weekly_plan actually touches updated_at
 -- — comparing them directly can't distinguish "touched" from "never
 -- ran". Backdating updated_at first gives confirm's `updated_at = now()`
--- something real to move it off of.
+-- something real to move it off of. Requires reset role first — recipes
+-- has no direct UPDATE grant for authenticated (writes only ever go
+-- through SECURITY DEFINER RPCs, same as this phase's own tables), same
+-- reset-role-to-backdate-a-fixture pattern import_job_claiming.test.sql
+-- already uses.
+reset role;
 update public.recipes set updated_at = '2000-01-01T00:00:00Z'
 where id = '20000000-0000-0000-0000-000000000001';
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
 
 select lives_ok(
   format($$ select public.confirm_weekly_plan(%L) $$, (select id from plan_a)),
