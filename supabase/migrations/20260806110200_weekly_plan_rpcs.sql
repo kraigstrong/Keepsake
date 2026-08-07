@@ -53,6 +53,12 @@ grant execute on function public.get_or_create_current_weekly_plan(text) to auth
 -- Phase 12 security bullet). No archived_at column exists yet
 -- (LIFE-01 is Phase 16) — when it lands, add `and archived_at is null`
 -- here, same forward-compatible reasoning as deleted_recipes_tombstones.sql.
+--
+-- `for update` on the plan row (Codex review, PR #36): without it, two
+-- concurrent adds from different household members can both read the
+-- same max(position) before either inserts, landing two entries on the
+-- same position — the plan row lock serializes concurrent writers
+-- instead, same pattern reorder_planning_entries below now uses.
 create or replace function public.add_to_weekly_plan(plan_id uuid, recipe_id uuid, servings integer)
 returns public.planning_entries
 language plpgsql
@@ -72,7 +78,8 @@ begin
 
   select status into plan_status
   from public.weekly_plans
-  where id = plan_id and household_id = caller_household_id;
+  where id = plan_id and household_id = caller_household_id
+  for update;
   if plan_status is null then
     raise exception 'weekly plan not found' using errcode = 'P0001';
   end if;
@@ -106,6 +113,88 @@ $$;
 revoke all on function public.add_to_weekly_plan(uuid, uuid, integer) from public;
 grant execute on function public.add_to_weekly_plan(uuid, uuid, integer) to authenticated;
 
+-- Batch counterpart to add_to_weekly_plan, for the multi-select
+-- Add-to-This-Week flow (Codex review, PR #36): that screen used to loop
+-- add_to_weekly_plan once per selected recipe client-side, so a failure
+-- partway through left a partially-applied selection with no way to
+-- retry without risking duplicate entries for whichever recipes had
+-- already succeeded. This validates and inserts the entire selection in
+-- one transaction — all recipes must exist in the caller's household and
+-- every serving count must be positive, or nothing is inserted at all.
+-- recipe_ids/servings_list are parallel arrays (PostgREST has no native
+-- array-of-objects RPC parameter type); unnest(...) with ordinality zips
+-- them back into rows in the caller's original order, same idiom
+-- reorder_planning_entries already uses for its own ordered_entry_ids.
+create or replace function public.add_recipes_to_weekly_plan(
+  plan_id uuid,
+  recipe_ids uuid[],
+  servings_list integer[]
+)
+returns setof public.planning_entries
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_household_id uuid;
+  plan_status text;
+  next_position integer;
+  item_count integer;
+begin
+  item_count := coalesce(array_length(recipe_ids, 1), 0);
+  if item_count = 0 then
+    raise exception 'recipe_ids must not be empty' using errcode = 'P0001';
+  end if;
+  if array_length(servings_list, 1) is distinct from item_count then
+    raise exception 'recipe_ids and servings_list must be the same length' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from unnest(servings_list) as s where s <= 0) then
+    raise exception 'servings must be positive' using errcode = 'P0001';
+  end if;
+
+  caller_household_id := public.my_household_id();
+  if caller_household_id is null then
+    raise exception 'caller does not belong to a household' using errcode = 'P0001';
+  end if;
+
+  select status into plan_status
+  from public.weekly_plans
+  where id = plan_id and household_id = caller_household_id
+  for update;
+  if plan_status is null then
+    raise exception 'weekly plan not found' using errcode = 'P0001';
+  end if;
+  if plan_status <> 'planning' then
+    raise exception 'weekly plan is not in planning state' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1 from unnest(recipe_ids) as rid
+    where not exists (
+      select 1 from public.recipes where id = rid and household_id = caller_household_id
+    )
+  ) then
+    raise exception 'recipe not found' using errcode = 'P0001';
+  end if;
+
+  select coalesce(max(position), -1) into next_position
+  from public.planning_entries
+  where weekly_plan_id = plan_id;
+
+  update public.weekly_plans set updated_at = now() where id = plan_id;
+
+  return query
+    insert into public.planning_entries
+      (weekly_plan_id, household_id, recipe_id, servings, position, added_by)
+    select plan_id, caller_household_id, u.recipe_id, u.servings, next_position + u.ord::integer, auth.uid()
+    from unnest(recipe_ids, servings_list) with ordinality as u(recipe_id, servings, ord)
+    returning *;
+end;
+$$;
+
+revoke all on function public.add_recipes_to_weekly_plan(uuid, uuid[], integer[]) from public;
+grant execute on function public.add_recipes_to_weekly_plan(uuid, uuid[], integer[]) to authenticated;
+
 -- Reorder validates ownership (Phase 12 security bullet): ordered_entry_ids
 -- must be exactly the set of entries already in this plan — no missing,
 -- no extra, no duplicate, no id belonging to a different plan/household.
@@ -131,7 +220,8 @@ begin
 
   select status into plan_status
   from public.weekly_plans
-  where id = plan_id and household_id = caller_household_id;
+  where id = plan_id and household_id = caller_household_id
+  for update;
   if plan_status is null then
     raise exception 'weekly plan not found' using errcode = 'P0001';
   end if;
@@ -218,6 +308,13 @@ grant execute on function public.remove_planning_entry(uuid) to authenticated;
 -- already-confirmed plan — or the Edit Plan -> add/remove -> re-confirm
 -- cycle the UI's "Edit Plan" link enables — only counts entries that
 -- haven't been counted yet. Rejects an empty plan (nothing to confirm).
+--
+-- Also stamps recipes.updated_at (Codex review, PR #36): the offline
+-- sync engine's incremental pull is cursored on (updated_at, id)
+-- (ADR-0013) — a recipe whose only change is planned_count would never
+-- be re-fetched by an already-synced device otherwise, leaving Library's
+-- Frequently Selected tier permanently stale on that device until the
+-- recipe changed for some unrelated reason.
 create or replace function public.confirm_weekly_plan(plan_id uuid)
 returns public.weekly_plans
 language plpgsql
@@ -243,7 +340,7 @@ begin
   end if;
 
   update public.recipes r
-  set planned_count = r.planned_count + 1
+  set planned_count = r.planned_count + 1, updated_at = now()
   from public.planning_entries pe
   where pe.weekly_plan_id = plan_id
     and pe.household_id = caller_household_id

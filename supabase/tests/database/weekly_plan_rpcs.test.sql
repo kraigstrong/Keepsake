@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(31);
+select plan(41);
 
 insert into auth.users (id, email)
 values
@@ -123,6 +123,99 @@ select set_config(
   true
 );
 
+-- add_recipes_to_weekly_plan (batch — Codex review, PR #36): a fresh
+-- plan/week, kept separate from plan_a's later confirm/reopen state
+-- machine tests below.
+create temporary table plan_batch as
+select * from public.get_or_create_current_weekly_plan('2026-W35');
+
+create temporary table batch_entries as
+select * from public.add_recipes_to_weekly_plan(
+  (select id from plan_batch),
+  array['20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002']::uuid[],
+  array[4, 2]
+);
+select is(
+  (select count(*)::int from batch_entries),
+  2,
+  'add_recipes_to_weekly_plan: inserts one entry per recipe'
+);
+select is(
+  (select position from batch_entries where recipe_id = '20000000-0000-0000-0000-000000000001'),
+  0,
+  'add_recipes_to_weekly_plan: first item lands at position 0'
+);
+select is(
+  (select position from batch_entries where recipe_id = '20000000-0000-0000-0000-000000000002'),
+  1,
+  'add_recipes_to_weekly_plan: second item lands at position 1, preserving array order'
+);
+
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(%L, array[]::uuid[], array[]::integer[]) $$,
+    (select id from plan_batch)
+  ),
+  'recipe_ids must not be empty',
+  'add_recipes_to_weekly_plan: rejects an empty selection'
+);
+
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(%L, array['20000000-0000-0000-0000-000000000001']::uuid[], array[1, 2]) $$,
+    (select id from plan_batch)
+  ),
+  'recipe_ids and servings_list must be the same length',
+  'add_recipes_to_weekly_plan: rejects mismatched array lengths'
+);
+
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(%L, array['20000000-0000-0000-0000-000000000001']::uuid[], array[0]) $$,
+    (select id from plan_batch)
+  ),
+  'servings must be positive',
+  'add_recipes_to_weekly_plan: rejects a non-positive serving count'
+);
+
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(
+         %L,
+         array['20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003']::uuid[],
+         array[4, 2]
+       ) $$,
+    (select id from plan_batch)
+  ),
+  'recipe not found',
+  'add_recipes_to_weekly_plan: rejects a batch containing a cross-household recipe'
+);
+select is(
+  (select count(*)::int from public.planning_entries where weekly_plan_id = (select id from plan_batch)),
+  2,
+  'add_recipes_to_weekly_plan: the rejected batch inserted nothing at all (all-or-nothing)'
+);
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '33333333-3333-3333-3333-333333333333', 'role', 'authenticated')::text,
+  true
+);
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(%L, array['20000000-0000-0000-0000-000000000003']::uuid[], array[2]) $$,
+    (select id from plan_batch)
+  ),
+  'weekly plan not found',
+  'add_recipes_to_weekly_plan: a caller from a different household cannot see the plan'
+);
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+
 -- reorder_planning_entries
 select throws_ok(
   format(
@@ -200,6 +293,10 @@ select is(
   (select planned_count from public.recipes where id = '20000000-0000-0000-0000-000000000001'),
   1,
   'confirm_weekly_plan: increments the confirmed recipe''s planned_count'
+);
+select ok(
+  (select updated_at > created_at from public.recipes where id = '20000000-0000-0000-0000-000000000001'),
+  'confirm_weekly_plan: stamps the recipe''s updated_at so the offline sync cursor picks it up'
 );
 
 select lives_ok(
