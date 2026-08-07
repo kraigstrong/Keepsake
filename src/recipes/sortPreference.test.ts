@@ -15,8 +15,13 @@ describe('readSortPreference', () => {
   });
 
   it('falls back to smart for a stored value that is not a recognized sort mode', async () => {
-    await AsyncStorage.setItem('keepsake.library.sortMode', 'frequentlySelected');
+    await AsyncStorage.setItem('keepsake.library.sortMode', 'bogus');
     await expect(readSortPreference()).resolves.toBe('smart');
+  });
+
+  it('returns a previously written frequentlySelected preference', async () => {
+    await writeSortPreference('frequentlySelected');
+    await expect(readSortPreference()).resolves.toBe('frequentlySelected');
   });
 
   it('falls back to smart when the read itself fails', async () => {

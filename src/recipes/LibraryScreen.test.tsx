@@ -33,6 +33,7 @@ function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
     createdAt: '2020-01-01T00:00:00.000Z',
     categoryIds: [],
     tags: [],
+    plannedCount: 0,
     ...overrides,
   };
 }

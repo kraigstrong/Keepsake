@@ -1,14 +1,22 @@
 import type { LibraryRecipe } from '../sync/offlineRecipes';
 
 /**
- * prd.md §14's "Additional sorts" minus Frequently Selected — that tier
- * needs a planned count that doesn't exist until Phase 12's This Week
- * planning, and its storage shape isn't decided yet (ADR-0014). Omitted
- * from the type entirely rather than exposed-but-broken.
+ * prd.md §14's "Additional sorts": Smart, Alphabetical, Recently Added,
+ * Frequently Selected — all four independently selectable (Codex
+ * review, PR #36: an earlier version of this file read Frequently
+ * Selected as only a tier *within* Smart, per Recently Added's own
+ * dual role there — but the PRD lists it as its own standalone mode
+ * too, the same way Recently Added is both a Smart tier and its own
+ * mode).
  */
-export type SortMode = 'smart' | 'alphabetical' | 'recentlyAdded';
+export type SortMode = 'smart' | 'alphabetical' | 'recentlyAdded' | 'frequentlySelected';
 
-export const SORT_MODES: readonly SortMode[] = ['smart', 'alphabetical', 'recentlyAdded'];
+export const SORT_MODES: readonly SortMode[] = [
+  'smart',
+  'alphabetical',
+  'recentlyAdded',
+  'frequentlySelected',
+];
 
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -22,30 +30,42 @@ function byCreatedAtDescending(a: LibraryRecipe, b: LibraryRecipe): number {
   return b.createdAt.localeCompare(a.createdAt);
 }
 
+// Higher plannedCount first; ties broken alphabetically for a
+// deterministic, stable order rather than leaving equal-count recipes
+// in whatever order they happened to arrive in.
+function byPlannedCountDescending(a: LibraryRecipe, b: LibraryRecipe): number {
+  return b.plannedCount - a.plannedCount || byTitle(a, b);
+}
+
 /**
- * prd.md §14 default sort: Recently Added (<2wk) first — newest first
- * within that tier — then the remaining recipes alphabetically. The PRD
- * doesn't specify remaining's order; alphabetical is already one of the
- * other offered sorts, so it's a principled choice, not an arbitrary one
- * (ADR-0014). The third tier, Frequently Selected, is a known, tracked
- * gap (see SortMode above) — not guessed at.
+ * prd.md §14 default sort, three tiers, each recipe appearing in
+ * exactly one: Recently Added (<2wk, newest first) — unchanged from
+ * Phase 7 — then Frequently Selected (FREQ-01: plannedCount > 0, most-
+ * planned first) among whatever's left, then everything else
+ * alphabetically. A recipe added within the last two weeks appears in
+ * Recently Added even if it's also been planned, so recency always
+ * outranks planned count rather than the two tiers fighting over it.
  */
 function smartSort(recipes: LibraryRecipe[], now: Date): LibraryRecipe[] {
   const cutoff = now.getTime() - TWO_WEEKS_MS;
   const recentlyAdded: LibraryRecipe[] = [];
+  const frequentlySelected: LibraryRecipe[] = [];
   const remaining: LibraryRecipe[] = [];
 
   for (const recipe of recipes) {
     if (new Date(recipe.createdAt).getTime() >= cutoff) {
       recentlyAdded.push(recipe);
+    } else if (recipe.plannedCount > 0) {
+      frequentlySelected.push(recipe);
     } else {
       remaining.push(recipe);
     }
   }
 
   recentlyAdded.sort(byCreatedAtDescending);
+  frequentlySelected.sort(byPlannedCountDescending);
   remaining.sort(byTitle);
-  return [...recentlyAdded, ...remaining];
+  return [...recentlyAdded, ...frequentlySelected, ...remaining];
 }
 
 /** Pure — no SQLite/AsyncStorage dependency, fully unit testable. `now` is injectable so the <2wk cutoff is deterministic in tests. */
@@ -59,6 +79,8 @@ export function sortRecipes(
       return [...recipes].sort(byTitle);
     case 'recentlyAdded':
       return [...recipes].sort(byCreatedAtDescending);
+    case 'frequentlySelected':
+      return [...recipes].sort(byPlannedCountDescending);
     case 'smart':
       return smartSort(recipes, now);
   }

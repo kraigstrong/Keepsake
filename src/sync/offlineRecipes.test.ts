@@ -33,6 +33,7 @@ describe('readLocalLibraryRecipes', () => {
           created_at: '2026-08-01T00:00:00.000Z',
           category_ids: JSON.stringify(['c1']),
           tags: JSON.stringify(['spicy']),
+          planned_count: 2,
         },
       ]),
     });
@@ -45,10 +46,11 @@ describe('readLocalLibraryRecipes', () => {
         createdAt: '2026-08-01T00:00:00.000Z',
         categoryIds: ['c1'],
         tags: ['spicy'],
+        plannedCount: 2,
       },
     ]);
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      'select id, title, created_at, category_ids, tags from recipes where household_id = ? order by title',
+      'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? order by title',
       HOUSEHOLD_ID,
     );
   });
@@ -56,7 +58,14 @@ describe('readLocalLibraryRecipes', () => {
   it('falls back a null created_at (pre-schema-v3-resync row) to the epoch, not "now"', async () => {
     const db = createMockDb({
       getAllAsync: jest.fn(async () => [
-        { id: 'r1', title: 'Chili', created_at: null, category_ids: '[]', tags: '[]' },
+        {
+          id: 'r1',
+          title: 'Chili',
+          created_at: null,
+          category_ids: '[]',
+          tags: '[]',
+          planned_count: 0,
+        },
       ]),
     });
     mockedGetDatabase.mockResolvedValue(db);

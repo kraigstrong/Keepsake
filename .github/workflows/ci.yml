@@ -84,13 +84,13 @@ jobs:
 
       - run: npm ci
 
-      # Fail only on high/critical, and only within dependencies that ship
-      # in the app or server bundle (--omit=dev). Two known, accepted gaps
-      # this currently hides:
+      # Fails only within dependencies that ship in the app or server
+      # bundle (--omit=dev). Two known, accepted gaps this currently
+      # hides:
       # - Moderate: uuid <11.1.1 via xcode -> @expo/config-plugins -> expo
       #   CLI internals (regular dependency, but moderate stays below the
-      #   --audit-level=high threshold either way). See the "Wire up
-      #   secret and dependency scanning" commit for the full reasoning.
+      #   high/critical threshold either way). See the "Wire up secret
+      #   and dependency scanning" commit for the full reasoning.
       # - High: @xmldom/xmldom (XML injection/DoS, no fix available) via
       #   @bacons/apple-targets's own nested @bacons/xcode/@expo/plist
       #   tree. @bacons/apple-targets is a devDependency — it only runs
@@ -99,4 +99,12 @@ jobs:
       #   or server bundle, so --omit=dev is the correct scope, not a
       #   blanket exception. Re-run without --omit=dev periodically to
       #   check whether upstream has picked up a fix.
-      - run: npm audit --omit=dev --audit-level=high
+      #
+      # scripts/check-npm-audit.mjs wraps the raw `npm audit` (rather than
+      # a bare --audit-level=high) so that a *new* high/critical finding
+      # anywhere still fails the build — it only tolerates the two
+      # specific, reviewed advisories documented in that script's own
+      # allowlist (image-size, nanoid — both build-tooling-only, no
+      # reachable path from real input to the shipped app), not every
+      # future high-severity finding.
+      - run: node scripts/check-npm-audit.mjs

@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -151,4 +151,12 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   // whichever household happens to be signed in when this migration
   // runs.
   7: [`alter table import_outbox add column household_id text`],
+  // This Week planning (Phase 12, ADR-0021). Mirrors recipes.planned_count
+  // for Library's Frequently Selected sort tier (FREQ-01). No resync-
+  // cursor reset needed, same reasoning as v6's servings_count: the
+  // server column also defaults to 0 for every pre-existing recipe (no
+  // plan could have been confirmed before this column existed), so an
+  // already-synced local row defaulting to 0 here is already correct,
+  // not stale.
+  8: [`alter table recipes add column planned_count integer not null default 0`],
 };

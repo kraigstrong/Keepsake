@@ -204,6 +204,7 @@ function AuthenticatedRouteBoundary() {
       <Stack.Protected guard={isOnboarded}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="recipe" />
+        <Stack.Screen name="this-week" />
         <Stack.Screen
           name="settings"
           options={{

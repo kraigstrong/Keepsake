@@ -4,13 +4,16 @@ import { defaultImageStore, ensureImageCached, type ImageStore } from './imageCa
 
 // What Library's sort/filter (Phase 7) needs beyond a bare id/title —
 // createdAt for the Smart-sort "Recently Added" tier (distinct from
-// updated_at, which changes on every edit), categoryIds/tags for filters.
+// updated_at, which changes on every edit), categoryIds/tags for
+// filters, plannedCount for the Frequently Selected tier (FREQ-01,
+// Phase 12).
 export interface LibraryRecipe {
   id: string;
   title: string;
   createdAt: string;
   categoryIds: string[];
   tags: string[];
+  plannedCount: number;
 }
 
 interface LibraryRecipeRow {
@@ -19,6 +22,7 @@ interface LibraryRecipeRow {
   created_at: string | null;
   category_ids: string;
   tags: string;
+  planned_count: number;
 }
 
 interface LocalRecipeRow {
@@ -78,7 +82,7 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
 export async function readLocalLibraryRecipes(householdId: string): Promise<LibraryRecipe[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<LibraryRecipeRow>(
-    'select id, title, created_at, category_ids, tags from recipes where household_id = ? order by title',
+    'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? order by title',
     householdId,
   );
   return rows.map((row) => ({
@@ -91,6 +95,7 @@ export async function readLocalLibraryRecipes(householdId: string): Promise<Libr
     createdAt: row.created_at ?? new Date(0).toISOString(),
     categoryIds: JSON.parse(row.category_ids) as string[],
     tags: JSON.parse(row.tags) as string[],
+    plannedCount: row.planned_count,
   }));
 }
 
