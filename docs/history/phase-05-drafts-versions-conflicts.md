@@ -1,0 +1,16 @@
+# Phase 5 — Drafts, Version History, and Edit Conflicts
+
+**Result:** Conditional Pass | **Date:** 2026-08-04 | **PR:** [#19](https://github.com/kraigstrong/Keepsake/pull/19)
+
+12 commits on `phase-5-drafts-versions-conflicts`. ADR-0011 resolved two design questions before writing any schema: drafts are server-synced and scoped to the owning user, not the household (prd.md's "user-specific" wording, distinct from cooking-checklist progress's explicit "device-specific"); conflict resolution is block-and-reload, not merge (nothing in prd.md or execution-plan.md describes a diff/merge UI, and "conflict prevention" is the plan's own phrase). `recipes.version` plus an immutable `recipe_versions` snapshot table (one jsonb blob per explicit save, not a parallel normalized schema — nothing needs to query inside old versions, only list and restore them). `save_recipe` now requires a `baseVersion` on every edit, checked against the row's current version before any write; a stale value fails the whole call atomically, and a missing one is rejected outright rather than silently allowed. `restore_recipe_version` reapplies a snapshot through `save_recipe`'s own atomic path rather than duplicating its write logic, supplying the recipe's current version as its own baseVersion so it succeeds by construction instead of needing a bypass flag. `recipe_drafts` (owner-only RLS, two partial unique indexes since Postgres treats every null `recipe_id` as distinct) with `upsert_draft`/`delete_draft` RPCs — the first table in this schema where the write boundary is per-user ownership rather than household membership, still RPC-only so `household_id` stays caller-derived rather than client-supplied. `RecipeEditorScreen` now prefers an existing draft over the server copy on load, autosaves a debounced draft on every change (skipping its first post-load firing so unedited content isn't written back as a "draft"), and shows a distinct conflict state with a reload action when a save is rejected for a stale version — the user's own draft is left alone either way, since reload only replaces what's on screen. New `RecipeVersionHistoryScreen` at `/recipe/[id]/history`, reached from the detail screen's new History button, lists every save with a restore action (disabled on the newest, since restoring the version already showing isn't meaningful).
+
+REC-08, VER-01/02/03/04 → `Done (tested)`. 43 suites, 219 passed, 1 skipped; typecheck/lint/format clean.
+
+## Conditional Pass follow-ups (tracked until closed)
+
+Phase 5 exited **Conditional Pass** (developer decision, 2026-08-04) — build scope and automated test coverage are real and complete, but the same two things Phase 4 hit couldn't be verified in this sandboxed environment:
+
+1. **No live iOS Simulator demonstration.** Same as Phase 4 — no staging Supabase reachable here to sign in against, and the installed build predates this phase's changes regardless.
+2. **Migrations and pgTAP have never actually executed anywhere.** No Docker in this environment — `recipe_versioning_schema.sql`, `recipe_drafts_schema.sql`, `save_recipe_rpc_versioning.sql`, `restore_recipe_version_rpc.sql`, `draft_rpcs.sql`, and their pgTAP tests are written and reviewed but unexecuted until real CI runs them on the PR.
+
+**Conditional Pass, not Pass** — same evidence gaps as Phase 4.

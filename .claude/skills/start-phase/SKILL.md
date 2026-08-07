@@ -9,12 +9,12 @@ Starting or resuming a phase of the Pantry build. Work through this in order.
 
 Read, in this order:
 
-1. `docs/phase-status.md` — current phase, status, next action, any open questions.
+1. `docs/current.md` — current phase, status, next action, any open questions.
 2. The relevant phase section in `docs/execution-plan.md` (Objective, Build scope, Security validation/considerations, Validation, Exit gate, Non-goals).
 3. `docs/prd-traceability.md` filtered to the requirement IDs that phase owns.
 4. `docs/adr/` for any prior decisions relevant to this phase (skim titles, read ones that look relevant).
 
-If `docs/phase-status.md` says a different phase is active than the one the developer named, say so before proceeding — don't silently skip ahead or backward.
+If `docs/current.md` says a different phase is active than the one the developer named, say so before proceeding — don't silently skip ahead or backward.
 
 ## 2. Confirm the branch
 
@@ -51,4 +51,4 @@ Implement one commit-sized unit at a time. After each: run relevant tests/type c
 
 ## 7. Before ending the session
 
-Update `docs/phase-status.md`: current status, what's done, exact next action for the next session. If a commit group is ready for a PR, say so explicitly and give the push/PR instructions (see the `pr-ready` skill) rather than leaving it implicit.
+Update `docs/current.md`: current status, what's done, exact next action for the next session. If a commit group is ready for a PR, say so explicitly and give the push/PR instructions (see the `pr-ready` skill) rather than leaving it implicit.

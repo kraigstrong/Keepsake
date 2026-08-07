@@ -1,0 +1,11 @@
+# Phase 5.5 — Optional Password Sign-in (ADR-0012)
+
+**Result:** — (no gate) | **Date:** 2026-08-04 | **PR:** [#20](https://github.com/kraigstrong/Keepsake/pull/20), follow-up [#21](https://github.com/kraigstrong/Keepsake/pull/21) — cross-cutting, not a numbered execution-plan phase
+
+Developer request, mid-Phase-6-handoff: an opt-in password as an alternative to email OTP, without changing the default for anyone who doesn't set one (ADR-0008's non-technical-audience reasoning still holds as the default). `SessionProvider` gained `setPassword`/`signInWithPassword` alongside the existing `sendOtp`/`verifyOtp`. Both `app/sign-in.tsx` and `app/settings.tsx` were extracted into testable `src/` components (`SignInScreen`, `SettingsScreen`) — neither had a dedicated unit test before, only routing-level smoke tests, and the amount of new interactive logic made that too risky to leave untested. Sign-in's email step now offers "Sign in with password instead"; Settings gained a "Set a password" form (new + confirm, client-side match check, server-side length/strength enforcement surfaced as-is). `minimum_password_length` raised 6→8 in `supabase/config.toml` (length over composition rules, per current NIST/1Password guidance). Threat model T11 added: password guessing is already covered by Supabase's existing per-IP sign-in rate limit, not new mitigation work; the generic "invalid credentials" error isn't a user-enumeration oracle.
+
+45 suites, 235 passed, 1 skipped; typecheck/lint/format clean. No PRD IDs owned (auth mechanism was never itself a distinct PRD requirement, just an ADR-0008 engineering decision this amends). No Simulator/device verification at exit time — same sandbox constraint as every phase since 3.
+
+**Since resolved:** a real physical-device pass on the developer's own machine (PR #21) exercised the actual sign-in flow against staging for the first time and found two real bugs — a stale `EXPO_PUBLIC_SUPABASE_ANON_KEY` reference left over from the publishable-key rename, and confusing sign-in copy that didn't indicate the email step also creates an account — both fixed. Also surfaced (not fixed, tracked in `docs/current.md`): staging's magic-link email is unusable as shipped.
+
+No exit decision — this isn't a phase with a gate.
