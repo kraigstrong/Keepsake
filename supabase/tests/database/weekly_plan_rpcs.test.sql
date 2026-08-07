@@ -280,6 +280,17 @@ select is(
 );
 
 -- confirm_weekly_plan
+--
+-- now() is frozen for pgTAP's whole single-transaction run (Postgres's
+-- now() is the *transaction* timestamp, not the statement timestamp),
+-- so created_at and a freshly-set updated_at would be bit-for-bit equal
+-- regardless of whether confirm_weekly_plan actually touches updated_at
+-- — comparing them directly can't distinguish "touched" from "never
+-- ran". Backdating updated_at first gives confirm's `updated_at = now()`
+-- something real to move it off of.
+update public.recipes set updated_at = '2000-01-01T00:00:00Z'
+where id = '20000000-0000-0000-0000-000000000001';
+
 select lives_ok(
   format($$ select public.confirm_weekly_plan(%L) $$, (select id from plan_a)),
   'confirm_weekly_plan: succeeds for a non-empty plan'
@@ -295,7 +306,8 @@ select is(
   'confirm_weekly_plan: increments the confirmed recipe''s planned_count'
 );
 select ok(
-  (select updated_at > created_at from public.recipes where id = '20000000-0000-0000-0000-000000000001'),
+  (select updated_at > '2000-01-01T00:00:00Z'::timestamptz from public.recipes
+   where id = '20000000-0000-0000-0000-000000000001'),
   'confirm_weekly_plan: stamps the recipe''s updated_at so the offline sync cursor picks it up'
 );
 
