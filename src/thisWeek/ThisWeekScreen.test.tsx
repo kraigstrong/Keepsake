@@ -124,6 +124,19 @@ it('renders planning rows with title and servings, and a Confirm Plan link', asy
   expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy();
 });
 
+it('shows an Add recipes button (same treatment as the empty state) once the plan has entries', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken' })] }),
+  );
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-add-recipes')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-add-recipes'));
+
+  expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
+});
+
 it('confirms the plan and reloads', async () => {
   mockedApi.fetchCurrentWeeklyPlan
     .mockResolvedValueOnce(plan({ entries: [entry({ id: 'e1' })] }))

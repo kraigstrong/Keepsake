@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 
 import {
   addRecipeToThisWeek,
@@ -12,6 +13,7 @@ import {
   type ThisWeekEntry,
   type ThisWeekPlan,
 } from './api';
+import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
@@ -49,6 +51,11 @@ export function ThisWeekScreen() {
   const [isMutating, setIsMutating] = useState(false);
   const [removed, setRemoved] = useState<RemovedEntryState | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Closes a swiped-open row once its Remove action has been tapped —
+  // Swipeable doesn't do this itself, and the row disappearing from
+  // `plan.entries` right after (the optimistic update below) isn't
+  // enough on its own to reset the open swipe offset.
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +133,7 @@ export function ThisWeekScreen() {
 
   async function handleRemove(entry: ThisWeekEntry) {
     if (!plan) return;
+    swipeableRefs.current.get(entry.id)?.close();
     const previous = plan;
     setPlan({ ...plan, entries: plan.entries.filter((e) => e.id !== entry.id) });
 
@@ -181,50 +189,69 @@ export function ThisWeekScreen() {
     }
   }
 
+  // Swipe-to-remove (Gmail-style), not a persistent X — the X sat right
+  // next to the up/down reorder buttons and was too easy to hit by
+  // accident while reordering. Swipeable uses gesture-handler's classic
+  // Animated-driven implementation, not Reanimated, so it doesn't run
+  // into the react-native-reanimated 4.5.1 incompatibility that ruled
+  // out react-native-draggable-flatlist for reordering.
   function renderPlanningItem(item: ThisWeekEntry, index: number, count: number) {
     return (
-      <View key={item.id} style={styles.row} testID={`this-week-entry-${item.id}`}>
-        <Thumbnail url={heroUrls[item.id]} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
-        </View>
-        <Pressable
-          onPress={() => handleRemove(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.title} from This Week`}
-          hitSlop={8}
-          testID={`this-week-entry-remove-${item.id}`}
-        >
-          <Text style={styles.removeIcon}>{'✕'}</Text>
-        </Pressable>
-        <View style={styles.moveButtons}>
+      <Swipeable
+        key={item.id}
+        ref={(ref) => {
+          if (ref) swipeableRefs.current.set(item.id, ref);
+          else swipeableRefs.current.delete(item.id);
+        }}
+        overshootRight={false}
+        renderRightActions={() => (
           <Pressable
-            onPress={() => handleMove(index, -1)}
-            disabled={index === 0 || isMutating}
+            onPress={() => handleRemove(item)}
+            style={styles.swipeRemove}
             accessibilityRole="button"
-            accessibilityLabel={`Move ${item.title} up`}
-            hitSlop={8}
-            testID={`this-week-entry-move-up-${item.id}`}
+            accessibilityLabel={`Remove ${item.title} from This Week`}
+            testID={`this-week-entry-remove-${item.id}`}
           >
-            <Text style={[styles.moveButton, index === 0 && styles.moveButtonDisabled]}>{'▲'}</Text>
+            <Text style={styles.swipeRemoveText}>Remove</Text>
           </Pressable>
-          <Pressable
-            onPress={() => handleMove(index, 1)}
-            disabled={index === count - 1 || isMutating}
-            accessibilityRole="button"
-            accessibilityLabel={`Move ${item.title} down`}
-            hitSlop={8}
-            testID={`this-week-entry-move-down-${item.id}`}
-          >
-            <Text style={[styles.moveButton, index === count - 1 && styles.moveButtonDisabled]}>
-              {'▼'}
+        )}
+      >
+        <View style={styles.row} testID={`this-week-entry-${item.id}`}>
+          <Thumbnail url={heroUrls[item.id]} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {item.title}
             </Text>
-          </Pressable>
+            <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
+          </View>
+          <View style={styles.moveButtons}>
+            <Pressable
+              onPress={() => handleMove(index, -1)}
+              disabled={index === 0 || isMutating}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${item.title} up`}
+              hitSlop={8}
+              testID={`this-week-entry-move-up-${item.id}`}
+            >
+              <Text style={[styles.moveButton, index === 0 && styles.moveButtonDisabled]}>
+                {'▲'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleMove(index, 1)}
+              disabled={index === count - 1 || isMutating}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${item.title} down`}
+              hitSlop={8}
+              testID={`this-week-entry-move-down-${item.id}`}
+            >
+              <Text style={[styles.moveButton, index === count - 1 && styles.moveButtonDisabled]}>
+                {'▼'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </Swipeable>
     );
   }
 
@@ -295,19 +322,6 @@ export function ThisWeekScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>This Week</Text>
         <View style={styles.headerRow}>
-          {/* Only shown once populated — an empty plan's EmptyState below
-              already offers its own "Add recipes" action, so showing
-              both here would be a redundant, confusingly-duplicate
-              control with identical text. */}
-          {!isConfirmed && plan.entries.length > 0 && (
-            <Pressable
-              onPress={goToAddRecipes}
-              accessibilityRole="button"
-              testID="this-week-add-recipes"
-            >
-              <Text style={styles.addRecipesLink}>Add recipes</Text>
-            </Pressable>
-          )}
           <View style={styles.headerSpacer} />
           {isConfirmed ? (
             <Pressable
@@ -332,6 +346,16 @@ export function ThisWeekScreen() {
           )}
         </View>
       </View>
+
+      {/* Same "Add recipes" button used by the empty state below, not a
+          plain text link — once a plan has entries this is the only way
+          to add more, so it keeps the same prominent treatment rather
+          than shrinking to a less noticeable affordance. */}
+      {!isConfirmed && plan.entries.length > 0 && (
+        <View style={styles.addRecipesRow}>
+          <Button title="Add recipes" onPress={goToAddRecipes} testID="this-week-add-recipes" />
+        </View>
+      )}
 
       <View style={styles.content}>
         {plan.entries.length === 0 ? (
@@ -397,10 +421,10 @@ const styles = StyleSheet.create({
   headerSpacer: {
     flex: 1,
   },
-  addRecipesLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
+  addRecipesRow: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    alignItems: 'flex-start',
   },
   confirmPlanLink: {
     ...typography.body,
@@ -451,10 +475,16 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 2,
   },
-  removeIcon: {
-    fontSize: 15,
-    color: colors.textTertiary,
-    paddingHorizontal: spacing.xs,
+  swipeRemove: {
+    width: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger,
+  },
+  swipeRemoveText: {
+    ...typography.body,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   moveButtons: {
     gap: 2,
