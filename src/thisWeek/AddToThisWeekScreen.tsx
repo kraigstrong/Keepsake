@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
 import { Button } from '../components/Button';
@@ -26,6 +27,7 @@ type Step = 'select' | 'servings';
 export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const router = useRouter();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('select');
   const [query, setQuery] = useState('');
@@ -109,7 +111,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
 
   return (
     <View style={styles.screen} testID="add-to-this-week-screen">
-      <View style={styles.header}>
+      {/* headerShown: false (app/this-week/add.tsx) — no native header to
+          reserve safe-area space here, so this modal-style screen has to
+          clear the Dynamic Island/notch itself. */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable
           onPress={() => (step === 'servings' ? setStep('select') : router.back())}
           accessibilityRole="button"
@@ -169,7 +174,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               </ScrollView>
             </>
           )}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title={selectedIds.length === 0 ? 'Select recipes to continue' : 'Next'}
               onPress={goToServingsStep}
@@ -216,7 +221,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               </View>
             ))}
           </ScrollView>
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title="Add to This Week"
               onPress={handleSubmit}

@@ -10,6 +10,14 @@ jest.mock('./api');
 jest.mock('../recipes/api');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+// This screen reads useSafeAreaInsets directly (headerShown: false, no
+// native header to reserve Dynamic-Island/notch space — see
+// AddToThisWeekScreen.tsx), so it needs the library's own test double
+// rather than the real native-backed provider.
+jest.mock(
+  'react-native-safe-area-context',
+  () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
+);
 
 function renderScreen() {
   return render(
