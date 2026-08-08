@@ -346,14 +346,22 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   sortRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
   },
+  // A hairline plus a little breathing room, matching how every row
+  // divider in this app reads (This Week's list, Row's own divider) —
+  // otherwise the filter chips and the recipe list run together with
+  // nothing to mark where one ends and the other begins.
   content: {
     flex: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.xs,
   },
   centered: {
     alignItems: 'center',
