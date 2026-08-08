@@ -9,8 +9,8 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 - **Phase:** 13 — Grocery Generation and Review
 - **Status:** Not started.
 - **Branch:** none yet. Phase 12 merged via [PR #36](https://github.com/kraigstrong/Keepsake/pull/36) (Conditional Pass, developer decision, 2026-08-07 — see `docs/history/phase-12-this-week-planning.md`).
-- **Next action:** Run `start-phase` for Phase 13. Before that, a Share Extension crash (`logError`/`drainAppGroupQueue`, "undefined is not a function") found during Phase 12 device testing is still open — Phase 9 code, not this phase's — see the entry below.
-- **Blocked on:** Nothing for Phase 13 itself; the Share Extension bug is a separate active investigation.
+- **Next action:** Run `start-phase` for Phase 13.
+- **Blocked on:** Nothing. The Share Extension crash (`logError`/`drainAppGroupQueue`, "undefined is not a function") found during Phase 12 device testing — Phase 9 code — has been resolved (developer confirmation, 2026-08-08).
 
 ## History
 
