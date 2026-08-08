@@ -341,16 +341,16 @@ export function ThisWeekScreen() {
           rust already means "keep building the plan" from the empty
           state, and flipping that meaning once the plan has entries is
           what read as inconsistent, not a case for Confirm needing the
-          louder color. */}
+          louder color.
+
+          Review Groceries sits in the *second* (right-hand) slot here,
+          matching Confirm Plan's position in the row above — developer
+          UX feedback, 2026-08-08: confirming and then moving on to
+          groceries should be a same-spot "tap tap", not a reach across
+          the row because the forward action swapped sides once the plan
+          confirmed. Edit Plan takes the first slot instead. */}
       {isConfirmed ? (
         <View style={styles.actionsRow}>
-          <View style={styles.actionsRowItem}>
-            <Button
-              title="Generate groceries"
-              onPress={() => router.push(`/groceries/${plan.id}`)}
-              testID="this-week-generate-groceries"
-            />
-          </View>
           <View style={styles.actionsRowItem}>
             <Button
               title="Edit Plan"
@@ -358,6 +358,13 @@ export function ThisWeekScreen() {
               disabled={isMutating}
               variant="secondary"
               testID="this-week-edit-plan"
+            />
+          </View>
+          <View style={styles.actionsRowItem}>
+            <Button
+              title="Review Groceries"
+              onPress={() => router.push(`/groceries/${plan.id}`)}
+              testID="this-week-review-groceries"
             />
           </View>
         </View>
