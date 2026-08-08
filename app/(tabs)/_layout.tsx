@@ -42,6 +42,12 @@ function TabsLayoutContent() {
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.background },
           headerTitle: () => null,
+          // Matches every screen's own paddingHorizontal: spacing.lg — the
+          // native header's left/right slots default to flush against the
+          // screen edge otherwise, which read as clipped/unreachable next
+          // to the notch or Dynamic Island (developer UX feedback).
+          headerLeftContainerStyle: { paddingLeft: spacing.lg },
+          headerRightContainerStyle: { paddingRight: spacing.lg },
           headerLeft: () => (
             <Pressable
               onPress={openAddSheet}
