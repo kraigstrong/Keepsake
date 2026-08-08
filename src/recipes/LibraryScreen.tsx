@@ -32,11 +32,20 @@ import {
 import { syncHousehold } from '../sync/syncEngine';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
+// Short enough that the whole row doesn't wrap or crowd Filters off the
+// end (developer UX feedback) — the full names still reach screen
+// readers via SORT_ACCESSIBILITY_LABELS below.
 const SORT_LABELS: Record<SortMode, string> = {
   smart: 'Smart',
-  alphabetical: 'Alphabetical',
-  recentlyAdded: 'Recently Added',
-  frequentlySelected: 'Frequently Selected',
+  alphabetical: 'A-Z',
+  recentlyAdded: 'Recent',
+  frequentlySelected: 'Frequent',
+};
+const SORT_ACCESSIBILITY_LABELS: Record<SortMode, string> = {
+  smart: 'Smart sort',
+  alphabetical: 'Alphabetical sort',
+  recentlyAdded: 'Recently added sort',
+  frequentlySelected: 'Frequently selected sort',
 };
 
 const CATEGORY_GROUP_LABELS: Record<CategoryGroup, string> = {
@@ -193,6 +202,7 @@ export function LibraryScreen() {
                     key={mode}
                     testID={`library-sort-${mode}`}
                     label={SORT_LABELS[mode]}
+                    accessibilityLabel={SORT_ACCESSIBILITY_LABELS[mode]}
                     selected={sortMode === mode}
                     onPress={() => chooseSort(mode)}
                   />

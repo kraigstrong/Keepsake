@@ -2,6 +2,7 @@
 
 exports[`Chip matches its snapshot 1`] = `
 <View
+  accessibilityLabel="Smart"
   accessibilityRole="button"
   accessibilityState={
     {
