@@ -11,7 +11,7 @@
  * sync with canonicalKey's own singularization rules by hand.
  */
 
-import { canonicalKey } from './canonicalKey';
+import { canonicalKey } from './canonicalKey.ts';
 
 const RAW_STAPLES: readonly string[] = [
   'salt',
