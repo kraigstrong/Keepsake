@@ -137,18 +137,31 @@ it('shows an Add recipes button (same treatment as the empty state) once the pla
   expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
 });
 
-it('confirms the plan and reloads', async () => {
-  mockedApi.fetchCurrentWeeklyPlan
-    .mockResolvedValueOnce(plan({ entries: [entry({ id: 'e1' })] }))
-    .mockResolvedValueOnce(plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }));
+it('confirms the plan optimistically, with no reload round-trip', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan({ entries: [entry({ id: 'e1' })] }));
 
   renderThisWeekScreen();
 
   await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('this-week-confirm-plan'));
 
+  expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy();
   await waitFor(() => expect(mockedApi.confirmThisWeek).toHaveBeenCalledWith('plan-1'));
-  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  // Only the initial mount fetch — confirming no longer waits on a second one.
+  expect(mockedApi.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
+});
+
+it('reverts the optimistic confirm if the server call fails', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan({ entries: [entry({ id: 'e1' })] }));
+  mockedApi.confirmThisWeek.mockRejectedValue(new Error('boom'));
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-confirm-plan'));
+
+  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  expect(screen.queryByTestId('this-week-edit-plan')).toBeNull();
 });
 
 it('removes an entry, shows an Undo banner, and restores it on Undo', async () => {
@@ -253,16 +266,32 @@ it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit
   expect(push).toHaveBeenCalledWith('/recipe/r1');
 });
 
-it('reopens a confirmed plan via Edit Plan', async () => {
-  mockedApi.fetchCurrentWeeklyPlan
-    .mockResolvedValueOnce(plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }))
-    .mockResolvedValueOnce(plan({ status: 'planning', entries: [entry({ id: 'e1' })] }));
+it('reopens a confirmed plan optimistically via Edit Plan, with no reload round-trip', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }),
+  );
 
   renderThisWeekScreen();
 
   await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('this-week-edit-plan'));
 
+  expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy();
   await waitFor(() => expect(mockedApi.reopenThisWeek).toHaveBeenCalledWith('plan-1'));
-  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  expect(mockedApi.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
+});
+
+it('reverts the optimistic reopen if the server call fails', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }),
+  );
+  mockedApi.reopenThisWeek.mockRejectedValue(new Error('boom'));
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-edit-plan'));
+
+  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  expect(screen.queryByTestId('this-week-confirm-plan')).toBeNull();
 });

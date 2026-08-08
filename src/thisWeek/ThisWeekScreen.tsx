@@ -163,13 +163,22 @@ export function ThisWeekScreen() {
     }
   }
 
+  // Optimistic, same pattern as handleRemove above — confirming/
+  // reopening previously awaited the RPC *then* a full load() before
+  // touching local state at all, stacking two sequential network round
+  // trips before the UI showed anything (developer-reported ~0.75s lag
+  // on Confirm Plan). Neither RPC changes anything this screen actually
+  // renders (confirm's planned_count/updated_at stamps aren't shown
+  // here), so the reload was pure latency, not freshness.
   async function handleConfirm() {
     if (!plan) return;
+    const previous = plan;
+    setPlan({ ...plan, status: 'confirmed' });
     setIsMutating(true);
     try {
       await confirmThisWeek(plan.id);
-      await load();
     } catch {
+      setPlan(previous);
       showToast("Couldn't confirm this week's plan");
     } finally {
       setIsMutating(false);
@@ -178,11 +187,13 @@ export function ThisWeekScreen() {
 
   async function handleEditPlan() {
     if (!plan) return;
+    const previous = plan;
+    setPlan({ ...plan, status: 'planning' });
     setIsMutating(true);
     try {
       await reopenThisWeek(plan.id);
-      await load();
     } catch {
+      setPlan(previous);
       showToast("Couldn't reopen this week's plan");
     } finally {
       setIsMutating(false);
