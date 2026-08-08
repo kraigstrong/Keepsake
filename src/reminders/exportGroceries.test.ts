@@ -1,12 +1,12 @@
 import { exportGroceriesToReminders, type GroceryExportItem } from './exportGroceries';
 import { getExportedItemHashes, recordExport } from './exportRecords';
-import { addGroceryReminder, getOrCreateGroceryList } from './reminders';
+import { addGroceryReminder, getOwnedGroceryListId } from './reminders';
 import type { LocalDb } from '../sync/local';
 
 jest.mock('./reminders');
 jest.mock('./exportRecords');
 
-const mockedGetOrCreateGroceryList = getOrCreateGroceryList as jest.Mock;
+const mockedGetOwnedGroceryListId = getOwnedGroceryListId as jest.Mock;
 const mockedAddGroceryReminder = addGroceryReminder as jest.Mock;
 const mockedGetExportedItemHashes = getExportedItemHashes as jest.Mock;
 const mockedRecordExport = recordExport as jest.Mock;
@@ -22,7 +22,7 @@ function item(overrides: Partial<GroceryExportItem> = {}): GroceryExportItem {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedGetOrCreateGroceryList.mockResolvedValue('list-1');
+  mockedGetOwnedGroceryListId.mockResolvedValue('list-1');
   mockedGetExportedItemHashes.mockResolvedValue(new Set());
   mockedRecordExport.mockResolvedValue(undefined);
 });
@@ -36,7 +36,7 @@ it('exports every item, recording each one locally', async () => {
     items: [item({ itemHash: 'onion' }), item({ itemHash: 'garlic' })],
   });
 
-  expect(outcome).toEqual({ succeeded: ['onion', 'garlic'], skipped: [], failed: [] });
+  expect(outcome).toEqual({ succeeded: ['onion', 'garlic'], skipped: [], partial: [], failed: [] });
   expect(mockedAddGroceryReminder).toHaveBeenCalledWith('list-1', '1 onion');
   expect(mockedRecordExport).toHaveBeenCalledWith(DB, {
     weeklyPlanId: 'plan-1',
@@ -55,12 +55,12 @@ it('skips an item already recorded as exported, without calling addGroceryRemind
     items: [item({ itemHash: 'onion' })],
   });
 
-  expect(outcome).toEqual({ succeeded: [], skipped: ['onion'], failed: [] });
+  expect(outcome).toEqual({ succeeded: [], skipped: ['onion'], partial: [], failed: [] });
   expect(mockedAddGroceryReminder).not.toHaveBeenCalled();
   expect(mockedRecordExport).not.toHaveBeenCalled();
 });
 
-it('collects a per-item failure without aborting the rest of the batch', async () => {
+it('collects a per-item failure (create itself failed) without aborting the rest of the batch', async () => {
   mockedAddGroceryReminder
     .mockRejectedValueOnce(new Error('EventKit save failed'))
     .mockResolvedValueOnce('r2');
@@ -73,12 +73,48 @@ it('collects a per-item failure without aborting the rest of the batch', async (
 
   expect(outcome.succeeded).toEqual(['garlic']);
   expect(outcome.failed).toEqual([{ itemHash: 'onion', message: 'EventKit save failed' }]);
+  expect(outcome.partial).toEqual([]);
   // The failed item is never recorded as exported — a later retry must
   // attempt it again.
   expect(mockedRecordExport).not.toHaveBeenCalledWith(
     DB,
     expect.objectContaining({ itemHash: 'onion' }),
   );
+});
+
+it('treats a create-succeeded-but-record-failed item as partial, never failed', async () => {
+  mockedAddGroceryReminder.mockResolvedValue('r1');
+  mockedRecordExport.mockRejectedValue(new Error('database is locked'));
+
+  const outcome = await exportGroceriesToReminders(DB, {
+    weeklyPlanId: 'plan-1',
+    householdId: 'household-1',
+    items: [item({ itemHash: 'onion' })],
+  });
+
+  expect(outcome.partial).toEqual([{ itemHash: 'onion', message: 'database is locked' }]);
+  expect(outcome.failed).toEqual([]);
+  expect(outcome.succeeded).toEqual([]);
+  // Retried a few times before giving up — transient SQLite contention
+  // is the expected real-world cause.
+  expect(mockedRecordExport).toHaveBeenCalledTimes(4);
+}, 10000);
+
+it('succeeds if recordExport recovers within the retry window', async () => {
+  mockedAddGroceryReminder.mockResolvedValue('r1');
+  mockedRecordExport
+    .mockRejectedValueOnce(new Error('database is locked'))
+    .mockResolvedValueOnce(undefined);
+
+  const outcome = await exportGroceriesToReminders(DB, {
+    weeklyPlanId: 'plan-1',
+    householdId: 'household-1',
+    items: [item({ itemHash: 'onion' })],
+  });
+
+  expect(outcome.succeeded).toEqual(['onion']);
+  expect(outcome.partial).toEqual([]);
+  expect(mockedRecordExport).toHaveBeenCalledTimes(2);
 });
 
 it("never leaks an item's display text into a failure message", async () => {
@@ -125,7 +161,7 @@ it('retrying after a partial failure only re-attempts what did not already succe
 
   // Retry: getExportedItemHashes now reflects garlic's success.
   jest.clearAllMocks();
-  mockedGetOrCreateGroceryList.mockResolvedValue('list-1');
+  mockedGetOwnedGroceryListId.mockResolvedValue('list-1');
   mockedGetExportedItemHashes.mockResolvedValue(new Set(['garlic']));
   mockedRecordExport.mockResolvedValue(undefined);
   mockedAddGroceryReminder.mockResolvedValueOnce('r-onion');
@@ -136,7 +172,12 @@ it('retrying after a partial failure only re-attempts what did not already succe
     items,
   });
 
-  expect(retryOutcome).toEqual({ succeeded: ['onion'], skipped: ['garlic'], failed: [] });
+  expect(retryOutcome).toEqual({
+    succeeded: ['onion'],
+    skipped: ['garlic'],
+    partial: [],
+    failed: [],
+  });
   expect(mockedAddGroceryReminder).toHaveBeenCalledTimes(1);
   expect(mockedAddGroceryReminder).toHaveBeenCalledWith('list-1', '1 onion');
 });

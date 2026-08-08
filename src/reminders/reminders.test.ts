@@ -1,9 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Calendar from 'expo-calendar/legacy';
 
 import {
   addGroceryReminder,
   getOrCreateGroceryList,
+  getOwnedGroceryListId,
   openReminders,
   requestReminderPermission,
 } from './reminders';
@@ -77,6 +79,50 @@ describe('getOrCreateGroceryList', () => {
     mocked.getCalendarsAsync.mockResolvedValue([] as never);
 
     await expect(getOrCreateGroceryList()).rejects.toThrow('No reminder source available');
+  });
+});
+
+describe('getOwnedGroceryListId', () => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+  });
+
+  it('reuses a remembered list id without re-searching by title', async () => {
+    await AsyncStorage.setItem('keepsake.reminders.groceryListId', 'owned-id');
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'owned-id', title: 'Keepsake Groceries', source: { id: 'src-1' } },
+    ] as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('owned-id');
+    expect(mocked.createCalendarAsync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to title search and remembers the result when the remembered list is gone', async () => {
+    await AsyncStorage.setItem('keepsake.reminders.groceryListId', 'deleted-id');
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'other-id', title: 'Some Other List', source: { id: 'src-1' } },
+    ] as never);
+    mocked.createCalendarAsync.mockResolvedValue('new-id' as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('new-id');
+    expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBe('new-id');
+  });
+
+  it('creates and remembers a list on the very first export', async () => {
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'other-id', title: 'Some Other List', source: { id: 'src-1' } },
+    ] as never);
+    mocked.createCalendarAsync.mockResolvedValue('new-id' as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('new-id');
+    expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBe('new-id');
   });
 });
 

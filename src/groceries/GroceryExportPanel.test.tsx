@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
+import { AppState } from 'react-native';
 
 import { GroceryExportPanel } from './GroceryExportPanel';
 import { getDatabase } from '../db/database';
@@ -18,10 +19,23 @@ const mockedRequestPermission = remindersModule.requestReminderPermission as jes
 const mockedOpenReminders = remindersModule.openReminders as jest.Mock;
 const mockedOpenSettings = Linking.openSettings as jest.Mock;
 
+// Same capture pattern as SessionProvider.test.tsx's AppState listener test.
+const addEventListenerSpy = jest.spyOn(AppState, 'addEventListener');
+let appStateHandler: (state: string) => void;
+
 const ITEMS = [
   { itemHash: 'onion', displayText: '3 onions' },
   { itemHash: 'garlic', displayText: '1 head garlic' },
 ];
+
+function outcome(overrides: Partial<exportGroceriesModule.GroceryExportOutcome> = {}) {
+  return {
+    succeeded: overrides.succeeded ?? [],
+    skipped: overrides.skipped ?? [],
+    partial: overrides.partial ?? [],
+    failed: overrides.failed ?? [],
+  };
+}
 
 function renderPanel(items = ITEMS) {
   return render(
@@ -36,6 +50,10 @@ beforeEach(() => {
   mockedGetDatabase.mockResolvedValue({});
   mockedRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
   mockedOpenReminders.mockResolvedValue(true);
+  addEventListenerSpy.mockImplementation((_event, handler) => {
+    appStateHandler = handler as (state: string) => void;
+    return { remove: jest.fn() } as never;
+  });
 });
 
 it('disables the export button when there is nothing to export', async () => {
@@ -44,7 +62,7 @@ it('disables the export button when there is nothing to export', async () => {
 });
 
 it('runs the export and shows a summary on success', async () => {
-  mockedExport.mockResolvedValue({ succeeded: ['onion', 'garlic'], skipped: [], failed: [] });
+  mockedExport.mockResolvedValue(outcome({ succeeded: ['onion', 'garlic'] }));
 
   await renderPanel();
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
@@ -58,42 +76,67 @@ it('runs the export and shows a summary on success', async () => {
   );
 });
 
-it('shows a mixed summary for skipped and failed items', async () => {
-  mockedExport.mockResolvedValue({
-    succeeded: ['onion'],
-    skipped: ['garlic'],
-    failed: [{ itemHash: 'x', message: 'boom' }],
-  });
+it('shows a mixed summary for skipped, partial, and failed items', async () => {
+  mockedExport.mockResolvedValue(
+    outcome({
+      succeeded: ['some-hash'],
+      skipped: ['another-hash'],
+      partial: [{ itemHash: 'y', message: 'db locked' }],
+      // Must match a real item in ITEMS — the retry button's visibility
+      // is driven by matching failed hashes back against the items prop.
+      failed: [{ itemHash: 'onion', message: 'boom' }],
+    }),
+  );
 
   await renderPanel();
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
 
   await waitFor(() =>
-    expect(screen.getByText('1 added, 1 already in Reminders, 1 failed')).toBeTruthy(),
+    expect(
+      screen.getByText('1 added, 1 already in Reminders, 1 added but not confirmed, 1 failed'),
+    ).toBeTruthy(),
   );
   expect(screen.getByTestId('grocery-export-retry-failed')).toBeTruthy();
 });
 
-it('offers a retry that re-runs the export', async () => {
-  mockedExport.mockResolvedValueOnce({
-    succeeded: [],
-    skipped: [],
-    failed: [{ itemHash: 'onion', message: 'boom' }],
-  });
+it('offers a retry that re-exports only the items that actually failed', async () => {
+  mockedExport.mockResolvedValueOnce(outcome({ failed: [{ itemHash: 'onion', message: 'boom' }] }));
 
   await renderPanel();
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
   await waitFor(() => expect(screen.getByTestId('grocery-export-retry-failed')).toBeTruthy());
 
-  mockedExport.mockResolvedValueOnce({ succeeded: ['onion'], skipped: [], failed: [] });
+  mockedExport.mockResolvedValueOnce(outcome({ succeeded: ['onion'] }));
   await fireEvent.press(screen.getByTestId('grocery-export-retry-failed'));
 
   await waitFor(() => expect(screen.getByText('1 added')).toBeTruthy());
   expect(mockedExport).toHaveBeenCalledTimes(2);
+  // Only the failed item — not garlic, which never failed — is retried.
+  expect(mockedExport).toHaveBeenLastCalledWith(
+    {},
+    {
+      weeklyPlanId: 'plan-1',
+      householdId: 'household-1',
+      items: [{ itemHash: 'onion', displayText: '3 onions' }],
+    },
+    expect.any(Function),
+  );
+});
+
+it('never offers a retry action for partial items (they already exist in Reminders)', async () => {
+  mockedExport.mockResolvedValue(
+    outcome({ partial: [{ itemHash: 'onion', message: 'db locked' }] }),
+  );
+
+  await renderPanel();
+  await fireEvent.press(screen.getByTestId('grocery-export-start'));
+
+  await waitFor(() => expect(screen.getByTestId('grocery-export-summary')).toBeTruthy());
+  expect(screen.queryByTestId('grocery-export-retry-failed')).toBeNull();
 });
 
 it('opens Reminders when requested', async () => {
-  mockedExport.mockResolvedValue({ succeeded: ['onion'], skipped: [], failed: [] });
+  mockedExport.mockResolvedValue(outcome({ succeeded: ['onion'] }));
 
   await renderPanel();
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
@@ -125,6 +168,18 @@ it('shows an Open Settings state once iOS will no longer re-prompt', async () =>
   expect(mockedOpenSettings).toHaveBeenCalled();
 });
 
+it('re-offers Export once the app returns to foreground after Open Settings', async () => {
+  mockedRequestPermission.mockResolvedValue({ granted: false, canAskAgain: false });
+
+  await renderPanel();
+  await fireEvent.press(screen.getByTestId('grocery-export-start'));
+  await waitFor(() => expect(screen.getByTestId('grocery-export-open-settings')).toBeTruthy());
+
+  appStateHandler('active');
+
+  await waitFor(() => expect(screen.getByTestId('grocery-export-start')).toBeTruthy());
+});
+
 it('shows a toast and returns to idle if the export call itself throws', async () => {
   mockedExport.mockRejectedValue(new Error('boom'));
 
@@ -132,4 +187,23 @@ it('shows a toast and returns to idle if the export call itself throws', async (
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
 
   await waitFor(() => expect(screen.getByTestId('grocery-export-start')).toBeTruthy());
+});
+
+it('ignores a second tap while permission is still being requested for the first', async () => {
+  const { promise, resolve } = (() => {
+    let res!: (value: { granted: boolean; canAskAgain: boolean }) => void;
+    const p = new Promise<{ granted: boolean; canAskAgain: boolean }>((r) => (res = r));
+    return { promise: p, resolve: res };
+  })();
+  mockedRequestPermission.mockReturnValue(promise);
+
+  await renderPanel();
+  fireEvent.press(screen.getByTestId('grocery-export-start'));
+  fireEvent.press(screen.getByTestId('grocery-export-start'));
+
+  resolve({ granted: true, canAskAgain: true });
+  mockedExport.mockResolvedValue(outcome({ succeeded: ['onion', 'garlic'] }));
+
+  await waitFor(() => expect(screen.getByTestId('grocery-export-summary')).toBeTruthy());
+  expect(mockedRequestPermission).toHaveBeenCalledTimes(1);
 });
