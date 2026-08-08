@@ -323,13 +323,15 @@ export function ThisWeekScreen() {
         <Text style={styles.title}>This Week</Text>
       </View>
 
-      {/* One row, both real Buttons — previously "Add recipes" was a
-          pill Button in its own row while Confirm Plan was a plain text
-          link up in the header, so they read as unrelated controls
-          sitting at different heights (developer UX feedback). Add
-          recipes keeps the same prominent-button treatment the empty
-          state below uses, just paired with Confirm Plan now instead of
-          standing alone. */}
+      {/* One row, both real Buttons, each flex:1 — previously they hugged
+          their own label width with only an 8px gap, so they clumped on
+          the left with dead space on the right (developer UX feedback:
+          "smushed"). Add recipes stays the primary/rust button matching
+          the empty state below — Confirm Plan finishes the plan, but
+          rust already means "keep building the plan" from the empty
+          state, and flipping that meaning once the plan has entries is
+          what read as inconsistent, not a case for Confirm needing the
+          louder color. */}
       {isConfirmed ? (
         <View style={styles.actionsRow}>
           <Button
@@ -343,18 +345,18 @@ export function ThisWeekScreen() {
       ) : (
         plan.entries.length > 0 && (
           <View style={styles.actionsRow}>
-            <Button
-              title="Add recipes"
-              onPress={goToAddRecipes}
-              variant="secondary"
-              testID="this-week-add-recipes"
-            />
-            <Button
-              title="Confirm Plan"
-              onPress={handleConfirm}
-              disabled={isMutating}
-              testID="this-week-confirm-plan"
-            />
+            <View style={styles.actionsRowItem}>
+              <Button title="Add recipes" onPress={goToAddRecipes} testID="this-week-add-recipes" />
+            </View>
+            <View style={styles.actionsRowItem}>
+              <Button
+                title="Confirm Plan"
+                onPress={handleConfirm}
+                disabled={isMutating}
+                variant="secondary"
+                testID="this-week-confirm-plan"
+              />
+            </View>
           </View>
         )
       )}
@@ -418,9 +420,12 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  actionsRowItem: {
+    flex: 1,
   },
   content: {
     flex: 1,
