@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -19,6 +20,8 @@ jest.mock('expo-image-manipulator', () => ({
   SaveFormat: { JPEG: 'jpeg' },
 }));
 
+jest.mock('expo-file-system', () => ({ File: jest.fn() }));
+
 jest.mock('../supabase/instance', () => ({
   supabase: { storage: { from: jest.fn() } },
 }));
@@ -26,6 +29,7 @@ jest.mock('../supabase/instance', () => ({
 const mockedPicker = ImagePicker as jest.Mocked<typeof ImagePicker>;
 const mockedManipulate = ImageManipulator.manipulate as jest.Mock;
 const mockedStorageFrom = supabase.storage.from as jest.Mock;
+const mockedFile = File as unknown as jest.Mock;
 
 afterEach(() => jest.clearAllMocks());
 
@@ -81,31 +85,30 @@ describe('stripMetadataAndResize', () => {
 });
 
 describe('uploadHeroImage', () => {
-  const originalFetch = global.fetch;
+  afterEach(() => jest.clearAllMocks());
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it('uploads to the recipe-images bucket under <household_id>/<random>.jpg', async () => {
-    const blob = {};
-    global.fetch = jest.fn().mockResolvedValue({ blob: () => Promise.resolve(blob) }) as never;
+  it('uploads raw bytes (not a Blob) to the recipe-images bucket under <household_id>/<random>.jpg', async () => {
+    const bytes = new ArrayBuffer(4);
+    mockedFile.mockImplementation(() => ({ arrayBuffer: () => Promise.resolve(bytes) }));
     const upload = jest.fn().mockResolvedValue({ error: null });
     mockedStorageFrom.mockReturnValue({ upload });
 
     const path = await uploadHeroImage('household-1', 'file:///hero.jpg');
 
+    expect(mockedFile).toHaveBeenCalledWith('file:///hero.jpg');
     expect(mockedStorageFrom).toHaveBeenCalledWith('recipe-images');
     expect(upload).toHaveBeenCalledWith(
       expect.stringMatching(/^household-1\/[0-9a-f-]{36}\.jpg$/),
-      blob,
+      bytes,
       { contentType: 'image/jpeg', upsert: false },
     );
     expect(path).toMatch(/^household-1\/[0-9a-f-]{36}\.jpg$/);
   });
 
   it('throws on a Supabase storage error', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ blob: () => Promise.resolve({}) }) as never;
+    mockedFile.mockImplementation(() => ({
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    }));
     mockedStorageFrom.mockReturnValue({
       upload: () => Promise.resolve({ error: new Error('storage full') }),
     });
