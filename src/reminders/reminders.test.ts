@@ -1,6 +1,12 @@
+import * as Linking from 'expo-linking';
 import * as Calendar from 'expo-calendar/legacy';
 
-import { addGroceryReminder, getOrCreateGroceryList, requestReminderPermission } from './reminders';
+import {
+  addGroceryReminder,
+  getOrCreateGroceryList,
+  openReminders,
+  requestReminderPermission,
+} from './reminders';
 
 jest.mock('expo-calendar/legacy', () => ({
   requestRemindersPermissionsAsync: jest.fn(),
@@ -9,13 +15,33 @@ jest.mock('expo-calendar/legacy', () => ({
   createReminderAsync: jest.fn(),
   EntityTypes: { REMINDER: 'reminder' },
 }));
+jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 
 const mocked = Calendar as jest.Mocked<typeof Calendar>;
+const mockedLinking = Linking as jest.Mocked<typeof Linking>;
 
 describe('requestReminderPermission', () => {
-  it('reflects the permission response', async () => {
-    mocked.requestRemindersPermissionsAsync.mockResolvedValue({ granted: true } as never);
-    expect(await requestReminderPermission()).toBe(true);
+  it('returns the full permission response, including canAskAgain', async () => {
+    mocked.requestRemindersPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    } as never);
+
+    expect(await requestReminderPermission()).toEqual({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    });
+  });
+});
+
+describe('openReminders', () => {
+  it('opens the Reminders app via its URL scheme', async () => {
+    await openReminders();
+    expect(mockedLinking.openURL).toHaveBeenCalledWith('x-apple-reminderkit://');
   });
 });
 
