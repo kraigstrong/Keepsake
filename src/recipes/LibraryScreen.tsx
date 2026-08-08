@@ -20,6 +20,7 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
 import type { SearchResult } from '../search/search';
@@ -178,7 +179,7 @@ export function LibraryScreen() {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Library</Text>
+      <ScreenHeader title="Library" />
 
       {recipes !== null && recipes.length > 0 && (
         <>
@@ -330,14 +331,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  title: {
-    ...typography.title,
-    color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
-    // See ThisWeekScreen's header.paddingTop for why this shrank from
-    // spacing.sm — same header-emptied-out cause (developer UX feedback).
-    paddingTop: spacing.xs,
   },
   searchInput: {
     ...typography.input,

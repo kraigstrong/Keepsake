@@ -19,6 +19,7 @@ import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getHeroImageUrl } from '../recipes/heroImage';
@@ -290,7 +291,7 @@ export function ThisWeekScreen() {
   if (!isOnline) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <View style={styles.centered}>
           <OfflineState
             message="This Week needs a connection to load and update your plan."
@@ -304,7 +305,7 @@ export function ThisWeekScreen() {
   if (loadError) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <View style={styles.centered}>
           <ErrorState
             title="Couldn't load this week's plan"
@@ -320,7 +321,7 @@ export function ThisWeekScreen() {
   if (plan === null) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <LoadingState label="Loading this week's plan…" testID="this-week-loading" />
       </View>
     );
@@ -330,9 +331,7 @@ export function ThisWeekScreen() {
 
   return (
     <View style={styles.screen} testID="this-week-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>This Week</Text>
-      </View>
+      <ScreenHeader title="This Week" />
 
       {/* One row, both real Buttons, each flex:1 — previously they hugged
           their own label width with only an 8px gap, so they clumped on
@@ -420,25 +419,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    paddingHorizontal: spacing.lg,
-    // Tuned smaller than spacing.sm — the native header above used to
-    // have visible text on both sides, which visually anchored this
-    // gap; now it's an empty left side and a small icon on the right,
-    // so the same gap reads as more open space above the title than it
-    // measures (developer UX feedback).
-    paddingTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  title: {
-    ...typography.title,
-    color: colors.textPrimary,
-  },
   actionsRow: {
     flexDirection: 'row',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
   },
   actionsRowItem: {
     flex: 1,

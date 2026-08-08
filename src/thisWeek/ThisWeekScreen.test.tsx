@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
+// Jest's module-factory hoisting only allows referencing out-of-scope
+// identifiers prefixed "mock" (case-insensitive) — see the Link stand-in
+// inside jest.mock('expo-router', ...) below.
+import { Text as MockText } from 'react-native';
 
 import * as api from './api';
 import type { ThisWeekEntry, ThisWeekPlan } from './api';
@@ -28,6 +33,13 @@ jest.mock('expo-router', () => ({
       effect();
     }
   }),
+  // ScreenHeader (rendered by every branch of ThisWeekScreen) uses
+  // expo-router's real Link for the Settings icon — this mock replaces
+  // the whole module, so Link needs a stand-in too or it renders as
+  // undefined.
+  Link: ({ children, ...props }: { children: ReactNode }) => (
+    <MockText {...props}>{children}</MockText>
+  ),
 }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 

@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
+// Jest's module-factory hoisting only allows referencing out-of-scope
+// identifiers prefixed "mock" (case-insensitive) — see the Link stand-in
+// inside jest.mock('expo-router', ...) below.
+import { Text as MockText } from 'react-native';
 
 import { LibraryScreen } from './LibraryScreen';
 import type { LibraryRecipe } from '../sync/offlineRecipes';
@@ -20,6 +25,12 @@ jest.mock('expo-router', () => ({
   // this test suite isn't inside a real navigator, so it's mocked to
   // behave like a plain mount-time effect instead.
   useFocusEffect: jest.fn((effect: () => void) => effect()),
+  // ScreenHeader uses expo-router's real Link for the Settings icon —
+  // this mock replaces the whole module, so Link needs a stand-in too
+  // or it renders as undefined.
+  Link: ({ children, ...props }: { children: ReactNode }) => (
+    <MockText {...props}>{children}</MockText>
+  ),
 }));
 // Transitively pulled in by ../sync/syncEngine's real module shape and
 // ../supabase/instance — mocked so loading it doesn't trip the

@@ -1,4 +1,4 @@
-import { Link, Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -6,27 +6,33 @@ import { AddSheetProvider, useAddSheet } from '../../src/components/AddSheetCont
 import { Button } from '../../src/components/Button';
 import { LibraryIcon } from '../../src/components/icons/LibraryIcon';
 import { PlusIcon } from '../../src/components/icons/PlusIcon';
-import { SettingsIcon } from '../../src/components/icons/SettingsIcon';
 import { ThisWeekIcon } from '../../src/components/icons/ThisWeekIcon';
 import { Sheet } from '../../src/components/Sheet';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 
 // Primary bottom navigation per prd.md §24: This Week and Library only.
 // Settings is deliberately not a tab — "Settings is secondary and does
-// not require a permanent bottom tab" — reached via the header action
-// below instead. The global add action (per the IA, reachable from both
-// tabs) is a floating "+" button anchored above the tab bar, not a
-// header action — a text link there ("Add"/"New Recipe") kept reading
-// as out of place next to This Week's own in-body actions (developer UX
-// feedback). Opens the same Sheet either way: manual creation (Phase
-// 4), URL import (Phase 8), bulk URL import (Phase 9), and camera/photo
-// import (Phase 10), all wired below.
+// not require a permanent bottom tab" — reached via each screen's own
+// ScreenHeader (title row) instead. It used to live in the native
+// header's right slot, but a lone icon up there with nothing on the
+// same row tying it to the screen's own title below read as
+// disconnected from it (developer UX feedback) — moved in-body,
+// alongside the title, for one cohesive header block per screen.
+//
+// The global add action (per the IA, reachable from both tabs) is a
+// floating "+" button anchored above the tab bar, not a header action —
+// a text link there ("Add"/"New Recipe") kept reading as out of place
+// next to This Week's own in-body actions (developer UX feedback).
+// Opens the same Sheet either way: manual creation (Phase 4), URL
+// import (Phase 8), bulk URL import (Phase 9), and camera/photo import
+// (Phase 10), all wired below.
 //
 // Native header title is hidden (headerTitle: () => null) rather than
-// removed outright (headerShown: false) — each screen renders its own
-// 28px title in-body per the Ink & Paper direction (ADR-0009), but
-// keeping the native header bar around still gets safe-area handling
-// and the right action slot for free instead of hand-rolling it.
+// removed outright (headerShown: false) — even with no left/right
+// content left in it, keeping the (now empty) native header bar around
+// still gets safe-area handling for free instead of hand-rolling it,
+// and every screen renders its own 28px title in-body regardless
+// (ADR-0009).
 const TAB_BAR_BASE_HEIGHT = 64;
 const FAB_SIZE = 56;
 export default function TabsLayout() {
@@ -49,20 +55,6 @@ function TabsLayoutContent() {
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.background },
           headerTitle: () => null,
-          // Matches every screen's own paddingHorizontal: spacing.lg — the
-          // native header's right slot defaults to flush against the
-          // screen edge otherwise, which read as clipped/unreachable next
-          // to the notch or Dynamic Island (developer UX feedback).
-          headerRightContainerStyle: { paddingRight: spacing.lg },
-          headerRight: () => (
-            <Link href="/settings" accessibilityLabel="Settings" accessibilityRole="button">
-              {/* Larger than the tab-bar icons' own 22px default — those
-                  sit in a row with labels underneath for context, this
-                  one stands alone at the top of the screen and read as
-                  too small at that size (developer UX feedback). */}
-              <SettingsIcon color={colors.textPrimary} size={28} />
-            </Link>
-          ),
           tabBarActiveTintColor: colors.textPrimary,
           tabBarInactiveTintColor: colors.textTertiary,
           tabBarStyle: {
