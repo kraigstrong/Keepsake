@@ -422,7 +422,12 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    // Tuned smaller than spacing.sm — the native header above used to
+    // have visible text on both sides, which visually anchored this
+    // gap; now it's an empty left side and a small icon on the right,
+    // so the same gap reads as more open space above the title than it
+    // measures (developer UX feedback).
+    paddingTop: spacing.xs,
     gap: spacing.xs,
   },
   title: {

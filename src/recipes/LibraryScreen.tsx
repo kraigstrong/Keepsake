@@ -335,7 +335,9 @@ const styles = StyleSheet.create({
     ...typography.title,
     color: colors.textPrimary,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    // See ThisWeekScreen's header.paddingTop for why this shrank from
+    // spacing.sm — same header-emptied-out cause (developer UX feedback).
+    paddingTop: spacing.xs,
   },
   searchInput: {
     ...typography.input,

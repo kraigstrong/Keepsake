@@ -6,9 +6,10 @@ import { AddSheetProvider, useAddSheet } from '../../src/components/AddSheetCont
 import { Button } from '../../src/components/Button';
 import { LibraryIcon } from '../../src/components/icons/LibraryIcon';
 import { PlusIcon } from '../../src/components/icons/PlusIcon';
+import { SettingsIcon } from '../../src/components/icons/SettingsIcon';
 import { ThisWeekIcon } from '../../src/components/icons/ThisWeekIcon';
 import { Sheet } from '../../src/components/Sheet';
-import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { colors, radii, spacing } from '../../src/theme/tokens';
 
 // Primary bottom navigation per prd.md §24: This Week and Library only.
 // Settings is deliberately not a tab — "Settings is secondary and does
@@ -55,7 +56,11 @@ function TabsLayoutContent() {
           headerRightContainerStyle: { paddingRight: spacing.lg },
           headerRight: () => (
             <Link href="/settings" accessibilityLabel="Settings" accessibilityRole="button">
-              <Text style={styles.headerAction}>Settings</Text>
+              {/* Larger than the tab-bar icons' own 22px default — those
+                  sit in a row with labels underneath for context, this
+                  one stands alone at the top of the screen and read as
+                  too small at that size (developer UX feedback). */}
+              <SettingsIcon color={colors.textPrimary} size={28} />
             </Link>
           ),
           tabBarActiveTintColor: colors.textPrimary,
@@ -151,10 +156,6 @@ function TabsLayoutContent() {
 }
 
 const styles = StyleSheet.create({
-  headerAction: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
   // No shadow/elevation (Ink & Paper is flat, ADR-0009) — the solid
   // rust fill against the paper background is what keeps this readable
   // as floating above the content instead of a shadow doing that work.
