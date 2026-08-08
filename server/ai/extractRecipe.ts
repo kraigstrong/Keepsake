@@ -17,8 +17,13 @@ import { z } from 'zod';
  *   ingredientSections                              -> REC-02
  *   instructionSections                              -> REC-03
  *   suggestedCategories/suggestedTags                -> AI-06 / ORG-04
+ *   notes                                             -> REC-04 (developer decision, 2026-08-07)
  *   uncertainFields                                   -> AI-07, AI-08
  * No `description` field — prd.md REC-09 says that field must not exist.
+ * `notes` is not that field reappearing under a new name: it's gated to an
+ * explicit, labeled author aside (see the prompt's own criteria below),
+ * never a summary or paraphrase of the page's narrative/SEO content — the
+ * exact thing REC-09 exists to keep out.
  *
  * .strict() rejects unrecognized keys instead of silently dropping them,
  * which makes REC-09 an enforced, testable constraint rather than just an
@@ -45,7 +50,22 @@ export const RecipeExtractionSchema = z
       }),
     ),
     suggestedCategories: z.array(z.string()),
-    suggestedTags: z.array(z.string()),
+    // Capped at 3 (developer product decision, 2026-08-07): free-form,
+    // AI-suggested tags with no cap fragmented into an unwieldy filter
+    // vocabulary after only a handful of recipes. The prompt's own
+    // tag-worthiness criteria do the real narrowing; this is a hard
+    // backstop against the model padding the list regardless.
+    suggestedTags: z.array(z.string()).max(3),
+    /**
+     * The recipe's own explicit tip/note callout — e.g. a labeled "Tip,"
+     * "Note," or "Chef's Note" section — captured only when the source
+     * genuinely has one; null otherwise. See the prompt's own rules for
+     * the exact inclusion/exclusion criteria (developer decision,
+     * 2026-08-07: too easy for this to become a dumping ground for the
+     * same blog narrative REC-09 already excludes, so the bar is
+     * deliberately narrow and null is the expected common case).
+     */
+    notes: z.string().nullable(),
     /**
      * Field names (e.g. "activeTimeMinutes") the model was not confident
      * about. Populating this — instead of a plausible-looking guess — is
@@ -67,7 +87,9 @@ Rules:
 - Preserve the page's own section structure for ingredients and instructions (e.g. "For the sauce" / "For the crust") when present; use a single unheaded section when the page has no sections.
 - Infer active time, total time, and yield when the page implies them even if not stated in exact numbers, but do NOT invent a specific number you cannot support from the text.
 - For any field you are not confident about, still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
-- suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly on the page.`;
+- suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly on the page.
+- suggestedTags: at most 3, short (one or two words), lowercase. Only tag a genuinely distinguishing, reusable attribute a cook would filter or search for later — diet (e.g. "vegetarian"), cuisine (e.g. "italian"), technique (e.g. "one-pot"), or occasion (e.g. "holiday"). Do not restate the title, an ingredient, or anything already captured in suggestedCategories, and do not invent a one-off descriptor so specific it wouldn't ever apply to another recipe. When in doubt, tag less.
+- notes: null unless the page has its own explicit, clearly labeled aside — a section actually headed "Tip," "Note," "Chef's Note," "Variation," or "Storage" (or an equivalent unmistakable label) — giving practical guidance about making, storing, or serving this dish. If present, copy its substance concisely; do not pad it or add anything not in that section. This is NOT a place to summarize the page, restate an instruction, or rescue any of the blog narrative/SEO filler you were told to remove above — if you are inferring or synthesizing rather than copying an explicit labeled aside, the answer is null. When in doubt, null.`;
 
 // Default to the cheaper/faster model; escalate to Opus only when Sonnet's
 // own result looks like it struggled (see seemsUncertain below), rather
@@ -198,7 +220,9 @@ Rules:
 - If the photo shows only part of a recipe (e.g. ingredients but no instructions, or the image is cut off), extract what is genuinely legible and leave the rest empty — do not invent missing sections.
 - Infer active time, total time, and yield only when legibly stated or clearly implied; do NOT invent a specific number you cannot support from the image.
 - For any field you are not confident about — including anything illegible, ambiguous handwriting, or a guess at a partially-obscured word — still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
-- suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly in the photo.`;
+- suggestedCategories and suggestedTags are your inference from the recipe's content, not necessarily anything stated explicitly in the photo.
+- suggestedTags: at most 3, short (one or two words), lowercase. Only tag a genuinely distinguishing, reusable attribute a cook would filter or search for later — diet, cuisine, technique, or occasion. Do not restate the title, an ingredient, or anything already captured in suggestedCategories, and do not invent a one-off descriptor so specific it wouldn't ever apply to another recipe. When in doubt, tag less.
+- notes: null unless the photo shows its own explicit, clearly labeled aside — text actually headed "Tip," "Note," "Chef's Note," "Variation," or "Storage" (or an equivalent unmistakable label) — giving practical guidance about making, storing, or serving this dish. If present and legible, copy its substance concisely; do not pad it or guess at illegible portions. This is NOT a place to summarize the recipe or restate an instruction — if you are inferring or synthesizing rather than reading an explicit labeled aside, the answer is null. When in doubt, null.`;
 
 export interface ExtractRecipeFromImageOptions {
   /** Same meaning as ExtractRecipeOptions.useProductionModels — opts into Opus escalation on an uncertain Sonnet result. Unlike the text path, the non-production floor is still Sonnet, not Haiku (see this function's own doc comment). */

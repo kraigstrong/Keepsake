@@ -3,8 +3,6 @@ import {
   EMPTY_FILTERS,
   filterRecipes,
   toggleCategoryFilter,
-  toggleTagFilter,
-  uniqueTags,
   type LibraryFilters,
 } from './libraryFilters';
 import type { LibraryRecipe } from '../sync/offlineRecipes';
@@ -26,75 +24,45 @@ describe('activeFilterCount', () => {
     expect(activeFilterCount(EMPTY_FILTERS)).toBe(0);
   });
 
-  it('sums categories and tags', () => {
-    expect(activeFilterCount({ categoryIds: ['c1', 'c2'], tags: ['weeknight'] })).toBe(3);
+  it('counts selected categories', () => {
+    expect(activeFilterCount({ categoryIds: ['c1', 'c2'] })).toBe(2);
   });
 });
 
 describe('filterRecipes', () => {
-  const chicken = recipe({ id: 'chicken', categoryIds: ['cat-chicken'], tags: ['weeknight'] });
-  const beef = recipe({ id: 'beef', categoryIds: ['cat-beef'], tags: ['freezer'] });
-  const dessert = recipe({ id: 'dessert', categoryIds: ['cat-dessert'], tags: ['weeknight'] });
+  const chicken = recipe({ id: 'chicken', categoryIds: ['cat-chicken'] });
+  const beef = recipe({ id: 'beef', categoryIds: ['cat-beef'] });
+  const dessert = recipe({ id: 'dessert', categoryIds: ['cat-dessert'] });
   const all = [chicken, beef, dessert];
 
   it('returns everything unfiltered when no filters are active', () => {
     expect(filterRecipes(all, EMPTY_FILTERS)).toEqual(all);
   });
 
-  it('ORs multiple selections within the same facet (category)', () => {
-    const filters: LibraryFilters = { categoryIds: ['cat-chicken', 'cat-beef'], tags: [] };
+  it('ORs multiple selections within the category facet', () => {
+    const filters: LibraryFilters = { categoryIds: ['cat-chicken', 'cat-beef'] };
     expect(filterRecipes(all, filters)).toEqual([chicken, beef]);
   });
 
-  it('ORs multiple selections within the same facet (tags)', () => {
-    const filters: LibraryFilters = { categoryIds: [], tags: ['weeknight', 'freezer'] };
-    expect(filterRecipes(all, filters)).toEqual([chicken, beef, dessert]);
-  });
-
-  it('ANDs across facets — category and tag filters both narrow the result', () => {
-    const filters: LibraryFilters = { categoryIds: ['cat-chicken'], tags: ['freezer'] };
-    expect(filterRecipes(all, filters)).toEqual([]);
-  });
-
-  it('a recipe matching the category but not the tag facet is excluded', () => {
-    const filters: LibraryFilters = { categoryIds: ['cat-chicken'], tags: ['freezer'] };
-    expect(filterRecipes(all, filters)).not.toContain(chicken);
+  it('excludes recipes not matching any selected category', () => {
+    const filters: LibraryFilters = { categoryIds: ['cat-chicken'] };
+    expect(filterRecipes(all, filters)).toEqual([chicken]);
   });
 });
 
-describe('toggleCategoryFilter / toggleTagFilter', () => {
+describe('toggleCategoryFilter', () => {
   it('adds a category id not yet selected', () => {
     expect(toggleCategoryFilter(EMPTY_FILTERS, 'c1').categoryIds).toEqual(['c1']);
   });
 
   it('removes a category id already selected', () => {
-    const filters: LibraryFilters = { categoryIds: ['c1', 'c2'], tags: [] };
+    const filters: LibraryFilters = { categoryIds: ['c1', 'c2'] };
     expect(toggleCategoryFilter(filters, 'c1').categoryIds).toEqual(['c2']);
   });
 
   it('does not mutate the input', () => {
-    const filters: LibraryFilters = { categoryIds: ['c1'], tags: [] };
+    const filters: LibraryFilters = { categoryIds: ['c1'] };
     toggleCategoryFilter(filters, 'c2');
     expect(filters.categoryIds).toEqual(['c1']);
-  });
-
-  it('tags toggle independently of categories', () => {
-    const filters: LibraryFilters = { categoryIds: ['c1'], tags: [] };
-    const next = toggleTagFilter(filters, 'weeknight');
-    expect(next).toEqual({ categoryIds: ['c1'], tags: ['weeknight'] });
-  });
-});
-
-describe('uniqueTags', () => {
-  it('deduplicates and alphabetizes tags across all given recipes', () => {
-    const recipes = [
-      recipe({ id: 'r1', tags: ['weeknight', 'spicy'] }),
-      recipe({ id: 'r2', tags: ['spicy', 'freezer'] }),
-    ];
-    expect(uniqueTags(recipes)).toEqual(['freezer', 'spicy', 'weeknight']);
-  });
-
-  it('returns an empty array when no recipe has any tags', () => {
-    expect(uniqueTags([recipe()])).toEqual([]);
   });
 });
