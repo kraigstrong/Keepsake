@@ -1,6 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import * as Calendar from 'expo-calendar/legacy';
 
-import { addGroceryReminder, getOrCreateGroceryList, requestReminderPermission } from './reminders';
+import {
+  addGroceryReminder,
+  getOrCreateGroceryList,
+  getOwnedGroceryListId,
+  openReminders,
+  requestReminderPermission,
+} from './reminders';
 
 jest.mock('expo-calendar/legacy', () => ({
   requestRemindersPermissionsAsync: jest.fn(),
@@ -9,13 +17,33 @@ jest.mock('expo-calendar/legacy', () => ({
   createReminderAsync: jest.fn(),
   EntityTypes: { REMINDER: 'reminder' },
 }));
+jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 
 const mocked = Calendar as jest.Mocked<typeof Calendar>;
+const mockedLinking = Linking as jest.Mocked<typeof Linking>;
 
 describe('requestReminderPermission', () => {
-  it('reflects the permission response', async () => {
-    mocked.requestRemindersPermissionsAsync.mockResolvedValue({ granted: true } as never);
-    expect(await requestReminderPermission()).toBe(true);
+  it('returns the full permission response, including canAskAgain', async () => {
+    mocked.requestRemindersPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    } as never);
+
+    expect(await requestReminderPermission()).toEqual({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    });
+  });
+});
+
+describe('openReminders', () => {
+  it('opens the Reminders app via its URL scheme', async () => {
+    await openReminders();
+    expect(mockedLinking.openURL).toHaveBeenCalledWith('x-apple-reminderkit://');
   });
 });
 
@@ -51,6 +79,50 @@ describe('getOrCreateGroceryList', () => {
     mocked.getCalendarsAsync.mockResolvedValue([] as never);
 
     await expect(getOrCreateGroceryList()).rejects.toThrow('No reminder source available');
+  });
+});
+
+describe('getOwnedGroceryListId', () => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+  });
+
+  it('reuses a remembered list id without re-searching by title', async () => {
+    await AsyncStorage.setItem('keepsake.reminders.groceryListId', 'owned-id');
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'owned-id', title: 'Keepsake Groceries', source: { id: 'src-1' } },
+    ] as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('owned-id');
+    expect(mocked.createCalendarAsync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to title search and remembers the result when the remembered list is gone', async () => {
+    await AsyncStorage.setItem('keepsake.reminders.groceryListId', 'deleted-id');
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'other-id', title: 'Some Other List', source: { id: 'src-1' } },
+    ] as never);
+    mocked.createCalendarAsync.mockResolvedValue('new-id' as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('new-id');
+    expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBe('new-id');
+  });
+
+  it('creates and remembers a list on the very first export', async () => {
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'other-id', title: 'Some Other List', source: { id: 'src-1' } },
+    ] as never);
+    mocked.createCalendarAsync.mockResolvedValue('new-id' as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('new-id');
+    expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBe('new-id');
   });
 });
 

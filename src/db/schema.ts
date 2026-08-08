@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -159,4 +159,26 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   // already-synced local row defaulting to 0 here is already correct,
   // not stale.
   8: [`alter table recipes add column planned_count integer not null default 0`],
+  // Apple Reminders export bookkeeping (Phase 14, ADR-0023). Reminders
+  // is a local, per-device EventKit store with no server-side
+  // representation — this table (not a Supabase one) is the only
+  // record of which grocery items have already been exported for a
+  // plan, keyed by item_hash (ADR-0022's deterministic merge/selection
+  // identity, reused rather than inventing a new one). Deliberately
+  // excluded from wipeDatabase()'s table list, same reasoning as
+  // import_outbox: an exported reminder is a real, already-happened
+  // side effect in a system this app doesn't control, so losing this
+  // record on sign-out would mean a re-export after signing back in
+  // recreates every item as a duplicate in the real Reminders app.
+  9: [
+    `create table if not exists grocery_exports (
+      weekly_plan_id text not null,
+      item_hash text not null,
+      household_id text not null,
+      reminder_id text not null,
+      exported_at text not null,
+      primary key (weekly_plan_id, item_hash)
+    )`,
+    `create index if not exists idx_grocery_exports_household_id on grocery_exports (household_id)`,
+  ],
 };

@@ -5,10 +5,20 @@ import type { GroceryReviewItem } from './api';
 import { GroceryReviewScreen } from './GroceryReviewScreen';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
+import { useHousehold } from '../household/HouseholdProvider';
 
 jest.mock('./api');
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
+jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+
+// GroceryExportPanel has its own dedicated test file — stubbed here so
+// this file only has to verify GroceryReviewScreen wires the right
+// props to it, not re-exercise export behavior itself.
+const mockGroceryExportPanel = jest.fn((_props: unknown) => null);
+jest.mock('./GroceryExportPanel', () => ({
+  GroceryExportPanel: (props: unknown) => mockGroceryExportPanel(props),
+}));
 
 // Same approximation as ThisWeekScreen.test.tsx: only calls a *new*
 // callback identity, not naively on every render — otherwise an
@@ -34,6 +44,7 @@ function renderScreen() {
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
+const mockedUseHousehold = useHousehold as jest.Mock;
 
 function item(overrides: Partial<GroceryReviewItem> = {}): GroceryReviewItem {
   return {
@@ -50,6 +61,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
+  mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
   mockedApi.setGroceryItemSelection.mockResolvedValue(undefined);
   mockedApi.clearGroceryItemSelection.mockResolvedValue(undefined);
 });
@@ -103,6 +115,26 @@ it('groups items under their category header', async () => {
   expect(screen.getByText('Produce')).toBeTruthy();
   expect(screen.getByText('Meat')).toBeTruthy();
   expect(screen.getByText('1 chicken breast')).toBeTruthy();
+});
+
+it('passes only included items to GroceryExportPanel, with the household id', async () => {
+  mockedApi.fetchGroceryReview.mockResolvedValue({
+    planId: 'plan-1',
+    items: [
+      item({ itemHash: 'onion', amounts: ['3 onions'], included: true }),
+      item({ itemHash: 'salt', amounts: ['1 tsp salt'], isStaple: true, included: false }),
+    ],
+  });
+
+  renderScreen();
+
+  await waitFor(() => expect(mockGroceryExportPanel).toHaveBeenCalled());
+  const lastCall = mockGroceryExportPanel.mock.calls.at(-1)![0];
+  expect(lastCall).toEqual({
+    planId: 'plan-1',
+    householdId: 'household-1',
+    items: [{ itemHash: 'onion', displayText: '3 onions' }],
+  });
 });
 
 it('renders a staple as unchecked by default and a non-staple as checked', async () => {
