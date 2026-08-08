@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -76,12 +77,16 @@ export function randomId(): string {
  */
 export async function uploadHeroImage(householdId: string, localUri: string): Promise<string> {
   const path = `${householdId}/${randomId()}.jpg`;
-  const response = await fetch(localUri);
-  const blob = await response.blob();
+  // Raw bytes, not a Blob: @supabase/storage-js only honors the
+  // `contentType` option for non-Blob bodies — a Blob upload silently
+  // uses the Blob's own `.type` instead, which React Native's
+  // `fetch(uri).blob()` gets wrong for local files (observed as
+  // "text/plain", rejected by the bucket's allowed_mime_types).
+  const bytes = await new File(localUri).arrayBuffer();
 
   const { error } = await supabase.storage
     .from('recipe-images')
-    .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
 
   if (error) throw error;
   return path;
