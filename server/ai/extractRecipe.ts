@@ -17,7 +17,7 @@ import { z } from 'zod';
  *   ingredientSections                              -> REC-02
  *   instructionSections                              -> REC-03
  *   suggestedCategories/suggestedTags                -> AI-06 / ORG-04
- *   notes                                             -> REC-07 (developer decision, 2026-08-07)
+ *   notes                                             -> REC-04 (developer decision, 2026-08-07)
  *   uncertainFields                                   -> AI-07, AI-08
  * No `description` field — prd.md REC-09 says that field must not exist.
  * `notes` is not that field reappearing under a new name: it's gated to an

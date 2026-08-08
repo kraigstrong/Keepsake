@@ -285,7 +285,11 @@ export function RecipeDetailScreen({
       // instead of the generic fallback so a locked plan doesn't read as
       // a broken button (developer UX feedback, 2026-08-07).
       const isLocked = error instanceof Error && error.message.includes('not in planning state');
-      showToast(isLocked ? "This week's plan is locked — reopen it to add recipes" : "Couldn't add to This Week");
+      showToast(
+        isLocked
+          ? "This week's plan is locked — reopen it to add recipes"
+          : "Couldn't add to This Week",
+      );
     }
   }
 
