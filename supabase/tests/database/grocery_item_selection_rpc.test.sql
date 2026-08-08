@@ -1,12 +1,13 @@
--- Phase 13 (ADR-0022): set_grocery_item_selection. The grocery list
--- itself is computed client-side and never persisted (server/groceries)
--- — this RPC only covers the one thing this phase's schema owns: the
--- household-authorized, upsert-on-conflict write path for a single
--- item's include/exclude override, restricted to a confirmed plan.
+-- Phase 13 (ADR-0022): set_grocery_item_selection and
+-- clear_grocery_item_selection. The grocery list itself is computed
+-- client-side and never persisted (server/groceries) — these RPCs only
+-- cover the one thing this phase's schema owns: the household-
+-- authorized write path for a single item's include/exclude override,
+-- restricted to a confirmed plan.
 
 begin;
 
-select plan(11);
+select plan(17);
 
 insert into auth.users (id, email)
 values
@@ -39,10 +40,14 @@ select set_config(
 
 create temporary table plan_a as
 select * from public.get_or_create_current_weekly_plan('2026-W32');
+-- Kept unconfirmed throughout — used for the "plan not confirmed" cases
+-- of both RPCs without disturbing plan_a's own confirmed-state tests.
+create temporary table plan_planning as
+select * from public.get_or_create_current_weekly_plan('2026-W33');
 
 select throws_ok(
   format(
-    $$ select public.set_grocery_item_selection(%L, 'abc123', false) $$,
+    $$ select public.set_grocery_item_selection(%L, 'a1b2c3d4e5f60718', false) $$,
     (select id from plan_a)
   ),
   'weekly plan is not confirmed',
@@ -57,12 +62,30 @@ select throws_ok(
     $$ select public.set_grocery_item_selection(%L, '', false) $$,
     (select id from plan_a)
   ),
-  'item_hash must not be empty',
+  'item_hash_param must be a 16-character lowercase hex hash',
   'set_grocery_item_selection: rejects an empty item_hash'
 );
 
+select throws_ok(
+  format(
+    $$ select public.set_grocery_item_selection(%L, 'abc123', false) $$,
+    (select id from plan_a)
+  ),
+  'item_hash_param must be a 16-character lowercase hex hash',
+  'set_grocery_item_selection: rejects a hash that is not 16 lowercase hex characters'
+);
+
+select throws_ok(
+  format(
+    $$ select public.set_grocery_item_selection(%L, 'A1B2C3D4E5F60718', false) $$,
+    (select id from plan_a)
+  ),
+  'item_hash_param must be a 16-character lowercase hex hash',
+  'set_grocery_item_selection: rejects uppercase hex (fnv1a64 always emits lowercase)'
+);
+
 create temporary table selection1 as
-select * from public.set_grocery_item_selection((select id from plan_a), 'abc123', false);
+select * from public.set_grocery_item_selection((select id from plan_a), 'a1b2c3d4e5f60718', false);
 select ok(
   (select id is not null from selection1),
   'set_grocery_item_selection: creates a selection row'
@@ -74,7 +97,7 @@ select is(
 );
 
 create temporary table selection1_again as
-select * from public.set_grocery_item_selection((select id from plan_a), 'abc123', true);
+select * from public.set_grocery_item_selection((select id from plan_a), 'a1b2c3d4e5f60718', true);
 select is(
   (select id from selection1_again),
   (select id from selection1),
@@ -87,9 +110,40 @@ select is(
 );
 select is(
   (select count(*)::int from public.grocery_item_selections
-   where weekly_plan_id = (select id from plan_a) and item_hash = 'abc123'),
+   where weekly_plan_id = (select id from plan_a) and item_hash = 'a1b2c3d4e5f60718'),
   1,
   'set_grocery_item_selection: exactly one row exists per (weekly_plan_id, item_hash)'
+);
+
+-- clear_grocery_item_selection
+select lives_ok(
+  format(
+    $$ select public.clear_grocery_item_selection(%L, 'a1b2c3d4e5f60718') $$,
+    (select id from plan_a)
+  ),
+  'clear_grocery_item_selection: removes an existing override'
+);
+select is(
+  (select count(*)::int from public.grocery_item_selections
+   where weekly_plan_id = (select id from plan_a) and item_hash = 'a1b2c3d4e5f60718'),
+  0,
+  'clear_grocery_item_selection: the row is actually gone'
+);
+select lives_ok(
+  format(
+    $$ select public.clear_grocery_item_selection(%L, 'a1b2c3d4e5f60718') $$,
+    (select id from plan_a)
+  ),
+  'clear_grocery_item_selection: clearing an already-cleared item is a no-op, not an error'
+);
+
+select throws_ok(
+  format(
+    $$ select public.clear_grocery_item_selection(%L, 'a1b2c3d4e5f60718') $$,
+    (select id from plan_planning)
+  ),
+  'weekly plan is not confirmed',
+  'clear_grocery_item_selection: rejects a plan still in planning state'
 );
 
 select set_config(
@@ -99,11 +153,19 @@ select set_config(
 );
 select throws_ok(
   format(
-    $$ select public.set_grocery_item_selection(%L, 'abc123', false) $$,
+    $$ select public.set_grocery_item_selection(%L, 'a1b2c3d4e5f60718', false) $$,
     (select id from plan_a)
   ),
   'weekly plan not found',
   'set_grocery_item_selection: a caller from a different household cannot see the plan at all'
+);
+select throws_ok(
+  format(
+    $$ select public.clear_grocery_item_selection(%L, 'a1b2c3d4e5f60718') $$,
+    (select id from plan_a)
+  ),
+  'weekly plan not found',
+  'clear_grocery_item_selection: a caller from a different household cannot see the plan at all'
 );
 
 select set_config(
@@ -113,11 +175,19 @@ select set_config(
 );
 select throws_ok(
   format(
-    $$ select public.set_grocery_item_selection(%L, 'abc123', false) $$,
+    $$ select public.set_grocery_item_selection(%L, 'a1b2c3d4e5f60718', false) $$,
     (select id from plan_a)
   ),
   'caller does not belong to a household',
   'set_grocery_item_selection: rejects a caller with no household'
+);
+select throws_ok(
+  format(
+    $$ select public.clear_grocery_item_selection(%L, 'a1b2c3d4e5f60718') $$,
+    (select id from plan_a)
+  ),
+  'caller does not belong to a household',
+  'clear_grocery_item_selection: rejects a caller with no household'
 );
 
 select * from finish();

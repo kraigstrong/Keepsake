@@ -6,7 +6,13 @@ import {
   GROCERY_CATEGORY_LABELS,
   GROCERY_CATEGORY_ORDER,
 } from '../../server/groceries/categoryDictionary.ts';
-import { fetchGroceryReview, setGroceryItemSelection, type GroceryReviewItem } from './api';
+import {
+  clearGroceryItemSelection,
+  fetchGroceryReview,
+  setGroceryItemSelection,
+  GROCERY_REVIEW_PLAN_NOT_CONFIRMED,
+  type GroceryReviewItem,
+} from './api';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
@@ -31,14 +37,28 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
 
   const [items, setItems] = useState<GroceryReviewItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [notConfirmed, setNotConfirmed] = useState(false);
+  // Guards against a double-tap re-triggering a second RPC for the same
+  // item before the first resolves (Codex review, PR #45): with two
+  // in-flight requests for one item, they can resolve out of order,
+  // leaving the UI showing the newer choice while the server ends up
+  // persisting the older one. Ignoring a press while that item's own
+  // request is still pending removes the race instead of trying to
+  // fence out-of-order responses.
+  const [pendingHashes, setPendingHashes] = useState<ReadonlySet<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
       const review = await fetchGroceryReview(planId);
       setItems(review.items);
       setLoadError(false);
-    } catch {
-      setLoadError(true);
+      setNotConfirmed(false);
+    } catch (error) {
+      if (error instanceof Error && error.message === GROCERY_REVIEW_PLAN_NOT_CONFIRMED) {
+        setNotConfirmed(true);
+      } else {
+        setLoadError(true);
+      }
     }
   }, [planId]);
 
@@ -53,17 +73,46 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   );
 
   async function handleToggle(item: GroceryReviewItem) {
-    if (!items) return;
+    if (pendingHashes.has(item.itemHash)) return;
     const nextIncluded = !item.included;
-    const previous = items;
-    setItems(
-      items.map((i) => (i.itemHash === item.itemHash ? { ...i, included: nextIncluded } : i)),
+    const previousIncluded = item.included;
+
+    setPendingHashes((prev) => new Set(prev).add(item.itemHash));
+    setItems((prev) =>
+      prev
+        ? prev.map((i) => (i.itemHash === item.itemHash ? { ...i, included: nextIncluded } : i))
+        : prev,
     );
+
     try {
-      await setGroceryItemSelection(planId, item.itemHash, nextIncluded);
+      // A toggle that lands back on the item's own computed default
+      // clears the override instead of persisting a row that just
+      // restates it — keeps grocery_item_selections sparse as intended
+      // (ADR-0022), so a future staples-list tuning isn't masked by a
+      // stale row recording today's default as a deliberate choice.
+      if (nextIncluded === !item.isStaple) {
+        await clearGroceryItemSelection(planId, item.itemHash);
+      } else {
+        await setGroceryItemSelection(planId, item.itemHash, nextIncluded);
+      }
     } catch {
-      setItems(previous);
+      // Reverts only this item, not the whole list snapshot — a
+      // concurrent successful toggle on a different item must survive
+      // this one's failure (Codex review, PR #45).
+      setItems((prev) =>
+        prev
+          ? prev.map((i) =>
+              i.itemHash === item.itemHash ? { ...i, included: previousIncluded } : i,
+            )
+          : prev,
+      );
       showToast("Couldn't update that item");
+    } finally {
+      setPendingHashes((prev) => {
+        const next = new Set(prev);
+        next.delete(item.itemHash);
+        return next;
+      });
     }
   }
 
@@ -97,6 +146,28 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
     );
   }
 
+  // A stale/deep link, or a co-member reopening the plan for editing
+  // while this screen is open — not a connectivity problem, so it gets
+  // its own copy rather than the generic "check your connection"
+  // message above (Codex review, PR #45). onRetry still just re-runs
+  // load(): if the plan gets (re)confirmed while this is on screen,
+  // trying again succeeds without navigating away first.
+  if (notConfirmed) {
+    return (
+      <View style={styles.screen} testID="grocery-review-screen">
+        <Text style={styles.title}>Groceries</Text>
+        <View style={styles.centered}>
+          <ErrorState
+            title="This week's plan isn't confirmed"
+            message="Go back to This Week and confirm your plan before reviewing groceries."
+            onRetry={load}
+            testID="grocery-review-not-confirmed"
+          />
+        </View>
+      </View>
+    );
+  }
+
   if (items === null) {
     return (
       <View style={styles.screen} testID="grocery-review-screen">
@@ -121,8 +192,12 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
                   key={item.itemHash}
                   style={styles.row}
                   onPress={() => handleToggle(item)}
+                  disabled={pendingHashes.has(item.itemHash)}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: item.included }}
+                  accessibilityState={{
+                    checked: item.included,
+                    disabled: pendingHashes.has(item.itemHash),
+                  }}
                   testID={`grocery-review-item-${item.itemHash}`}
                 >
                   <View style={[styles.checkbox, item.included && styles.checkboxSelected]}>

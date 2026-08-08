@@ -22,6 +22,20 @@ export interface GroceryReviewList {
   items: GroceryReviewItem[];
 }
 
+// Thrown by fetchGroceryReview when the plan isn't confirmed yet — a
+// stale/deep link, or a co-member reopening the plan for editing while
+// this screen is open, would otherwise render a fully interactive-
+// looking list whose every toggle then gets rejected by the RPC
+// (Codex review, PR #45). A string constant, not an error subclass:
+// this codebase has no error-hierarchy convention to extend, and the
+// caller only ever needs to compare messages, same as every other
+// thrown-Error(message) path in this file.
+export const GROCERY_REVIEW_PLAN_NOT_CONFIRMED =
+  "This week's plan needs to be confirmed before groceries can be reviewed.";
+
+interface FetchedWeeklyPlanRow {
+  status: string;
+}
 interface FetchedIngredientLine {
   line_text: string;
   quantity_min: number | null;
@@ -55,6 +69,16 @@ function toParsedLine(line: FetchedIngredientLine): ParsedIngredientLine {
  * household has already recorded for this plan.
  */
 export async function fetchGroceryReview(planId: string): Promise<GroceryReviewList> {
+  const { data: plan, error: planError } = await supabase
+    .from('weekly_plans')
+    .select('status')
+    .eq('id', planId)
+    .single();
+  if (planError) throw new Error(planError.message);
+  if ((plan as unknown as FetchedWeeklyPlanRow).status !== 'confirmed') {
+    throw new Error(GROCERY_REVIEW_PLAN_NOT_CONFIRMED);
+  }
+
   const { data: entries, error: entriesError } = await supabase
     .from('planning_entries')
     .select(
@@ -104,6 +128,12 @@ export async function fetchGroceryReview(planId: string): Promise<GroceryReviewL
   };
 }
 
+// item_hash_param, not item_hash — an ON CONFLICT target column list in
+// the RPC can't be schema-qualified the way a WHERE/VALUES reference
+// can, so a same-named parameter there is genuinely ambiguous to the
+// planner (same collision ADR-0021 hit with week_key_param; this one
+// shipped broken and was caught by CI, not local review, since this
+// environment has no Docker to run pgTAP before pushing).
 export async function setGroceryItemSelection(
   planId: string,
   itemHash: string,
@@ -111,8 +141,23 @@ export async function setGroceryItemSelection(
 ): Promise<void> {
   const { error } = await supabase.rpc('set_grocery_item_selection', {
     plan_id: planId,
-    item_hash: itemHash,
+    item_hash_param: itemHash,
     included,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Restores an item to its computed default (staple -> excluded, else
+// included) rather than persisting a row that merely restates the
+// default — keeps grocery_item_selections sparse as ADR-0022 actually
+// intends, and means a future tuning of the staples list applies
+// retroactively to anyone who never overrode that item (Codex review,
+// PR #45). Callers decide *when* to call this vs. setGroceryItemSelection
+// by comparing the toggled value against the item's own isStaple flag.
+export async function clearGroceryItemSelection(planId: string, itemHash: string): Promise<void> {
+  const { error } = await supabase.rpc('clear_grocery_item_selection', {
+    plan_id: planId,
+    item_hash_param: itemHash,
   });
   if (error) throw new Error(error.message);
 }
