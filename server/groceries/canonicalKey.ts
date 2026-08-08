@@ -5,43 +5,26 @@
  * same string for both.
  *
  * Normalization steps, in order:
- *  1. Drop everything from the first comma onward — preparation clauses
- *     ("large diced", "at room temperature") that would otherwise make
- *     near-identical ingredients look distinct.
- *  2. Lowercase / trim / collapse whitespace / strip trailing
- *     punctuation.
+ *  1. Drop everything from the first comma onward.
+ *  2. Lowercase / trim / collapse whitespace / strip trailing punctuation.
  *  3. Strip one leading preparation-state word from LEADING_PREP_MODIFIERS
  *     ("melted butter" -> "butter"), then singularize the last word with
  *     a small, fixed suffix rule.
  *
- * Both the suffix rule and LEADING_PREP_MODIFIERS are safe under "a
- * false merge is worse than a missed merge" (execution-plan.md's Phase
- * 13 Validation section) for the same structural reason: each is a
- * small, fixed, reviewed list applied deterministically, so it can only
- * ever make two spellings of the *same* underlying product collide — it
- * has no mechanism to make two different products collide. That's why
- * LEADING_PREP_MODIFIERS deliberately excludes words like "diced",
- * "ground", "chopped", or "cooked": those describe prep states with a
- * real product-identity idiom attached ("diced tomatoes" is a canned
- * good distinct from fresh tomatoes; "ground beef" and "cooked chicken"
- * are different purchases than "beef" or "chicken"), so stripping them
- * would risk exactly the false merge this whole function exists to
- * avoid. The words on the list only ever describe a physical state of
- * an otherwise-identical product (melted vs. solid butter is still
- * butter to buy). Everything else stays an accepted under-merging gap
- * per the ADR, not something this function tries to fix.
+ * See the ADR for why this stays this narrow. LEADING_PREP_MODIFIERS
+ * carries the same constraint one level down: each entry must describe
+ * only a physical state of an otherwise-identical product, never a
+ * word that's also its own distinct product name ("ground beef",
+ * "diced tomatoes" — real idioms, not just "beef"/"tomatoes" in a
+ * different state) — that's what would turn this into a false merge.
  */
 
-// See the module doc above for why this list is this short and this
-// specific — extending it is a normal, reviewed code change, but each
-// addition needs the same "no product-identity idiom" check.
 const LEADING_PREP_MODIFIERS: readonly string[] = [
   'room temperature',
   'melted',
   'softened',
   'chilled',
   'cooled',
-  'beaten',
   'whisked',
   'warmed',
 ];

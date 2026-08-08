@@ -56,6 +56,11 @@ describe('canonicalKey', () => {
       ['ground beef', 'beef'],
       ['cooked chicken', 'chicken'],
       ['chopped onion', 'onion'],
+      // Codex review, PR #47: "beaten" was on LEADING_PREP_MODIFIERS,
+      // but "beaten rice" (flattened rice, poha) is a distinct product,
+      // not just rice that's been beaten — the same idiom risk as
+      // "ground"/"diced"/"cooked". Removed from the list entirely.
+      ['beaten rice', 'rice'],
     ])('"%s" and "%s" produce different keys', (a, b) => {
       expect(canonicalKey(a)).not.toBe(canonicalKey(b));
     });
