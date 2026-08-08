@@ -279,8 +279,13 @@ export function RecipeDetailScreen({
       const plan = await fetchCurrentWeeklyPlan();
       await addRecipeToThisWeek(plan.id, recipeId, scaledServings ?? DEFAULT_SERVINGS_WHEN_UNKNOWN);
       showToast('Added to This Week');
-    } catch {
-      showToast("Couldn't add to This Week");
+    } catch (error) {
+      // add_to_weekly_plan raises this exact message when the current
+      // week's plan is confirmed (locked) — surfaced as its own toast
+      // instead of the generic fallback so a locked plan doesn't read as
+      // a broken button (developer UX feedback, 2026-08-07).
+      const isLocked = error instanceof Error && error.message.includes('not in planning state');
+      showToast(isLocked ? "This week's plan is locked — reopen it to add recipes" : "Couldn't add to This Week");
     }
   }
 
@@ -429,14 +434,16 @@ export function RecipeDetailScreen({
         >
           <Text style={styles.editButtonLabel}>Edit</Text>
         </Pressable>
-        <Pressable
-          style={styles.editButton}
-          accessibilityRole="button"
-          onPress={() => router.push(`/recipe/${recipeId}/history`)}
-          testID="recipe-detail-history-button"
-        >
-          <Text style={styles.editButtonLabel}>History</Text>
-        </Pressable>
+        {recipe.version > 1 && (
+          <Pressable
+            style={styles.editButton}
+            accessibilityRole="button"
+            onPress={() => router.push(`/recipe/${recipeId}/history`)}
+            testID="recipe-detail-history-button"
+          >
+            <Text style={styles.editButtonLabel}>History</Text>
+          </Pressable>
+        )}
         {recipe.originalPhotoPath && (
           <Pressable
             style={styles.editButton}

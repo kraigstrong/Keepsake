@@ -151,14 +151,22 @@ it('navigates to the edit screen', async () => {
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit');
 });
 
-it('navigates to the history screen', async () => {
-  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+it('navigates to the history screen when more than one version exists', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, version: 2 });
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
   await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/history');
+});
+
+it('hides the History button when the recipe has only one version', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  expect(screen.queryByTestId('recipe-detail-history-button')).toBeNull();
 });
 
 it('does not show an Original Photo button when the recipe has no original_photo_path', async () => {
@@ -372,4 +380,23 @@ it('shows an error toast when adding to This Week fails', async () => {
   await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
 
   await waitFor(() => expect(screen.getByText("Couldn't add to This Week")).toBeTruthy());
+});
+
+it('shows a locked-plan-specific toast when the current week is confirmed', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+  mockedThisWeekApi.fetchCurrentWeeklyPlan.mockResolvedValue({
+    id: 'plan-1',
+    status: 'confirmed',
+    entries: [],
+  });
+  mockedThisWeekApi.addRecipeToThisWeek.mockRejectedValue(
+    new Error('weekly plan is not in planning state'),
+  );
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() =>
+    expect(screen.getByText("This week's plan is locked — reopen it to add recipes")).toBeTruthy(),
+  );
 });
