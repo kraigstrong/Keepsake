@@ -344,13 +344,22 @@ export function ThisWeekScreen() {
           louder color. */}
       {isConfirmed ? (
         <View style={styles.actionsRow}>
-          <Button
-            title="Edit Plan"
-            onPress={handleEditPlan}
-            disabled={isMutating}
-            variant="secondary"
-            testID="this-week-edit-plan"
-          />
+          <View style={styles.actionsRowItem}>
+            <Button
+              title="Generate groceries"
+              onPress={() => router.push(`/groceries/${plan.id}`)}
+              testID="this-week-generate-groceries"
+            />
+          </View>
+          <View style={styles.actionsRowItem}>
+            <Button
+              title="Edit Plan"
+              onPress={handleEditPlan}
+              disabled={isMutating}
+              variant="secondary"
+              testID="this-week-edit-plan"
+            />
+          </View>
         </View>
       ) : (
         plan.entries.length > 0 && (

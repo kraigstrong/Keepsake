@@ -278,6 +278,18 @@ it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit
   expect(push).toHaveBeenCalledWith('/recipe/r1');
 });
 
+it('navigates to the grocery review screen for the confirmed plan', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ id: 'plan-1', status: 'confirmed', entries: [entry({ id: 'e1' })] }),
+  );
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-generate-groceries')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-generate-groceries'));
+  expect(push).toHaveBeenCalledWith('/groceries/plan-1');
+});
+
 it('reopens a confirmed plan optimistically via Edit Plan, with no reload round-trip', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }),

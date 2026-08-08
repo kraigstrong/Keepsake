@@ -7,10 +7,10 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 ## Current
 
 - **Phase:** 13 — Grocery Generation and Review
-- **Status:** Not started.
-- **Branch:** none yet. Phase 12 merged via [PR #36](https://github.com/kraigstrong/Keepsake/pull/36) (Conditional Pass, developer decision, 2026-08-07 — see `docs/history/phase-12-this-week-planning.md`).
-- **Next action:** Run `start-phase` for Phase 13. Before that, a Share Extension crash (`logError`/`drainAppGroupQueue`, "undefined is not a function") found during Phase 12 device testing is still open — Phase 9 code, not this phase's — see the entry below.
-- **Blocked on:** Nothing for Phase 13 itself; the Share Extension bug is a separate active investigation.
+- **Status:** Build scope complete, not yet exited. All eight build-scope bullets implemented across 6 commits on `phase-13-grocery-generation`: ADR-0022 (design decisions), `grocery_item_selections` schema/RLS/RPC, `canonicalKey`/`itemHash`, `categoryDictionary`/`staples`, `generateGroceryList` (scale + conservative merge + group), client data access, and the grouped review screen + This Week entry point. `prd-traceability.md` GRO-01/02/04/05/06 marked `Done (tested)`; GRO-07 `In Progress` (Phase 13's half only — no editing in review — the rest is Phase 14's export flow); GRO-03 stays `Not Started` (Phase 14). All 97 Jest suites (799 tests) and `tsc`/`eslint`/`prettier` pass locally; pgTAP is CI-only (no Docker in this environment).
+- **Branch:** `phase-13-grocery-generation` (not pushed yet). Phase 12 merged via [PR #36](https://github.com/kraigstrong/Keepsake/pull/36) (Conditional Pass, developer decision, 2026-08-07 — see `docs/history/phase-12-this-week-planning.md`).
+- **Next action:** No live Simulator/device walkthrough of the grocery review screen has been performed yet (same gap Phase 12 left open for This Week — see below). Either do that walkthrough first, or run the `exit-phase` skill now and record the gap as a Conditional-Pass follow-up, matching how Phase 12 itself was handled — developer's call. After that, `pr-ready` for the branch.
+- **Blocked on:** Nothing. The Share Extension crash (`logError`/`drainAppGroupQueue`, "undefined is not a function") found during Phase 12 device testing — Phase 9 code — has been resolved (developer confirmation, 2026-08-08).
 
 ## History
 
