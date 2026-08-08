@@ -126,6 +126,31 @@ describe('getOwnedGroceryListId', () => {
     expect(id).toBe('new-id');
     expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBe('new-id');
   });
+
+  it('prefers a native "Groceries" list over the remembered owned list', async () => {
+    await AsyncStorage.setItem('keepsake.reminders.groceryListId', 'owned-id');
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'owned-id', title: 'Keepsake Groceries', source: { id: 'src-1' } },
+      { id: 'native-id', title: 'Groceries', source: { id: 'src-1' } },
+    ] as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('native-id');
+    expect(mocked.createCalendarAsync).not.toHaveBeenCalled();
+  });
+
+  it('prefers a native "Groceries" list over creating one on first export', async () => {
+    mocked.getCalendarsAsync.mockResolvedValue([
+      { id: 'native-id', title: 'Groceries', source: { id: 'src-1' } },
+    ] as never);
+
+    const id = await getOwnedGroceryListId();
+
+    expect(id).toBe('native-id');
+    expect(mocked.createCalendarAsync).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem('keepsake.reminders.groceryListId')).toBeNull();
+  });
 });
 
 describe('addGroceryReminder', () => {
