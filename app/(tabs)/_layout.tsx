@@ -49,13 +49,19 @@ function TabsLayoutContent() {
           headerLeftContainerStyle: { paddingLeft: spacing.lg },
           headerRightContainerStyle: { paddingRight: spacing.lg },
           headerLeft: () => (
+            // "New Recipe" rather than "Add" — This Week already has its
+            // own "Add recipes" action (adds an *existing* library recipe
+            // to the plan), and the shared plain "Add" label next to it
+            // read as ambiguous about which one it was (developer UX
+            // feedback). This opens the sheet for creating a brand new
+            // recipe (manual/URL/bulk/photo), so it's named for that.
             <Pressable
               onPress={openAddSheet}
-              accessibilityLabel="Add recipe"
+              accessibilityLabel="New recipe"
               accessibilityRole="button"
               hitSlop={8}
             >
-              <Text style={styles.headerAction}>Add</Text>
+              <Text style={styles.headerAction}>New Recipe</Text>
             </Pressable>
           ),
           headerRight: () => (
