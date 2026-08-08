@@ -8,8 +8,6 @@ import {
   EMPTY_FILTERS,
   filterRecipes,
   toggleCategoryFilter,
-  toggleTagFilter,
-  uniqueTags,
   type LibraryFilters,
 } from './libraryFilters';
 import { SORT_MODES, sortRecipes, type SortMode } from './librarySort';
@@ -175,7 +173,6 @@ export function LibraryScreen() {
     group,
     options: categories.filter((c) => c.groupName === group),
   })).filter((section) => section.options.length > 0);
-  const tagOptions = uniqueTags(recipes ?? []);
 
   return (
     <View style={styles.screen}>
@@ -290,23 +287,6 @@ export function LibraryScreen() {
               </View>
             </View>
           ))}
-
-          {tagOptions.length > 0 && (
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Tags</Text>
-              <View style={styles.chipWrap}>
-                {tagOptions.map((tag) => (
-                  <Chip
-                    key={tag}
-                    testID={`library-filter-tag-${tag}`}
-                    label={tag}
-                    selected={filters.tags.includes(tag)}
-                    onPress={() => setFilters(toggleTagFilter(filters, tag))}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
         </ScrollView>
 
         <View style={styles.filterActions}>
