@@ -62,6 +62,11 @@ describe('runMigrations', () => {
         /create table if not exists import_outbox/i.test(source),
       ),
     ).toBe(true);
+    expect(
+      db.execAsync.mock.calls.some(([source]) =>
+        /create table if not exists grocery_exports/i.test(source),
+      ),
+    ).toBe(true);
   });
 
   it('is a no-op when the database is already at SCHEMA_VERSION', async () => {
@@ -136,6 +141,7 @@ describe('getDatabase / wipeDatabase', () => {
       'delete from recipe_trigram',
     ]);
     expect(deletedTables.some((source: string) => /import_outbox/i.test(source))).toBe(false);
+    expect(deletedTables.some((source: string) => /grocery_exports/i.test(source))).toBe(false);
   });
 
   it('opens the database on demand if wipeDatabase is called before any read', async () => {
