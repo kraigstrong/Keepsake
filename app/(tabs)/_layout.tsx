@@ -106,22 +106,26 @@ function TabsLayoutContent() {
       </Tabs>
       <Sheet visible={addSheetVisible} onDismiss={() => closeAddSheet()} testID="add-recipe-sheet">
         <View style={{ gap: spacing.md }}>
-          <Button
-            title="Create manually"
-            onPress={() => {
-              closeAddSheet();
-              router.push('/recipe/new');
-            }}
-            testID="add-recipe-manual"
-          />
+          {/* Import is this app's core value prop — typing a recipe in by
+              hand is the least-used path, so it shouldn't be the one
+              styled as the inviting rust-colored primary action
+              (developer UX feedback). */}
           <Button
             title="Import from a URL"
-            variant="secondary"
             onPress={() => {
               closeAddSheet();
               router.push('/recipe/import');
             }}
             testID="add-recipe-import-url"
+          />
+          <Button
+            title="Create manually"
+            variant="secondary"
+            onPress={() => {
+              closeAddSheet();
+              router.push('/recipe/new');
+            }}
+            testID="add-recipe-manual"
           />
           <Button
             title="Import multiple URLs"
