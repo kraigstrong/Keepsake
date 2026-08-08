@@ -13,11 +13,20 @@ describe('RecipeExtractionSchema', () => {
     instructionSections: [{ heading: null, steps: ['Heat the oil.'] }],
     suggestedCategories: ['Main'],
     suggestedTags: ['italian', 'comfort-food'],
+    notes: null,
     uncertainFields: [],
   };
 
   it('accepts a well-formed extraction', () => {
     expect(RecipeExtractionSchema.safeParse(validExtraction).success).toBe(true);
+  });
+
+  it('accepts an explicit source note', () => {
+    const result = RecipeExtractionSchema.safeParse({
+      ...validExtraction,
+      notes: 'Freezes well for up to 3 months.',
+    });
+    expect(result.success).toBe(true);
   });
 
   it('rejects an extraction carrying a description field (REC-09)', () => {
@@ -52,6 +61,7 @@ describe('extractRecipe — model selection', () => {
     instructionSections: [{ heading: null, steps: ['Roast it.'] }],
     suggestedCategories: ['Chicken'],
     suggestedTags: ['weeknight'],
+    notes: null,
     uncertainFields: [],
   };
 

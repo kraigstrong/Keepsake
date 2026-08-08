@@ -509,7 +509,11 @@ Deno.serve(async (req: Request) => {
           totalTimeMinutes: extraction.totalTimeMinutes,
           yieldText: extraction.yield,
           servingsCount: parseServings(extraction.yield),
-          permanentNotes: null,
+          // Only ever the source's own explicit labeled tip/note (see the
+          // extraction prompt's strict inclusion criteria) — never a
+          // summary or paraphrase, so this can't become REC-09's excluded
+          // description field back under a different name.
+          permanentNotes: extraction.notes,
           sourceUrl: finalUrl ?? null,
           sourceAttribution,
           tags: extraction.suggestedTags,
