@@ -146,13 +146,15 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| GRO-01 | Grouped review before export | 13 | Not Started |
-| GRO-02 | Include/exclude items | 13 | Not Started |
+| GRO-01 | Grouped review before export | 13 | Done (tested)¶ |
+| GRO-02 | Include/exclude items | 13 | Done (tested)¶ |
 | GRO-03 | Apple Reminders export (only export target for MVP) | 14 | Not Started |
-| GRO-04 | Standard categories: Produce / Meat / Frozen / Dairy / Pantry / Other | 13 | Not Started |
-| GRO-05 | Conservative ingredient merging, no merge UI | 13 | Not Started |
-| GRO-06 | Staples omitted by default | 13 | Not Started |
-| GRO-07 | No editing within the export flow | 13 / 14 | Not Started |
+| GRO-04 | Standard categories: Produce / Meat / Frozen / Dairy / Pantry / Other | 13 | Done (tested)¶ |
+| GRO-05 | Conservative ingredient merging, no merge UI | 13 | Done (tested)¶ |
+| GRO-06 | Staples omitted by default | 13 | Done (tested)¶ |
+| GRO-07 | No editing within the export flow | 13 / 14 | In Progress |
+
+¶ Phase 13's own pgTAP coverage (`supabase/tests/database/grocery_item_selection_rpc.test.sql`) is CI-only, not run locally (no Docker in this environment); Jest coverage for the generation/merge/category/staple logic (`server/groceries/*.test.ts`, `src/groceries/api.test.ts`, `src/groceries/GroceryReviewScreen.test.tsx`) ran locally. No live Simulator/device walkthrough performed yet — see `docs/current.md`.
 
 ## Lifecycle: Archive & Delete (LIFE)
 
