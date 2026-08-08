@@ -4,6 +4,7 @@ import * as Calendar from 'expo-calendar/legacy';
 
 import {
   addGroceryReminder,
+  getActiveReminderIds,
   getOrCreateGroceryList,
   getOwnedGroceryListId,
   openReminders,
@@ -15,6 +16,7 @@ jest.mock('expo-calendar/legacy', () => ({
   getCalendarsAsync: jest.fn(),
   createCalendarAsync: jest.fn(),
   createReminderAsync: jest.fn(),
+  getRemindersAsync: jest.fn(),
   EntityTypes: { REMINDER: 'reminder' },
 }));
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
@@ -134,5 +136,30 @@ describe('addGroceryReminder', () => {
 
     expect(id).toBe('reminder-id');
     expect(mocked.createReminderAsync).toHaveBeenCalledWith('list-1', { title: 'Milk' });
+  });
+});
+
+describe('getActiveReminderIds', () => {
+  it('includes incomplete reminders and excludes completed ones', async () => {
+    mocked.getRemindersAsync.mockResolvedValue([
+      { id: 'r1', completed: false },
+      { id: 'r2', completed: true },
+      { id: 'r3' },
+    ] as never);
+
+    const ids = await getActiveReminderIds('list-1');
+
+    expect(ids).toEqual(new Set(['r1', 'r3']));
+    expect(mocked.getRemindersAsync).toHaveBeenCalledWith(['list-1'], null, null, null);
+  });
+
+  it('naturally excludes a reminder deleted since it was last recorded', async () => {
+    // A deleted reminder just never shows up in getRemindersAsync — no
+    // separate "not found" case to handle.
+    mocked.getRemindersAsync.mockResolvedValue([{ id: 'still-here', completed: false }] as never);
+
+    const ids = await getActiveReminderIds('list-1');
+
+    expect(ids.has('deleted-reminder-id')).toBe(false);
   });
 });

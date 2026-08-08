@@ -1,5 +1,5 @@
-import { addGroceryReminder, getOwnedGroceryListId } from './reminders';
-import { getExportedItemHashes, recordExport } from './exportRecords';
+import { addGroceryReminder, getActiveReminderIds, getOwnedGroceryListId } from './reminders';
+import { getExportedItems, recordExport } from './exportRecords';
 import type { LocalDb } from '../sync/local';
 
 /**
@@ -7,9 +7,13 @@ import type { LocalDb } from '../sync/local';
  * list (ADR-0023). Sequential, not parallel — a native EventKit write
  * per item, and per-item outcomes need to stay individually attributable
  * for the result summary. Duplicate protection means retry is simply
- * calling this again: already-recorded items are skipped, so a second
- * call after a partial failure only attempts what didn't succeed (or
- * wasn't attempted) last time.
+ * calling this again: an item already recorded as exported is skipped
+ * *only while its reminder is still open in Reminders* (ADR-0023
+ * amended, 2026-08-08) — a plan is a singleton per (household,
+ * week_key), reused as it gets replanned, so a recorded row can easily
+ * outlive the shopping trip it was created for. Once the user checks
+ * that reminder off (or deletes it), the same item_hash showing up in a
+ * later export is a *new* grocery list, not a retry, and gets recreated.
  */
 
 export interface GroceryExportItem {
@@ -80,14 +84,16 @@ export async function exportGroceriesToReminders(
   params: ExportGroceriesParams,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<GroceryExportOutcome> {
-  const alreadyExported = await getExportedItemHashes(db, params.weeklyPlanId);
+  const exportedItems = await getExportedItems(db, params.weeklyPlanId);
   const listId = await getOwnedGroceryListId();
+  const activeReminderIds = await getActiveReminderIds(listId);
 
   const outcome: GroceryExportOutcome = { succeeded: [], skipped: [], partial: [], failed: [] };
 
   let completed = 0;
   for (const item of params.items) {
-    if (alreadyExported.has(item.itemHash)) {
+    const recordedReminderId = exportedItems.get(item.itemHash);
+    if (recordedReminderId !== undefined && activeReminderIds.has(recordedReminderId)) {
       outcome.skipped.push(item.itemHash);
       completed += 1;
       onProgress?.(completed, params.items.length);

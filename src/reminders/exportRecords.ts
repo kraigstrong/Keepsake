@@ -3,23 +3,31 @@ import type { LocalDb } from '../sync/local';
 /**
  * Local (not Supabase) bookkeeping for which grocery items have already
  * been exported to Reminders, per (weekly_plan_id, item_hash) — see
- * ADR-0023. This is the sole idempotency mechanism for exportGroceries.ts:
- * an item already recorded here is skipped, never re-created.
+ * ADR-0023, amended per developer device-testing feedback 2026-08-08.
+ * A row here is no longer an unconditional "skip forever": a plan is a
+ * singleton per (household, week_key) and gets edited/replanned in
+ * place, so a stale row can point at a reminder the user has since
+ * completed or deleted while shopping. exportGroceries.ts treats this
+ * map as a *candidate* to skip, valid only for as long as the recorded
+ * `reminder_id` is still open in Reminders itself (checked via
+ * `getActiveReminderIds`) — this module has no way to know that on its
+ * own, since it never touches EventKit.
  */
 
-interface ExportedHashRow {
+interface ExportedItemRow {
   item_hash: string;
+  reminder_id: string;
 }
 
-export async function getExportedItemHashes(
+export async function getExportedItems(
   db: LocalDb,
   weeklyPlanId: string,
-): Promise<Set<string>> {
-  const rows = await db.getAllAsync<ExportedHashRow>(
-    'select item_hash from grocery_exports where weekly_plan_id = ?',
+): Promise<Map<string, string>> {
+  const rows = await db.getAllAsync<ExportedItemRow>(
+    'select item_hash, reminder_id from grocery_exports where weekly_plan_id = ?',
     weeklyPlanId,
   );
-  return new Set(rows.map((row) => row.item_hash));
+  return new Map(rows.map((row) => [row.item_hash, row.reminder_id]));
 }
 
 export interface RecordExportParams {

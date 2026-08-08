@@ -109,3 +109,21 @@ export async function getOwnedGroceryListId(): Promise<string> {
 export async function addGroceryReminder(listId: string, itemTitle: string): Promise<string> {
   return Calendar.createReminderAsync(listId, { title: itemTitle });
 }
+
+/**
+ * IDs of reminders in `listId` that still exist and aren't checked off
+ * (ADR-0023 amended, developer device-testing feedback 2026-08-08). A
+ * `status: null` fetch with no date range returns every reminder in the
+ * calendar regardless of completion — each carries its own `completed`
+ * flag — so one call here answers both "was it deleted?" (absent from
+ * the result) and "was it completed?" in a single native round trip
+ * instead of one `getReminderAsync` per previously-exported item.
+ */
+export async function getActiveReminderIds(listId: string): Promise<ReadonlySet<string>> {
+  const reminders = await Calendar.getRemindersAsync([listId], null, null, null);
+  return new Set(
+    reminders
+      .filter((reminder) => !reminder.completed && reminder.id)
+      .map((reminder) => reminder.id!),
+  );
+}
