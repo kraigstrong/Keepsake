@@ -13,11 +13,13 @@ import {
   GROCERY_REVIEW_PLAN_NOT_CONFIRMED,
   type GroceryReviewItem,
 } from './api';
+import { GroceryExportPanel } from './GroceryExportPanel';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
+import { useHousehold } from '../household/HouseholdProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface GroceryReviewScreenProps {
@@ -34,6 +36,7 @@ export interface GroceryReviewScreenProps {
 export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
+  const { household } = useHousehold();
 
   const [items, setItems] = useState<GroceryReviewItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -223,6 +226,15 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
           );
         })}
       </ScrollView>
+      {household && (
+        <GroceryExportPanel
+          planId={planId}
+          householdId={household.id}
+          items={items
+            .filter((item) => item.included)
+            .map((item) => ({ itemHash: item.itemHash, displayText: item.amounts.join(', ') }))}
+        />
+      )}
     </View>
   );
 }
