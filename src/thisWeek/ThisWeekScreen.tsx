@@ -321,40 +321,42 @@ export function ThisWeekScreen() {
     <View style={styles.screen} testID="this-week-screen">
       <View style={styles.header}>
         <Text style={styles.title}>This Week</Text>
-        <View style={styles.headerRow}>
-          <View style={styles.headerSpacer} />
-          {isConfirmed ? (
-            <Pressable
-              onPress={handleEditPlan}
-              disabled={isMutating}
-              accessibilityRole="button"
-              testID="this-week-edit-plan"
-            >
-              <Text style={styles.editPlanLink}>Edit Plan</Text>
-            </Pressable>
-          ) : (
-            plan.entries.length > 0 && (
-              <Pressable
-                onPress={handleConfirm}
-                disabled={isMutating}
-                accessibilityRole="button"
-                testID="this-week-confirm-plan"
-              >
-                <Text style={styles.confirmPlanLink}>Confirm Plan</Text>
-              </Pressable>
-            )
-          )}
-        </View>
       </View>
 
-      {/* Same "Add recipes" button used by the empty state below, not a
-          plain text link — once a plan has entries this is the only way
-          to add more, so it keeps the same prominent treatment rather
-          than shrinking to a less noticeable affordance. */}
-      {!isConfirmed && plan.entries.length > 0 && (
-        <View style={styles.addRecipesRow}>
-          <Button title="Add recipes" onPress={goToAddRecipes} testID="this-week-add-recipes" />
+      {/* One row, both real Buttons — previously "Add recipes" was a
+          pill Button in its own row while Confirm Plan was a plain text
+          link up in the header, so they read as unrelated controls
+          sitting at different heights (developer UX feedback). Add
+          recipes keeps the same prominent-button treatment the empty
+          state below uses, just paired with Confirm Plan now instead of
+          standing alone. */}
+      {isConfirmed ? (
+        <View style={styles.actionsRow}>
+          <Button
+            title="Edit Plan"
+            onPress={handleEditPlan}
+            disabled={isMutating}
+            variant="secondary"
+            testID="this-week-edit-plan"
+          />
         </View>
+      ) : (
+        plan.entries.length > 0 && (
+          <View style={styles.actionsRow}>
+            <Button
+              title="Add recipes"
+              onPress={goToAddRecipes}
+              variant="secondary"
+              testID="this-week-add-recipes"
+            />
+            <Button
+              title="Confirm Plan"
+              onPress={handleConfirm}
+              disabled={isMutating}
+              testID="this-week-confirm-plan"
+            />
+          </View>
+        )
       )}
 
       <View style={styles.content}>
@@ -414,27 +416,11 @@ const styles = StyleSheet.create({
     ...typography.title,
     color: colors.textPrimary,
   },
-  headerRow: {
+  actionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerSpacer: {
-    flex: 1,
-  },
-  addRecipesRow: {
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    alignItems: 'flex-start',
-  },
-  confirmPlanLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.accent,
-  },
-  editPlanLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textTertiary,
   },
   content: {
     flex: 1,

@@ -111,7 +111,7 @@ it('shows the empty state with an Add recipes action', async () => {
   expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
 });
 
-it('renders planning rows with title and servings, and a Confirm Plan link', async () => {
+it('renders planning rows with title and servings, and a Confirm Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', servings: 4 })] }),
   );
@@ -237,7 +237,7 @@ it('disables move-up on the first entry and move-down on the last entry', async 
   );
 });
 
-it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan link', async () => {
+it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ status: 'confirmed', entries: [entry({ id: 'e1', recipeId: 'r1' })] }),
   );
