@@ -117,6 +117,31 @@ it('groups items under their category header', async () => {
   expect(screen.getByText('1 chicken breast')).toBeTruthy();
 });
 
+it('groups staples into their own section instead of their aisle category', async () => {
+  mockedApi.fetchGroceryReview.mockResolvedValue({
+    planId: 'plan-1',
+    items: [
+      item({ itemHash: 'onion', category: 'produce', amounts: ['3 onions'], isStaple: false }),
+      item({
+        itemHash: 'salt',
+        category: 'pantry',
+        amounts: ['1 tsp salt'],
+        isStaple: true,
+        included: false,
+      }),
+    ],
+  });
+
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Staples (probably on hand)')).toBeTruthy());
+  // "Pantry" never renders — the only pantry item is the staple, which
+  // moved to its own section instead.
+  expect(screen.queryByText('Pantry')).toBeNull();
+  expect(screen.getByText('Produce')).toBeTruthy();
+  expect(screen.getByText('1 tsp salt')).toBeTruthy();
+});
+
 it('passes only included items to GroceryExportPanel, with the household id', async () => {
   mockedApi.fetchGroceryReview.mockResolvedValue({
     planId: 'plan-1',

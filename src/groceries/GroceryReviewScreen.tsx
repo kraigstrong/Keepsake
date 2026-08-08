@@ -26,6 +26,44 @@ export interface GroceryReviewScreenProps {
   planId: string;
 }
 
+function GroceryRow({
+  item,
+  pending,
+  onToggle,
+}: {
+  item: GroceryReviewItem;
+  pending: boolean;
+  onToggle: (item: GroceryReviewItem) => void;
+}) {
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={() => onToggle(item)}
+      disabled={pending}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: item.included, disabled: pending }}
+      testID={`grocery-review-item-${item.itemHash}`}
+    >
+      <View style={[styles.checkbox, item.included && styles.checkboxSelected]}>
+        {item.included && <Text style={styles.checkmark}>{'✓'}</Text>}
+      </View>
+      <View style={styles.rowText}>
+        <Text
+          style={[styles.rowTitle, !item.included && styles.rowTitleExcluded]}
+          numberOfLines={2}
+        >
+          {item.amounts.join(', ')}
+        </Text>
+        {__DEV__ && (
+          <Text style={styles.debugText}>
+            {item.category} · {item.isStaple ? 'staple' : 'not staple'} · {item.itemHash}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 /**
  * OFF-04: grocery export requires connectivity, same as This Week — no
  * local mirror here either. GRO-01/GRO-02 (grouped review,
@@ -185,46 +223,46 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
       <Text style={styles.title}>Groceries</Text>
       <ScrollView style={styles.list} testID="grocery-review-list">
         {GROCERY_CATEGORY_ORDER.map((category) => {
-          const categoryItems = items.filter((item) => item.category === category);
+          // Staples get their own section below (GRO-01/GRO-02, developer
+          // device-testing feedback 2026-08-08) rather than sitting
+          // unchecked-but-mixed-in throughout their real aisle category —
+          // "here's what you probably already have" reads as one group,
+          // not scattered rows to notice individually.
+          const categoryItems = items.filter(
+            (item) => item.category === category && !item.isStaple,
+          );
           if (categoryItems.length === 0) return null;
           return (
             <View key={category}>
               <Text style={styles.sectionHeader}>{GROCERY_CATEGORY_LABELS[category]}</Text>
               {categoryItems.map((item) => (
-                <Pressable
+                <GroceryRow
                   key={item.itemHash}
-                  style={styles.row}
-                  onPress={() => handleToggle(item)}
-                  disabled={pendingHashes.has(item.itemHash)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{
-                    checked: item.included,
-                    disabled: pendingHashes.has(item.itemHash),
-                  }}
-                  testID={`grocery-review-item-${item.itemHash}`}
-                >
-                  <View style={[styles.checkbox, item.included && styles.checkboxSelected]}>
-                    {item.included && <Text style={styles.checkmark}>{'✓'}</Text>}
-                  </View>
-                  <View style={styles.rowText}>
-                    <Text
-                      style={[styles.rowTitle, !item.included && styles.rowTitleExcluded]}
-                      numberOfLines={2}
-                    >
-                      {item.amounts.join(', ')}
-                    </Text>
-                    {__DEV__ && (
-                      <Text style={styles.debugText}>
-                        {item.category} · {item.isStaple ? 'staple' : 'not staple'} ·{' '}
-                        {item.itemHash}
-                      </Text>
-                    )}
-                  </View>
-                </Pressable>
+                  item={item}
+                  pending={pendingHashes.has(item.itemHash)}
+                  onToggle={handleToggle}
+                />
               ))}
             </View>
           );
         })}
+        {(() => {
+          const stapleItems = items.filter((item) => item.isStaple);
+          if (stapleItems.length === 0) return null;
+          return (
+            <View>
+              <Text style={styles.sectionHeader}>Staples (probably on hand)</Text>
+              {stapleItems.map((item) => (
+                <GroceryRow
+                  key={item.itemHash}
+                  item={item}
+                  pending={pendingHashes.has(item.itemHash)}
+                  onToggle={handleToggle}
+                />
+              ))}
+            </View>
+          );
+        })()}
       </ScrollView>
       {household && (
         <GroceryExportPanel

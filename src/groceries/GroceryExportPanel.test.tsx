@@ -68,7 +68,7 @@ it('runs the export and shows a summary on success', async () => {
   await fireEvent.press(screen.getByTestId('grocery-export-start'));
 
   await waitFor(() => expect(screen.getByTestId('grocery-export-summary')).toBeTruthy());
-  expect(screen.getByText('2 added')).toBeTruthy();
+  expect(screen.getByText('2 sent')).toBeTruthy();
   expect(mockedExport).toHaveBeenCalledWith(
     {},
     { weeklyPlanId: 'plan-1', householdId: 'household-1', items: ITEMS },
@@ -93,7 +93,7 @@ it('shows a mixed summary for skipped, partial, and failed items', async () => {
 
   await waitFor(() =>
     expect(
-      screen.getByText('1 added, 1 already in Reminders, 1 added but not confirmed, 1 failed'),
+      screen.getByText('1 sent, 1 already in Reminders, 1 sent but not confirmed, 1 failed'),
     ).toBeTruthy(),
   );
   expect(screen.getByTestId('grocery-export-retry-failed')).toBeTruthy();
@@ -109,7 +109,7 @@ it('offers a retry that re-exports only the items that actually failed', async (
   mockedExport.mockResolvedValueOnce(outcome({ succeeded: ['onion'] }));
   await fireEvent.press(screen.getByTestId('grocery-export-retry-failed'));
 
-  await waitFor(() => expect(screen.getByText('1 added')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('1 sent')).toBeTruthy());
   expect(mockedExport).toHaveBeenCalledTimes(2);
   // Only the failed item — not garlic, which never failed — is retried.
   expect(mockedExport).toHaveBeenLastCalledWith(

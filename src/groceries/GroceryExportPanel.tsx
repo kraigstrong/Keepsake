@@ -80,7 +80,7 @@ export function GroceryExportPanel({ planId, householdId, items }: GroceryExport
         setPhase({ status: 'done', outcome });
       } catch {
         setPhase({ status: 'idle' });
-        showToast("Couldn't export to Reminders");
+        showToast("Couldn't send to Reminders");
       }
     } finally {
       exportInFlightRef.current = false;
@@ -91,7 +91,7 @@ export function GroceryExportPanel({ planId, householdId, items }: GroceryExport
     return (
       <View style={styles.container} testID="grocery-export-panel">
         <LoadingState
-          label={`Exporting ${phase.completed} of ${phase.total}…`}
+          label={`Sending ${phase.completed} of ${phase.total}…`}
           testID="grocery-export-progress"
         />
       </View>
@@ -102,7 +102,7 @@ export function GroceryExportPanel({ planId, householdId, items }: GroceryExport
     return (
       <View style={styles.container} testID="grocery-export-panel">
         <Text style={styles.message}>
-          Keepsake needs Reminders access to export your grocery list.
+          Keepsake needs Reminders access to send your grocery list there.
         </Text>
         {phase.canAskAgain ? (
           <Button
@@ -125,14 +125,14 @@ export function GroceryExportPanel({ planId, householdId, items }: GroceryExport
     const { outcome } = phase;
     const addedText =
       outcome.succeeded.length > 0
-        ? `${outcome.succeeded.length} added`
+        ? `${outcome.succeeded.length} sent`
         : outcome.skipped.length > 0
           ? 'Already up to date'
-          : 'Nothing to add';
+          : 'Nothing to send';
     const skippedText =
       outcome.skipped.length > 0 ? `, ${outcome.skipped.length} already in Reminders` : '';
     const partialText =
-      outcome.partial.length > 0 ? `, ${outcome.partial.length} added but not confirmed` : '';
+      outcome.partial.length > 0 ? `, ${outcome.partial.length} sent but not confirmed` : '';
     const failedText = outcome.failed.length > 0 ? `, ${outcome.failed.length} failed` : '';
 
     const failedItems = items.filter((item) =>
@@ -173,7 +173,7 @@ export function GroceryExportPanel({ planId, householdId, items }: GroceryExport
   return (
     <View style={styles.container} testID="grocery-export-panel">
       <Button
-        title="Export to Reminders"
+        title="Send to Reminders"
         onPress={() => handleExport()}
         disabled={items.length === 0}
         testID="grocery-export-start"

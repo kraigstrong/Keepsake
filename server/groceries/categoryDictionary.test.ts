@@ -25,8 +25,14 @@ describe('categorize', () => {
     ['olive oil', 'pantry'],
     ['chicken broth', 'pantry'],
     ['kosher salt', 'pantry'],
+    ['beef bouillon', 'pantry'],
+    ['chicken bouillon cubes', 'pantry'],
   ])('categorizes "%s" as %s', (text, expected) => {
     expect(categorizeText(text)).toBe(expected);
+  });
+
+  it('"beef bouillon" is Pantry, not Meat, despite containing "beef"', () => {
+    expect(categorizeText('beef bouillon')).toBe('pantry');
   });
 
   it('falls back to Other for an unrecognized ingredient', () => {

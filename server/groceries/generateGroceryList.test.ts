@@ -176,6 +176,42 @@ describe('generateGroceryList', () => {
     });
   });
 
+  describe('display text', () => {
+    it('drops a preparation clause after the comma from the displayed amount', () => {
+      const items = generateGroceryList([
+        entry('r1', 4, 4, [
+          line({
+            lineText: '4 1/2 cups flour, divided',
+            quantityMin: 4.5,
+            unit: 'cup',
+            ingredientText: 'flour, divided',
+          }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'flour')!.amounts).toEqual(['4 1/2 cups flour']);
+    });
+
+    it('still merges across occurrences whose clauses differ only after the comma', () => {
+      const items = generateGroceryList([
+        entry('r1', 4, 4, [
+          line({
+            lineText: '1 cup flour, divided',
+            quantityMin: 1,
+            unit: 'cup',
+            ingredientText: 'flour, divided',
+          }),
+        ]),
+        entry('r2', 4, 4, [
+          line({ lineText: '1 cup flour', quantityMin: 1, unit: 'cup', ingredientText: 'flour' }),
+        ]),
+      ]);
+
+      const flour = findItem(items, 'flour');
+      expect(flour!.amounts).toEqual(['2 cups flour']);
+    });
+  });
+
   describe('categorization and staples', () => {
     it('tags a staple ingredient as excluded-by-default via isStaple', () => {
       const items = generateGroceryList([

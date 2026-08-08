@@ -44,6 +44,21 @@ interface ScaledOccurrence extends ParsedIngredientLine {
   recipeId: string;
 }
 
+/**
+ * Drops everything from the first comma onward, the same structural
+ * step canonicalKey() already applies for identity — but here it's
+ * applied to what actually renders on the grocery-review row, not just
+ * the merge key. Preparation clauses ("flour, divided", "olive oil,
+ * extra virgin") are real information on a recipe's own ingredient
+ * list (RecipeDetailScreen keeps them, via the same shared
+ * formatIngredientLine()) but read as noise on a list meant for a
+ * store aisle. Case-preserving, unlike canonicalKey — this is display
+ * text, not a lookup key.
+ */
+function groceryDisplayText(ingredientText: string): string {
+  return ingredientText.split(',', 1)[0]!.trim();
+}
+
 function multiplierFor(entry: PlanningEntryForGroceries): number {
   if (!entry.recipeServingsCount) {
     return 1;
@@ -94,7 +109,12 @@ export function generateGroceryList(entries: readonly PlanningEntryForGroceries[
         continue;
       }
 
-      const occurrence: ScaledOccurrence = { ...scaled, recipeId: entry.recipeId };
+      const occurrence: ScaledOccurrence = {
+        ...scaled,
+        ingredientText:
+          scaled.ingredientText === null ? null : groceryDisplayText(scaled.ingredientText),
+        recipeId: entry.recipeId,
+      };
       const existing = groups.get(key);
       if (existing) {
         existing.push(occurrence);
