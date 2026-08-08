@@ -20,6 +20,7 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
 import type { SearchResult } from '../search/search';
@@ -32,11 +33,20 @@ import {
 import { syncHousehold } from '../sync/syncEngine';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
+// Short enough that the whole row doesn't wrap or crowd Filters off the
+// end (developer UX feedback) — the full names still reach screen
+// readers via SORT_ACCESSIBILITY_LABELS below.
 const SORT_LABELS: Record<SortMode, string> = {
   smart: 'Smart',
-  alphabetical: 'Alphabetical',
-  recentlyAdded: 'Recently Added',
-  frequentlySelected: 'Frequently Selected',
+  alphabetical: 'A-Z',
+  recentlyAdded: 'Recent',
+  frequentlySelected: 'Frequent',
+};
+const SORT_ACCESSIBILITY_LABELS: Record<SortMode, string> = {
+  smart: 'Smart sort',
+  alphabetical: 'Alphabetical sort',
+  recentlyAdded: 'Recently added sort',
+  frequentlySelected: 'Frequently selected sort',
 };
 
 const CATEGORY_GROUP_LABELS: Record<CategoryGroup, string> = {
@@ -169,7 +179,7 @@ export function LibraryScreen() {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Library</Text>
+      <ScreenHeader title="Library" />
 
       {recipes !== null && recipes.length > 0 && (
         <>
@@ -193,6 +203,7 @@ export function LibraryScreen() {
                     key={mode}
                     testID={`library-sort-${mode}`}
                     label={SORT_LABELS[mode]}
+                    accessibilityLabel={SORT_ACCESSIBILITY_LABELS[mode]}
                     selected={sortMode === mode}
                     onPress={() => chooseSort(mode)}
                   />
@@ -321,12 +332,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  title: {
-    ...typography.title,
-    color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
   searchInput: {
     ...typography.input,
     marginHorizontal: spacing.lg,
@@ -346,14 +351,22 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   sortRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
   },
+  // A hairline plus a little breathing room, matching how every row
+  // divider in this app reads (This Week's list, Row's own divider) —
+  // otherwise the filter chips and the recipe list run together with
+  // nothing to mark where one ends and the other begins.
   content: {
     flex: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.xs,
   },
   centered: {
     alignItems: 'center',

@@ -27,6 +27,13 @@ describe('Chip', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('uses a longer accessibilityLabel when the visible label has been shortened', async () => {
+    await render(<Chip label="A-Z" accessibilityLabel="Alphabetical sort" onPress={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'Alphabetical sort' })).toBeOnTheScreen();
+    expect(screen.getByText('A-Z')).toBeOnTheScreen();
+  });
+
   it('does not disable Dynamic Type font scaling on its label', async () => {
     await render(<Chip label="Smart" onPress={() => {}} />);
     expect(screen.getByText('Smart').props.allowFontScaling).not.toBe(false);

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
+import {
+  PanGestureHandler,
+  State,
+  type PanGestureHandlerGestureEvent,
+  type PanGestureHandlerStateChangeEvent,
+} from 'react-native-gesture-handler';
 
 import { useReducedMotion } from '../accessibility/useReducedMotion';
 import { colors, radii, spacing } from '../theme/tokens';
@@ -8,6 +14,10 @@ const ANIMATION_DURATION_MS = 250;
 // Comfortably taller than any realistic sheet content, so it starts
 // fully off-screen at rest regardless of what's inside.
 const SHEET_OFFSCREEN_OFFSET = 400;
+// Drag-to-dismiss thresholds (grabber handle only, see below) — either
+// dragged far enough or flicked fast enough counts as "let go of this."
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 800;
 
 export interface SheetProps {
   visible: boolean;
@@ -59,6 +69,12 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
   // never the setter), and useRef().current specifically trips
   // react-hooks/refs even though this exact pattern is correct here.
   const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
+  // Tracks the grabber drag independently of `progress` (the open/close
+  // animation) — added together below for the sheet's actual transform,
+  // same reasoning as backdrop/sheet being independent (see above): a
+  // drag in progress shouldn't fight with, or get overwritten by, the
+  // open/close timing.
+  const [dragY] = useState(() => new Animated.Value(0));
 
   const openAnimated = useCallback(() => {
     if (reducedMotion) {
@@ -75,13 +91,38 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
   useEffect(() => {
     // Opening is triggered by onShow below instead — see the comment
     // above for why starting it here doesn't work.
-    if (!visible) progress.setValue(0);
-  }, [visible, progress]);
+    if (!visible) {
+      progress.setValue(0);
+      dragY.setValue(0);
+    }
+  }, [visible, progress, dragY]);
+
+  const onDragGestureEvent = Animated.event<PanGestureHandlerGestureEvent>(
+    [{ nativeEvent: { translationY: dragY } }],
+    { useNativeDriver: true },
+  );
+
+  function onDragHandlerStateChange(event: PanGestureHandlerStateChangeEvent) {
+    if (event.nativeEvent.oldState !== State.ACTIVE) return;
+    const { translationY, velocityY } = event.nativeEvent;
+    if (translationY > DISMISS_DISTANCE || velocityY > DISMISS_VELOCITY) {
+      onDismiss();
+      return;
+    }
+    Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+  }
 
   const backdropOpacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] });
   const sheetTranslateY = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [SHEET_OFFSCREEN_OFFSET, 0],
+  });
+  // Dragging the grabber upward shouldn't lift the sheet past its
+  // resting position — only positive (downward) drag moves it.
+  const clampedDragY = dragY.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+    extrapolateLeft: 'clamp',
   });
 
   return (
@@ -104,7 +145,24 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
           accessibilityLabel="Dismiss"
           accessibilityRole="button"
         />
-        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            { transform: [{ translateY: Animated.add(sheetTranslateY, clampedDragY) }] },
+          ]}
+        >
+          <PanGestureHandler
+            onGestureEvent={onDragGestureEvent}
+            onHandlerStateChange={onDragHandlerStateChange}
+          >
+            <Animated.View
+              style={styles.grabberHandle}
+              accessibilityLabel="Drag down to close"
+              testID={testID ? `${testID}-grabber` : undefined}
+            >
+              <View style={styles.grabber} />
+            </Animated.View>
+          </PanGestureHandler>
           {children}
         </Animated.View>
       </View>
@@ -124,6 +182,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  // A generous vertical touch/drag target around a small visual pill —
+  // the pill itself stays subtle (this direction has no shadows/
+  // elevation to lean on instead, per ADR-0009), the tappable area is
+  // what actually needs to be easy to grab.
+  grabberHandle: {
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  grabber: {
+    width: 36,
+    height: 4,
+    borderRadius: radii.full,
+    backgroundColor: colors.border,
   },
 });

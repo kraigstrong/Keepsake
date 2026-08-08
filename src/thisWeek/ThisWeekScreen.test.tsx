@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
+// Jest's module-factory hoisting only allows referencing out-of-scope
+// identifiers prefixed "mock" (case-insensitive) — see the Link stand-in
+// inside jest.mock('expo-router', ...) below.
+import { Text as MockText } from 'react-native';
 
 import * as api from './api';
 import type { ThisWeekEntry, ThisWeekPlan } from './api';
@@ -28,6 +33,13 @@ jest.mock('expo-router', () => ({
       effect();
     }
   }),
+  // ScreenHeader (rendered by every branch of ThisWeekScreen) uses
+  // expo-router's real Link for the Settings icon — this mock replaces
+  // the whole module, so Link needs a stand-in too or it renders as
+  // undefined.
+  Link: ({ children, ...props }: { children: ReactNode }) => (
+    <MockText {...props}>{children}</MockText>
+  ),
 }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
@@ -111,7 +123,7 @@ it('shows the empty state with an Add recipes action', async () => {
   expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
 });
 
-it('renders planning rows with title and servings, and a Confirm Plan link', async () => {
+it('renders planning rows with title and servings, and a Confirm Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', servings: 4 })] }),
   );
@@ -124,18 +136,44 @@ it('renders planning rows with title and servings, and a Confirm Plan link', asy
   expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy();
 });
 
-it('confirms the plan and reloads', async () => {
-  mockedApi.fetchCurrentWeeklyPlan
-    .mockResolvedValueOnce(plan({ entries: [entry({ id: 'e1' })] }))
-    .mockResolvedValueOnce(plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }));
+it('shows an Add recipes button (same treatment as the empty state) once the plan has entries', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken' })] }),
+  );
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-add-recipes')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-add-recipes'));
+
+  expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
+});
+
+it('confirms the plan optimistically, with no reload round-trip', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan({ entries: [entry({ id: 'e1' })] }));
 
   renderThisWeekScreen();
 
   await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('this-week-confirm-plan'));
 
+  expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy();
   await waitFor(() => expect(mockedApi.confirmThisWeek).toHaveBeenCalledWith('plan-1'));
-  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  // Only the initial mount fetch — confirming no longer waits on a second one.
+  expect(mockedApi.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
+});
+
+it('reverts the optimistic confirm if the server call fails', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan({ entries: [entry({ id: 'e1' })] }));
+  mockedApi.confirmThisWeek.mockRejectedValue(new Error('boom'));
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-confirm-plan'));
+
+  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  expect(screen.queryByTestId('this-week-edit-plan')).toBeNull();
 });
 
 it('removes an entry, shows an Undo banner, and restores it on Undo', async () => {
@@ -224,7 +262,7 @@ it('disables move-up on the first entry and move-down on the last entry', async 
   );
 });
 
-it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan link', async () => {
+it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ status: 'confirmed', entries: [entry({ id: 'e1', recipeId: 'r1' })] }),
   );
@@ -240,16 +278,32 @@ it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit
   expect(push).toHaveBeenCalledWith('/recipe/r1');
 });
 
-it('reopens a confirmed plan via Edit Plan', async () => {
-  mockedApi.fetchCurrentWeeklyPlan
-    .mockResolvedValueOnce(plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }))
-    .mockResolvedValueOnce(plan({ status: 'planning', entries: [entry({ id: 'e1' })] }));
+it('reopens a confirmed plan optimistically via Edit Plan, with no reload round-trip', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }),
+  );
 
   renderThisWeekScreen();
 
   await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('this-week-edit-plan'));
 
+  expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy();
   await waitFor(() => expect(mockedApi.reopenThisWeek).toHaveBeenCalledWith('plan-1'));
-  await waitFor(() => expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy());
+  expect(mockedApi.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
+});
+
+it('reverts the optimistic reopen if the server call fails', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({ status: 'confirmed', entries: [entry({ id: 'e1' })] }),
+  );
+  mockedApi.reopenThisWeek.mockRejectedValue(new Error('boom'));
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-edit-plan'));
+
+  await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
+  expect(screen.queryByTestId('this-week-confirm-plan')).toBeNull();
 });

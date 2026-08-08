@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
 import { Button } from '../components/Button';
@@ -11,10 +12,9 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipesToThisWeek } from './api';
 
 // Same "typical household" default RecipeDetailScreen falls back to
-// when a recipe has no parseable serving count — this flow has no
-// per-recipe context to scale from at all (WEEK-02's "choose servings"
-// step, not a scaled detail view), so every selection starts here and
-// is freely adjustable via the stepper below.
+// when a recipe has no parseable serving count (ADR-0018) — used here
+// only when a selected recipe's own servingsCount is null; otherwise
+// each recipe seeds its stepper from its actual parsed/saved value.
 const DEFAULT_SERVINGS = 4;
 const MIN_SERVINGS = 1;
 
@@ -27,6 +27,7 @@ type Step = 'select' | 'servings';
 export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const router = useRouter();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('select');
   const [query, setQuery] = useState('');
@@ -60,7 +61,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     setServingsById((prev) => {
       const next = { ...prev };
       for (const id of selectedIds) {
-        if (next[id] === undefined) next[id] = DEFAULT_SERVINGS;
+        if (next[id] === undefined) {
+          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
+          next[id] = recipe?.servingsCount ?? DEFAULT_SERVINGS;
+        }
       }
       return next;
     });
@@ -107,7 +111,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
 
   return (
     <View style={styles.screen} testID="add-to-this-week-screen">
-      <View style={styles.header}>
+      {/* headerShown: false (app/this-week/add.tsx) — no native header to
+          reserve safe-area space here, so this modal-style screen has to
+          clear the Dynamic Island/notch itself. */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable
           onPress={() => (step === 'servings' ? setStep('select') : router.back())}
           accessibilityRole="button"
@@ -167,7 +174,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               </ScrollView>
             </>
           )}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title={selectedIds.length === 0 ? 'Select recipes to continue' : 'Next'}
               onPress={goToServingsStep}
@@ -214,7 +221,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               </View>
             ))}
           </ScrollView>
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title="Add to This Week"
               onPress={handleSubmit}

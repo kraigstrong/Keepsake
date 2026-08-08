@@ -24,14 +24,14 @@ const mockedRpc = supabase.rpc as jest.Mock;
 afterEach(() => jest.clearAllMocks());
 
 describe('fetchRecipes', () => {
-  it('returns id/title summaries', async () => {
+  it('returns id/title/servingsCount summaries', async () => {
     mockedFrom.mockReturnValue({
       select: () => ({
         order: () =>
           Promise.resolve({
             data: [
-              { id: 'r1', title: 'Chili' },
-              { id: 'r2', title: 'Tacos' },
+              { id: 'r1', title: 'Chili', servings_count: 6 },
+              { id: 'r2', title: 'Tacos', servings_count: null },
             ],
             error: null,
           }),
@@ -39,8 +39,8 @@ describe('fetchRecipes', () => {
     });
 
     await expect(fetchRecipes()).resolves.toEqual([
-      { id: 'r1', title: 'Chili' },
-      { id: 'r2', title: 'Tacos' },
+      { id: 'r1', title: 'Chili', servingsCount: 6 },
+      { id: 'r2', title: 'Tacos', servingsCount: null },
     ]);
     expect(mockedFrom).toHaveBeenCalledWith('recipes');
   });

@@ -4,6 +4,7 @@ import { supabase } from '../supabase/instance';
 export interface RecipeSummary {
   id: string;
   title: string;
+  servingsCount: number | null;
 }
 
 // Plain-text lines — instructions always, and ingredients while being
@@ -114,11 +115,15 @@ export function isRecipeConflictError(error: unknown): boolean {
 }
 
 export async function fetchRecipes(): Promise<RecipeSummary[]> {
-  const { data, error } = await supabase.from('recipes').select('id, title').order('title');
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id, title, servings_count')
+    .order('title');
   if (error) throw error;
-  return (data as { id: string; title: string }[]).map((row) => ({
+  return (data as { id: string; title: string; servings_count: number | null }[]).map((row) => ({
     id: row.id,
     title: row.title,
+    servingsCount: row.servings_count,
   }));
 }
 

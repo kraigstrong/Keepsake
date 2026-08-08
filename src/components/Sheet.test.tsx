@@ -67,6 +67,25 @@ describe('Sheet', () => {
     expect(screen.getByTestId('sheet-backdrop')).toBeOnTheScreen();
   });
 
+  // The grabber's actual drag-to-dismiss physics (PanGestureHandler
+  // translationY/velocityY driving a real native pan) aren't exercised
+  // here, the same way the open/close slide animation above isn't —
+  // this project has no react-native-gesture-handler jest native-event
+  // mock wired up, and fireGestureHandler needs one. What's testable and
+  // tested: the grabber renders as its own element wherever a Sheet
+  // does, so the affordance itself (developer UX feedback: "I'd expect
+  // to be able to pull that filter pop-up down") is present. The actual
+  // gesture needs a device/Simulator pass.
+  it('renders a drag handle above the sheet content', async () => {
+    await render(
+      <Sheet visible onDismiss={() => {}} testID="sheet">
+        <Text>Sheet content</Text>
+      </Sheet>,
+    );
+
+    expect(screen.getByTestId('sheet-grabber')).toBeOnTheScreen();
+  });
+
   it('shows immediately when Reduced Motion is enabled', async () => {
     mockedUseReducedMotion.mockReturnValue(true);
     await render(

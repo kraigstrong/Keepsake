@@ -10,6 +10,14 @@ jest.mock('./api');
 jest.mock('../recipes/api');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+// This screen reads useSafeAreaInsets directly (headerShown: false, no
+// native header to reserve Dynamic-Island/notch space — see
+// AddToThisWeekScreen.tsx), so it needs the library's own test double
+// rather than the real native-backed provider.
+jest.mock(
+  'react-native-safe-area-context',
+  () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
+);
 
 function renderScreen() {
   return render(
@@ -29,8 +37,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ back });
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
-    { id: 'r1', title: 'Herb Roast Chicken' },
-    { id: 'r2', title: 'Tacos' },
+    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: null },
+    { id: 'r2', title: 'Tacos', servingsCount: null },
   ]);
   mockedThisWeekApi.addRecipesToThisWeek.mockResolvedValue(undefined);
 });
@@ -69,7 +77,7 @@ it('disables Next until at least one recipe is selected, then advances to the se
   expect(screen.queryByTestId('add-to-this-week-servings-r2')).toBeNull();
 });
 
-it('defaults servings to 4 and adjusts with the stepper', async () => {
+it('defaults servings to 4 when a recipe has no parsed serving count, and adjusts with the stepper', async () => {
   await renderScreen();
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
@@ -85,6 +93,21 @@ it('defaults servings to 4 and adjusts with the stepper', async () => {
   await fireEvent.press(screen.getByTestId('add-to-this-week-servings-decrement-r1'));
   // Never below 1.
   expect(screen.getByText('1')).toBeTruthy();
+});
+
+it("seeds servings from the recipe's own servingsCount instead of the 4-serving default", async () => {
+  mockedRecipesApi.fetchRecipes.mockResolvedValue([
+    { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6 },
+    { id: 'r2', title: 'Tacos', servingsCount: null },
+  ]);
+
+  await renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Nacho Cheese Sauce')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
+
+  expect(screen.getByText('6')).toBeTruthy();
 });
 
 it('going back from the servings step preserves the selection', async () => {

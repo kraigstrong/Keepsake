@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 
 import {
   addRecipeToThisWeek,
@@ -12,11 +13,13 @@ import {
   type ThisWeekEntry,
   type ThisWeekPlan,
 } from './api';
+import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getHeroImageUrl } from '../recipes/heroImage';
@@ -49,6 +52,11 @@ export function ThisWeekScreen() {
   const [isMutating, setIsMutating] = useState(false);
   const [removed, setRemoved] = useState<RemovedEntryState | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Closes a swiped-open row once its Remove action has been tapped —
+  // Swipeable doesn't do this itself, and the row disappearing from
+  // `plan.entries` right after (the optimistic update below) isn't
+  // enough on its own to reset the open swipe offset.
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +134,7 @@ export function ThisWeekScreen() {
 
   async function handleRemove(entry: ThisWeekEntry) {
     if (!plan) return;
+    swipeableRefs.current.get(entry.id)?.close();
     const previous = plan;
     setPlan({ ...plan, entries: plan.entries.filter((e) => e.id !== entry.id) });
 
@@ -155,13 +164,22 @@ export function ThisWeekScreen() {
     }
   }
 
+  // Optimistic, same pattern as handleRemove above — confirming/
+  // reopening previously awaited the RPC *then* a full load() before
+  // touching local state at all, stacking two sequential network round
+  // trips before the UI showed anything (developer-reported ~0.75s lag
+  // on Confirm Plan). Neither RPC changes anything this screen actually
+  // renders (confirm's planned_count/updated_at stamps aren't shown
+  // here), so the reload was pure latency, not freshness.
   async function handleConfirm() {
     if (!plan) return;
+    const previous = plan;
+    setPlan({ ...plan, status: 'confirmed' });
     setIsMutating(true);
     try {
       await confirmThisWeek(plan.id);
-      await load();
     } catch {
+      setPlan(previous);
       showToast("Couldn't confirm this week's plan");
     } finally {
       setIsMutating(false);
@@ -170,61 +188,82 @@ export function ThisWeekScreen() {
 
   async function handleEditPlan() {
     if (!plan) return;
+    const previous = plan;
+    setPlan({ ...plan, status: 'planning' });
     setIsMutating(true);
     try {
       await reopenThisWeek(plan.id);
-      await load();
     } catch {
+      setPlan(previous);
       showToast("Couldn't reopen this week's plan");
     } finally {
       setIsMutating(false);
     }
   }
 
+  // Swipe-to-remove (Gmail-style), not a persistent X — the X sat right
+  // next to the up/down reorder buttons and was too easy to hit by
+  // accident while reordering. Swipeable uses gesture-handler's classic
+  // Animated-driven implementation, not Reanimated, so it doesn't run
+  // into the react-native-reanimated 4.5.1 incompatibility that ruled
+  // out react-native-draggable-flatlist for reordering.
   function renderPlanningItem(item: ThisWeekEntry, index: number, count: number) {
     return (
-      <View key={item.id} style={styles.row} testID={`this-week-entry-${item.id}`}>
-        <Thumbnail url={heroUrls[item.id]} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
-        </View>
-        <Pressable
-          onPress={() => handleRemove(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.title} from This Week`}
-          hitSlop={8}
-          testID={`this-week-entry-remove-${item.id}`}
-        >
-          <Text style={styles.removeIcon}>{'✕'}</Text>
-        </Pressable>
-        <View style={styles.moveButtons}>
+      <Swipeable
+        key={item.id}
+        ref={(ref) => {
+          if (ref) swipeableRefs.current.set(item.id, ref);
+          else swipeableRefs.current.delete(item.id);
+        }}
+        overshootRight={false}
+        renderRightActions={() => (
           <Pressable
-            onPress={() => handleMove(index, -1)}
-            disabled={index === 0 || isMutating}
+            onPress={() => handleRemove(item)}
+            style={styles.swipeRemove}
             accessibilityRole="button"
-            accessibilityLabel={`Move ${item.title} up`}
-            hitSlop={8}
-            testID={`this-week-entry-move-up-${item.id}`}
+            accessibilityLabel={`Remove ${item.title} from This Week`}
+            testID={`this-week-entry-remove-${item.id}`}
           >
-            <Text style={[styles.moveButton, index === 0 && styles.moveButtonDisabled]}>{'▲'}</Text>
+            <Text style={styles.swipeRemoveText}>Remove</Text>
           </Pressable>
-          <Pressable
-            onPress={() => handleMove(index, 1)}
-            disabled={index === count - 1 || isMutating}
-            accessibilityRole="button"
-            accessibilityLabel={`Move ${item.title} down`}
-            hitSlop={8}
-            testID={`this-week-entry-move-down-${item.id}`}
-          >
-            <Text style={[styles.moveButton, index === count - 1 && styles.moveButtonDisabled]}>
-              {'▼'}
+        )}
+      >
+        <View style={styles.row} testID={`this-week-entry-${item.id}`}>
+          <Thumbnail url={heroUrls[item.id]} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {item.title}
             </Text>
-          </Pressable>
+            <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
+          </View>
+          <View style={styles.moveButtons}>
+            <Pressable
+              onPress={() => handleMove(index, -1)}
+              disabled={index === 0 || isMutating}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${item.title} up`}
+              hitSlop={8}
+              testID={`this-week-entry-move-up-${item.id}`}
+            >
+              <Text style={[styles.moveButton, index === 0 && styles.moveButtonDisabled]}>
+                {'▲'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleMove(index, 1)}
+              disabled={index === count - 1 || isMutating}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${item.title} down`}
+              hitSlop={8}
+              testID={`this-week-entry-move-down-${item.id}`}
+            >
+              <Text style={[styles.moveButton, index === count - 1 && styles.moveButtonDisabled]}>
+                {'▼'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </Swipeable>
     );
   }
 
@@ -252,7 +291,7 @@ export function ThisWeekScreen() {
   if (!isOnline) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <View style={styles.centered}>
           <OfflineState
             message="This Week needs a connection to load and update your plan."
@@ -266,7 +305,7 @@ export function ThisWeekScreen() {
   if (loadError) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <View style={styles.centered}>
           <ErrorState
             title="Couldn't load this week's plan"
@@ -282,7 +321,7 @@ export function ThisWeekScreen() {
   if (plan === null) {
     return (
       <View style={styles.screen} testID="this-week-screen">
-        <Text style={styles.title}>This Week</Text>
+        <ScreenHeader title="This Week" />
         <LoadingState label="Loading this week's plan…" testID="this-week-loading" />
       </View>
     );
@@ -292,46 +331,45 @@ export function ThisWeekScreen() {
 
   return (
     <View style={styles.screen} testID="this-week-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>This Week</Text>
-        <View style={styles.headerRow}>
-          {/* Only shown once populated — an empty plan's EmptyState below
-              already offers its own "Add recipes" action, so showing
-              both here would be a redundant, confusingly-duplicate
-              control with identical text. */}
-          {!isConfirmed && plan.entries.length > 0 && (
-            <Pressable
-              onPress={goToAddRecipes}
-              accessibilityRole="button"
-              testID="this-week-add-recipes"
-            >
-              <Text style={styles.addRecipesLink}>Add recipes</Text>
-            </Pressable>
-          )}
-          <View style={styles.headerSpacer} />
-          {isConfirmed ? (
-            <Pressable
-              onPress={handleEditPlan}
-              disabled={isMutating}
-              accessibilityRole="button"
-              testID="this-week-edit-plan"
-            >
-              <Text style={styles.editPlanLink}>Edit Plan</Text>
-            </Pressable>
-          ) : (
-            plan.entries.length > 0 && (
-              <Pressable
+      <ScreenHeader title="This Week" />
+
+      {/* One row, both real Buttons, each flex:1 — previously they hugged
+          their own label width with only an 8px gap, so they clumped on
+          the left with dead space on the right (developer UX feedback:
+          "smushed"). Add recipes stays the primary/rust button matching
+          the empty state below — Confirm Plan finishes the plan, but
+          rust already means "keep building the plan" from the empty
+          state, and flipping that meaning once the plan has entries is
+          what read as inconsistent, not a case for Confirm needing the
+          louder color. */}
+      {isConfirmed ? (
+        <View style={styles.actionsRow}>
+          <Button
+            title="Edit Plan"
+            onPress={handleEditPlan}
+            disabled={isMutating}
+            variant="secondary"
+            testID="this-week-edit-plan"
+          />
+        </View>
+      ) : (
+        plan.entries.length > 0 && (
+          <View style={styles.actionsRow}>
+            <View style={styles.actionsRowItem}>
+              <Button title="Add recipes" onPress={goToAddRecipes} testID="this-week-add-recipes" />
+            </View>
+            <View style={styles.actionsRowItem}>
+              <Button
+                title="Confirm Plan"
                 onPress={handleConfirm}
                 disabled={isMutating}
-                accessibilityRole="button"
+                variant="secondary"
                 testID="this-week-confirm-plan"
-              >
-                <Text style={styles.confirmPlanLink}>Confirm Plan</Text>
-              </Pressable>
-            )
-          )}
-        </View>
-      </View>
+              />
+            </View>
+          </View>
+        )
+      )}
 
       <View style={styles.content}>
         {plan.entries.length === 0 ? (
@@ -381,36 +419,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  title: {
-    ...typography.title,
-    color: colors.textPrimary,
-  },
-  headerRow: {
+  actionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
-  headerSpacer: {
+  actionsRowItem: {
     flex: 1,
-  },
-  addRecipesLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  confirmPlanLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.accent,
-  },
-  editPlanLink: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textTertiary,
   },
   content: {
     flex: 1,
@@ -451,10 +467,16 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 2,
   },
-  removeIcon: {
-    fontSize: 15,
-    color: colors.textTertiary,
-    paddingHorizontal: spacing.xs,
+  swipeRemove: {
+    width: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger,
+  },
+  swipeRemoveText: {
+    ...typography.body,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   moveButtons: {
     gap: 2,
