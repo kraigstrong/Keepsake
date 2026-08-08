@@ -11,10 +11,9 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipesToThisWeek } from './api';
 
 // Same "typical household" default RecipeDetailScreen falls back to
-// when a recipe has no parseable serving count — this flow has no
-// per-recipe context to scale from at all (WEEK-02's "choose servings"
-// step, not a scaled detail view), so every selection starts here and
-// is freely adjustable via the stepper below.
+// when a recipe has no parseable serving count (ADR-0018) — used here
+// only when a selected recipe's own servingsCount is null; otherwise
+// each recipe seeds its stepper from its actual parsed/saved value.
 const DEFAULT_SERVINGS = 4;
 const MIN_SERVINGS = 1;
 
@@ -60,7 +59,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     setServingsById((prev) => {
       const next = { ...prev };
       for (const id of selectedIds) {
-        if (next[id] === undefined) next[id] = DEFAULT_SERVINGS;
+        if (next[id] === undefined) {
+          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
+          next[id] = recipe?.servingsCount ?? DEFAULT_SERVINGS;
+        }
       }
       return next;
     });
