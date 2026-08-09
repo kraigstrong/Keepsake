@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 // identifiers prefixed "mock" (case-insensitive) — see the Link stand-in
 // inside jest.mock('expo-router', ...) below.
 import { Text as MockText } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as api from './api';
 import type { ThisWeekEntry, ThisWeekPlan } from './api';
@@ -44,10 +45,16 @@ jest.mock('expo-router', () => ({
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 function renderThisWeekScreen() {
+  // GestureHandlerRootView mirrors app/_layout.tsx's real wrapper — the
+  // gesture-handler v3 swipe-to-remove row (ReanimatedSwipeable) throws
+  // without one in its ancestry, same as it would if this screen were
+  // mounted outside the app root in production.
   return render(
-    <ToastProvider>
-      <ThisWeekScreen />
-    </ToastProvider>,
+    <GestureHandlerRootView>
+      <ToastProvider>
+        <ThisWeekScreen />
+      </ToastProvider>
+    </GestureHandlerRootView>,
   );
 }
 
