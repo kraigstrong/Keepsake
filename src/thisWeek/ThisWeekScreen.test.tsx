@@ -285,8 +285,8 @@ it('navigates to the grocery review screen for the confirmed plan', async () => 
 
   renderThisWeekScreen();
 
-  await waitFor(() => expect(screen.getByTestId('this-week-generate-groceries')).toBeTruthy());
-  await fireEvent.press(screen.getByTestId('this-week-generate-groceries'));
+  await waitFor(() => expect(screen.getByTestId('this-week-review-groceries')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('this-week-review-groceries'));
   expect(push).toHaveBeenCalledWith('/groceries/plan-1');
 });
 

@@ -28,6 +28,13 @@ describe('canonicalKey', () => {
     it('strips trailing punctuation', () => {
       expect(canonicalKey('Salt.')).toBe(canonicalKey('salt'));
     });
+
+    it.each(['melted butter', 'softened butter', 'chilled butter', 'room temperature butter'])(
+      '"%s" merges with "butter"',
+      (text) => {
+        expect(canonicalKey(text)).toBe(canonicalKey('butter'));
+      },
+    );
   });
 
   describe('must not merge (different ingredients, or a variety distinction)', () => {
@@ -41,6 +48,19 @@ describe('canonicalKey', () => {
       ['whole milk', 'skim milk'],
       ['garlic', 'garlic powder'],
       ['sugar', 'brown sugar'],
+      // Deliberately NOT on LEADING_PREP_MODIFIERS (module doc): each of
+      // these carries a real product-identity idiom, so stripping the
+      // modifier would risk a false merge, the one thing this function
+      // must never do.
+      ['diced tomatoes', 'tomato'],
+      ['ground beef', 'beef'],
+      ['cooked chicken', 'chicken'],
+      ['chopped onion', 'onion'],
+      // Codex review, PR #47: "beaten" was on LEADING_PREP_MODIFIERS,
+      // but "beaten rice" (flattened rice, poha) is a distinct product,
+      // not just rice that's been beaten — the same idiom risk as
+      // "ground"/"diced"/"cooked". Removed from the list entirely.
+      ['beaten rice', 'rice'],
     ])('"%s" and "%s" produce different keys', (a, b) => {
       expect(canonicalKey(a)).not.toBe(canonicalKey(b));
     });

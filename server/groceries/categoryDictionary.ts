@@ -56,6 +56,7 @@ const RULES: readonly CategoryRule[] = [
   { keyword: 'vegetable broth', category: 'pantry' },
   { keyword: 'vegetable stock', category: 'pantry' },
   { keyword: 'fish sauce', category: 'pantry' },
+  { keyword: 'bouillon', category: 'pantry' },
   { keyword: 'bell pepper', category: 'produce' },
   { keyword: 'chili pepper', category: 'produce' },
   { keyword: 'jalapeno', category: 'produce' },

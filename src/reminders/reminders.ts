@@ -17,6 +17,16 @@ import * as Calendar from 'expo-calendar/legacy';
  */
 const GROCERY_LIST_TITLE = 'Keepsake Groceries';
 
+// The title iOS's own "Groceries" list template uses (Reminders' New
+// List -> list type picker) — that list type auto-sorts items into
+// aisle sections as they're typed. EventKit exposes no way to create
+// that type or detect it as anything but an ordinary list, only match
+// by title (developer experiment, 2026-08-08: does an item added via
+// createReminderAsync still land sorted?). Harmless if this happens to
+// match an unrelated ordinary list of the same name — it's still a
+// reasonable place to put groceries, just without the auto-sort.
+const NATIVE_GROCERIES_LIST_TITLE = 'Groceries';
+
 // Remembers the EventKit id of the list this app itself created, so a
 // later export can verify ownership instead of matching on title alone
 // — a title match can't distinguish this app's own list from an
@@ -88,14 +98,24 @@ export async function getOrCreateGroceryList(): Promise<string> {
  * remembered list was deleted; that fallback still carries the original
  * title-match ambiguity, but only on that one-time/rare path rather than
  * on every export.
+ *
+ * Checks for a native "Groceries" list first (developer experiment,
+ * 2026-08-08) — if the user already has one, prefer it over the
+ * app-owned list every time, not just on first export, since they may
+ * create or rename that list at any point after already having used
+ * Keepsake's own list.
  */
 export async function getOwnedGroceryListId(): Promise<string> {
+  const lists = await Calendar.getCalendarsAsync(Calendar.EntityTypes.REMINDER);
+
+  const native = lists.find((list) => list.title === NATIVE_GROCERIES_LIST_TITLE);
+  if (native) {
+    return native.id;
+  }
+
   const rememberedId = await AsyncStorage.getItem(OWNED_LIST_ID_KEY).catch(() => null);
-  if (rememberedId) {
-    const lists = await Calendar.getCalendarsAsync(Calendar.EntityTypes.REMINDER);
-    if (lists.some((list) => list.id === rememberedId)) {
-      return rememberedId;
-    }
+  if (rememberedId && lists.some((list) => list.id === rememberedId)) {
+    return rememberedId;
   }
 
   const id = await getOrCreateGroceryList();
@@ -108,4 +128,22 @@ export async function getOwnedGroceryListId(): Promise<string> {
 
 export async function addGroceryReminder(listId: string, itemTitle: string): Promise<string> {
   return Calendar.createReminderAsync(listId, { title: itemTitle });
+}
+
+/**
+ * IDs of reminders in `listId` that still exist and aren't checked off
+ * (ADR-0023 amended, developer device-testing feedback 2026-08-08). A
+ * `status: null` fetch with no date range returns every reminder in the
+ * calendar regardless of completion — each carries its own `completed`
+ * flag — so one call here answers both "was it deleted?" (absent from
+ * the result) and "was it completed?" in a single native round trip
+ * instead of one `getReminderAsync` per previously-exported item.
+ */
+export async function getActiveReminderIds(listId: string): Promise<ReadonlySet<string>> {
+  const reminders = await Calendar.getRemindersAsync([listId], null, null, null);
+  return new Set(
+    reminders
+      .filter((reminder) => !reminder.completed && reminder.id)
+      .map((reminder) => reminder.id!),
+  );
 }

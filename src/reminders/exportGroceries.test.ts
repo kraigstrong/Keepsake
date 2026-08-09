@@ -1,6 +1,6 @@
 import { exportGroceriesToReminders, type GroceryExportItem } from './exportGroceries';
-import { getExportedItemHashes, recordExport } from './exportRecords';
-import { addGroceryReminder, getOwnedGroceryListId } from './reminders';
+import { getExportedItems, recordExport } from './exportRecords';
+import { addGroceryReminder, getActiveReminderIds, getOwnedGroceryListId } from './reminders';
 import type { LocalDb } from '../sync/local';
 
 jest.mock('./reminders');
@@ -8,7 +8,8 @@ jest.mock('./exportRecords');
 
 const mockedGetOwnedGroceryListId = getOwnedGroceryListId as jest.Mock;
 const mockedAddGroceryReminder = addGroceryReminder as jest.Mock;
-const mockedGetExportedItemHashes = getExportedItemHashes as jest.Mock;
+const mockedGetExportedItems = getExportedItems as jest.Mock;
+const mockedGetActiveReminderIds = getActiveReminderIds as jest.Mock;
 const mockedRecordExport = recordExport as jest.Mock;
 
 const DB = {} as LocalDb;
@@ -23,7 +24,8 @@ function item(overrides: Partial<GroceryExportItem> = {}): GroceryExportItem {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedGetOwnedGroceryListId.mockResolvedValue('list-1');
-  mockedGetExportedItemHashes.mockResolvedValue(new Set());
+  mockedGetExportedItems.mockResolvedValue(new Map());
+  mockedGetActiveReminderIds.mockResolvedValue(new Set());
   mockedRecordExport.mockResolvedValue(undefined);
 });
 
@@ -46,8 +48,9 @@ it('exports every item, recording each one locally', async () => {
   });
 });
 
-it('skips an item already recorded as exported, without calling addGroceryReminder', async () => {
-  mockedGetExportedItemHashes.mockResolvedValue(new Set(['onion']));
+it('skips an item already recorded as exported while its reminder is still active', async () => {
+  mockedGetExportedItems.mockResolvedValue(new Map([['onion', 'reminder-onion']]));
+  mockedGetActiveReminderIds.mockResolvedValue(new Set(['reminder-onion']));
 
   const outcome = await exportGroceriesToReminders(DB, {
     weeklyPlanId: 'plan-1',
@@ -58,6 +61,32 @@ it('skips an item already recorded as exported, without calling addGroceryRemind
   expect(outcome).toEqual({ succeeded: [], skipped: ['onion'], partial: [], failed: [] });
   expect(mockedAddGroceryReminder).not.toHaveBeenCalled();
   expect(mockedRecordExport).not.toHaveBeenCalled();
+});
+
+it('recreates an item whose previously-exported reminder was completed or deleted', async () => {
+  // Recorded from a prior export, but not in the active set — the user
+  // checked it off (or deleted it) since then. A stale row must never
+  // suppress a genuinely new grocery list (developer device-testing
+  // feedback, 2026-08-08: "cleared my plan, made a new plan, exported
+  // again, and it says nothing added").
+  mockedGetExportedItems.mockResolvedValue(new Map([['onion', 'old-reminder-id']]));
+  mockedGetActiveReminderIds.mockResolvedValue(new Set());
+  mockedAddGroceryReminder.mockResolvedValue('new-reminder-id');
+
+  const outcome = await exportGroceriesToReminders(DB, {
+    weeklyPlanId: 'plan-1',
+    householdId: 'household-1',
+    items: [item({ itemHash: 'onion' })],
+  });
+
+  expect(outcome).toEqual({ succeeded: ['onion'], skipped: [], partial: [], failed: [] });
+  expect(mockedAddGroceryReminder).toHaveBeenCalledWith('list-1', '1 onion');
+  expect(mockedRecordExport).toHaveBeenCalledWith(DB, {
+    weeklyPlanId: 'plan-1',
+    itemHash: 'onion',
+    householdId: 'household-1',
+    reminderId: 'new-reminder-id',
+  });
 });
 
 it('collects a per-item failure (create itself failed) without aborting the rest of the batch', async () => {
@@ -159,10 +188,12 @@ it('retrying after a partial failure only re-attempts what did not already succe
     items,
   });
 
-  // Retry: getExportedItemHashes now reflects garlic's success.
+  // Retry: getExportedItems now reflects garlic's success, and its
+  // reminder is still active (not yet checked off).
   jest.clearAllMocks();
   mockedGetOwnedGroceryListId.mockResolvedValue('list-1');
-  mockedGetExportedItemHashes.mockResolvedValue(new Set(['garlic']));
+  mockedGetExportedItems.mockResolvedValue(new Map([['garlic', 'r-garlic']]));
+  mockedGetActiveReminderIds.mockResolvedValue(new Set(['r-garlic']));
   mockedRecordExport.mockResolvedValue(undefined);
   mockedAddGroceryReminder.mockResolvedValueOnce('r-onion');
 

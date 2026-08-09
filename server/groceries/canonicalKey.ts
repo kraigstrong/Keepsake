@@ -4,24 +4,39 @@
  * ingredient lines merge only when this function returns the exact
  * same string for both.
  *
- * Two normalization steps, in order:
- *  1. Drop everything from the first comma onward — preparation clauses
- *     ("large diced", "at room temperature") that would otherwise make
- *     near-identical ingredients look distinct.
- *  2. Lowercase / trim / collapse whitespace / strip trailing
- *     punctuation, then singularize the last word with a small, fixed
- *     suffix rule.
+ * Normalization steps, in order:
+ *  1. Drop everything from the first comma onward.
+ *  2. Lowercase / trim / collapse whitespace / strip trailing punctuation.
+ *  3. Strip one leading preparation-state word from LEADING_PREP_MODIFIERS
+ *     ("melted butter" -> "butter"), then singularize the last word with
+ *     a small, fixed suffix rule.
  *
- * The suffix rule is safe under "a false merge is worse than a missed
- * merge" (execution-plan.md's Phase 13 Validation section) for a
- * structural reason, not just caution: it is applied independently to
- * each string, so it can only ever make two spellings of the *same*
- * underlying word collide (a true singular/plural pair) — it has no
- * mechanism to make two different ingredients collide. Its only failure
- * mode is under-merging (irregular plurals it doesn't know, adjectives
- * left in front so "yellow onion" never merges with "onion") — an
- * accepted gap per the ADR, not something this function tries to fix.
+ * See the ADR for why this stays this narrow. LEADING_PREP_MODIFIERS
+ * carries the same constraint one level down: each entry must describe
+ * only a physical state of an otherwise-identical product, never a
+ * word that's also its own distinct product name ("ground beef",
+ * "diced tomatoes" — real idioms, not just "beef"/"tomatoes" in a
+ * different state) — that's what would turn this into a false merge.
  */
+
+const LEADING_PREP_MODIFIERS: readonly string[] = [
+  'room temperature',
+  'melted',
+  'softened',
+  'chilled',
+  'cooled',
+  'whisked',
+  'warmed',
+];
+
+function stripLeadingModifier(phrase: string): string {
+  for (const modifier of LEADING_PREP_MODIFIERS) {
+    if (phrase.startsWith(`${modifier} `)) {
+      return phrase.slice(modifier.length + 1);
+    }
+  }
+  return phrase;
+}
 
 function singularizeWord(word: string): string {
   if (word.length <= 3) {
@@ -62,5 +77,5 @@ export function canonicalKey(text: string): string {
     return normalized;
   }
 
-  return singularizeLastWord(normalized);
+  return singularizeLastWord(stripLeadingModifier(normalized));
 }

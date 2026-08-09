@@ -15,9 +15,25 @@ import { canonicalKey } from './canonicalKey.ts';
 
 const RAW_STAPLES: readonly string[] = [
   'salt',
+  // Common adjective-prefixed salt variants — canonicalKey only drops
+  // text *after* a comma, never a leading adjective (ADR-0022 decision
+  // 3's accepted under-merging gap), so "kosher salt" needs its own
+  // entry rather than relying on a match against plain "salt". Kept to
+  // the handful actually common in recipe writing, not a generic
+  // substring match: unlike "salt", generic "pepper" or "water"
+  // substrings would wrongly catch "bell pepper" / "coconut water",
+  // which are real purchases, not staples.
+  'kosher salt',
+  'sea salt',
+  'table salt',
+  'fine salt',
   'black pepper',
   'pepper',
   'sugar',
+  'granulated sugar',
+  'white sugar',
+  'powdered sugar',
+  'confectioners sugar',
   'brown sugar',
   'flour',
   'all-purpose flour',

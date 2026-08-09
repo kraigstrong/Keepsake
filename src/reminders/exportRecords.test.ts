@@ -1,4 +1,4 @@
-import { getExportedItemHashes, recordExport } from './exportRecords';
+import { getExportedItems, recordExport } from './exportRecords';
 import type { LocalDb } from '../sync/local';
 
 function createMockDb(overrides: Partial<LocalDb> = {}): LocalDb & {
@@ -16,25 +16,33 @@ function createMockDb(overrides: Partial<LocalDb> = {}): LocalDb & {
   } as LocalDb & { getAllAsync: jest.Mock; runAsync: jest.Mock };
 }
 
-describe('getExportedItemHashes', () => {
-  it('returns a set of the exported item hashes for the plan', async () => {
+describe('getExportedItems', () => {
+  it('returns a map of item hash to reminder id for the plan', async () => {
     const db = createMockDb({
-      getAllAsync: jest.fn(async () => [{ item_hash: 'a1b2c3d4e5f60718' }, { item_hash: 'aaaa' }]),
+      getAllAsync: jest.fn(async () => [
+        { item_hash: 'a1b2c3d4e5f60718', reminder_id: 'reminder-a' },
+        { item_hash: 'aaaa', reminder_id: 'reminder-b' },
+      ]),
     } as never);
 
-    const result = await getExportedItemHashes(db, 'plan-1');
+    const result = await getExportedItems(db, 'plan-1');
 
-    expect(result).toEqual(new Set(['a1b2c3d4e5f60718', 'aaaa']));
+    expect(result).toEqual(
+      new Map([
+        ['a1b2c3d4e5f60718', 'reminder-a'],
+        ['aaaa', 'reminder-b'],
+      ]),
+    );
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      'select item_hash from grocery_exports where weekly_plan_id = ?',
+      'select item_hash, reminder_id from grocery_exports where weekly_plan_id = ?',
       'plan-1',
     );
   });
 
-  it('returns an empty set when nothing has been exported yet', async () => {
+  it('returns an empty map when nothing has been exported yet', async () => {
     const db = createMockDb();
-    const result = await getExportedItemHashes(db, 'plan-1');
-    expect(result).toEqual(new Set());
+    const result = await getExportedItems(db, 'plan-1');
+    expect(result).toEqual(new Map());
   });
 });
 
