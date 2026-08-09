@@ -5,4 +5,4 @@
 // client transitively pulls in — throws "native module not found" in
 // the Jest environment. Re-exports the package's own official mock
 // rather than reimplementing it.
-module.exports = require('@react-native-async-storage/async-storage/jest/async-storage-mock');
+module.exports = require('@react-native-async-storage/async-storage/jest');

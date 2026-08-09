@@ -15,6 +15,10 @@ module.exports = {
       ...jestExpoPreset,
       displayName: 'app',
       rootDir: __dirname,
+      // gesture-handler v3 needs its own jest mocks (configureRelations
+      // etc. aren't on the default native-module automock) — see
+      // https://docs.swmansion.com/react-native-gesture-handler/docs/guides/testing/
+      setupFiles: [...jestExpoPreset.setupFiles, 'react-native-gesture-handler/jestSetup'],
       // Deliberately excludes app/**/*.test.{ts,tsx}: Expo Router's context
       // scanner treats every file under app/ as a candidate route, so a
       // colocated test file would pollute the real route tree. Route/nav

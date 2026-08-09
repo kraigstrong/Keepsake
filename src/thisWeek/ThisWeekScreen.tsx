@@ -1,7 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import {
   addRecipeToThisWeek,
@@ -56,7 +56,7 @@ export function ThisWeekScreen() {
   // Swipeable doesn't do this itself, and the row disappearing from
   // `plan.entries` right after (the optimistic update below) isn't
   // enough on its own to reset the open swipe offset.
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+  const swipeableRefs = useRef<Map<string, SwipeableMethods>>(new Map());
 
   const load = useCallback(async () => {
     try {
@@ -203,10 +203,11 @@ export function ThisWeekScreen() {
 
   // Swipe-to-remove (Gmail-style), not a persistent X — the X sat right
   // next to the up/down reorder buttons and was too easy to hit by
-  // accident while reordering. Swipeable uses gesture-handler's classic
-  // Animated-driven implementation, not Reanimated, so it doesn't run
-  // into the react-native-reanimated 4.5.1 incompatibility that ruled
-  // out react-native-draggable-flatlist for reordering.
+  // accident while reordering. gesture-handler v3 dropped the classic
+  // Animated-driven Swipeable, so this is ReanimatedSwipeable now; unlike
+  // react-native-draggable-flatlist (ADR-0021), it doesn't hit the
+  // react-native-reanimated incompatibility — confirmed by this file's
+  // test suite passing against reanimated 4.5.3.
   function renderPlanningItem(item: ThisWeekEntry, index: number, count: number) {
     return (
       <Swipeable
