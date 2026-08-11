@@ -121,10 +121,15 @@ export function isRecipeConflictError(error: unknown): boolean {
   return error instanceof Error && error.message === CONFLICT_MESSAGE;
 }
 
+// AddToThisWeekScreen's picker — excludes archived/deleted recipes
+// (Phase 16, ADR-0025), same as Library/Search; you can't plan a recipe
+// you can't currently see.
 export async function fetchRecipes(): Promise<RecipeSummary[]> {
   const { data, error } = await supabase
     .from('recipes')
     .select('id, title, servings_count')
+    .is('archived_at', null)
+    .is('deleted_at', null)
     .order('title');
   if (error) throw error;
   return (data as { id: string; title: string; servings_count: number | null }[]).map((row) => ({

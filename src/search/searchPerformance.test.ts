@@ -69,6 +69,11 @@ function createSearchDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   for (const statement of MIGRATIONS[1]!) db.exec(statement);
   for (const statement of MIGRATIONS[2]!) db.exec(statement);
+  // ADR-0025 (Phase 16): the tier queries' household-scoping join now
+  // also excludes archived/deleted recipes, so migration 11
+  // (archived_at/deleted_at) needs to run here too — see
+  // searchCorrectness.test.ts's own note on this same pattern.
+  for (const statement of MIGRATIONS[11]!) db.exec(statement);
   return db;
 }
 

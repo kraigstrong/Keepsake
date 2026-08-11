@@ -38,6 +38,12 @@ describe('buildTitleMatchQuery / buildIngredientsMatchQuery', () => {
     expect(sql).toContain('r.household_id = ?');
   });
 
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', () => {
+    const { sql } = buildTitleMatchQuery('tomato', HOUSEHOLD_ID);
+    expect(sql).toContain('r.archived_at is null');
+    expect(sql).toContain('r.deleted_at is null');
+  });
+
   it('respects a custom limit', () => {
     const { sql } = buildTitleMatchQuery('tomato', HOUSEHOLD_ID, 5);
     expect(sql).toContain('limit 5');
@@ -53,6 +59,12 @@ describe('buildEverythingMatchQuery', () => {
   it('is not column-scoped', () => {
     const { params } = buildEverythingMatchQuery('tomato', HOUSEHOLD_ID);
     expect(params[0]).toBe('"tomato"');
+  });
+
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', () => {
+    const { sql } = buildEverythingMatchQuery('tomato', HOUSEHOLD_ID);
+    expect(sql).toContain('r.archived_at is null');
+    expect(sql).toContain('r.deleted_at is null');
   });
 });
 
@@ -91,6 +103,12 @@ describe('buildFuzzyMatchQuery', () => {
     const { sql } = buildFuzzyMatchQuery('tomatto', HOUSEHOLD_ID);
     expect(sql).toContain('join recipes r on r.id = t.recipe_id');
     expect(sql).toContain('r.household_id = ?');
+  });
+
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', () => {
+    const { sql } = buildFuzzyMatchQuery('tomatto', HOUSEHOLD_ID);
+    expect(sql).toContain('r.archived_at is null');
+    expect(sql).toContain('r.deleted_at is null');
   });
 
   it('deduplicates repeated trigrams', () => {

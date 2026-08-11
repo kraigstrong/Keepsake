@@ -50,9 +50,21 @@ describe('readLocalLibraryRecipes', () => {
       },
     ]);
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? order by title',
+      'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
       HOUSEHOLD_ID,
     );
+  });
+
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', async () => {
+    const db = createMockDb();
+    mockedGetDatabase.mockResolvedValue(db);
+
+    await readLocalLibraryRecipes(HOUSEHOLD_ID);
+
+    const getAllAsync = db.getAllAsync as jest.Mock;
+    const query = getAllAsync.mock.calls[0][0] as string;
+    expect(query).toContain('archived_at is null');
+    expect(query).toContain('deleted_at is null');
   });
 
   it('falls back a null created_at (pre-schema-v3-resync row) to the epoch, not "now"', async () => {

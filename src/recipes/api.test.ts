@@ -27,14 +27,18 @@ describe('fetchRecipes', () => {
   it('returns id/title/servingsCount summaries', async () => {
     mockedFrom.mockReturnValue({
       select: () => ({
-        order: () =>
-          Promise.resolve({
-            data: [
-              { id: 'r1', title: 'Chili', servings_count: 6 },
-              { id: 'r2', title: 'Tacos', servings_count: null },
-            ],
-            error: null,
+        is: () => ({
+          is: () => ({
+            order: () =>
+              Promise.resolve({
+                data: [
+                  { id: 'r1', title: 'Chili', servings_count: 6 },
+                  { id: 'r2', title: 'Tacos', servings_count: null },
+                ],
+                error: null,
+              }),
           }),
+        }),
       }),
     });
 
@@ -45,9 +49,27 @@ describe('fetchRecipes', () => {
     expect(mockedFrom).toHaveBeenCalledWith('recipes');
   });
 
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', async () => {
+    const order = jest.fn(() => Promise.resolve({ data: [], error: null }));
+    const secondIs = jest.fn(() => ({ order }));
+    const firstIs = jest.fn(() => ({ is: secondIs }));
+    mockedFrom.mockReturnValue({ select: () => ({ is: firstIs }) });
+
+    await fetchRecipes();
+
+    expect(firstIs).toHaveBeenCalledWith('archived_at', null);
+    expect(secondIs).toHaveBeenCalledWith('deleted_at', null);
+  });
+
   it('throws on a Supabase error', async () => {
     mockedFrom.mockReturnValue({
-      select: () => ({ order: () => Promise.resolve({ data: null, error: new Error('boom') }) }),
+      select: () => ({
+        is: () => ({
+          is: () => ({
+            order: () => Promise.resolve({ data: null, error: new Error('boom') }),
+          }),
+        }),
+      }),
     });
 
     await expect(fetchRecipes()).rejects.toThrow('boom');
