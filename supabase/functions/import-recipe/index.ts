@@ -316,11 +316,20 @@ Deno.serve(async (req: Request) => {
     // treated as its own import, before any fetch or AI call. RLS
     // already scopes this select to the caller's own household, so no
     // explicit household_id filter is needed here.
+    //
+    // deleted_at is excluded (Phase 16, ADR-0025): without this, a
+    // deleted recipe would still match here and silently resolve a
+    // re-import to the hidden, deleted row instead of creating a fresh
+    // one — recipes_household_source_url_idx already stopped enforcing
+    // uniqueness against a deleted row for the same reason. archived_at
+    // is deliberately NOT excluded — an archived recipe still counts as
+    // "already have this" for import purposes, unchanged from before.
     if (!isPhotoJob) {
       const { data: existingRecipes } = await supabase
         .from('recipes')
         .select('id, source_url')
-        .not('source_url', 'is', null);
+        .not('source_url', 'is', null)
+        .is('deleted_at', null);
 
       for (const existing of existingRecipes ?? []) {
         let existingNormalized: string;
