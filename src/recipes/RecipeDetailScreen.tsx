@@ -7,6 +7,7 @@ import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api'
 import { getHeroImageUrl } from './heroImage';
 import { DEFAULT_SERVINGS_WHEN_UNKNOWN, SCALE_PRESETS, scaledIngredientSections } from './scaling';
 import { Button } from '../components/Button';
+import { type CookingEvent, getCookingHistory } from '../cooking/api';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
@@ -60,6 +61,7 @@ export function RecipeDetailScreen({
   const [categories, setCategories] = useState<Category[]>([]);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+  const [cookingHistory, setCookingHistory] = useState<CookingEvent[]>([]);
   // Both screen-local, reset every visit (ADR-0018) — never persisted.
   const [displayMode, setDisplayMode] = useState<'original' | 'preferred'>('preferred');
   const [multiplier, setMultiplier] = useState(1);
@@ -101,6 +103,22 @@ export function RecipeDetailScreen({
       cancelled = true;
     };
   }, [session]);
+
+  // REC-05/NOTE-01..03 (Phase 15, ADR-0024): always online, same as
+  // getCookingHistory's own "no offline mirror" call — a recipe with no
+  // cooking history yet just resolves to an empty array, not an error,
+  // so there's nothing to show a load-failure state for.
+  useEffect(() => {
+    let cancelled = false;
+    getCookingHistory(recipeId)
+      .then((events) => {
+        if (!cancelled) setCookingHistory(events);
+      })
+      .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
+    return () => {
+      cancelled = true;
+    };
+  }, [recipeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,6 +404,21 @@ export function RecipeDetailScreen({
         </View>
       )}
 
+      {cookingHistory.length > 0 && (
+        <View style={styles.section} testID="recipe-detail-cooking-history">
+          <Text style={styles.sectionHeading}>Cooking History</Text>
+          {/* Already newest-first (getCookingHistory) — NOTE-03's "newest
+              note preview appears near top" is exactly this ordering,
+              not a separate preview element. */}
+          {cookingHistory.map((event) => (
+            <View key={event.id} style={styles.cookingHistoryRow}>
+              <Text style={styles.line}>{formatCookedAt(event.cookedAt)}</Text>
+              {event.note && <Text style={styles.cookingHistoryNote}>{event.note}</Text>}
+            </View>
+          ))}
+        </View>
+      )}
+
       <View style={styles.actions}>
         <Pressable
           style={styles.editButton}
@@ -440,6 +473,14 @@ export function RecipeDetailScreen({
 function openExternalUrl(url: string | null) {
   if (!url || !/^https?:\/\//i.test(url)) return;
   Linking.openURL(url);
+}
+
+function formatCookedAt(cookedAt: string): string {
+  return new Date(cookedAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 const styles = StyleSheet.create({
@@ -509,6 +550,13 @@ const styles = StyleSheet.create({
   },
   link: {
     color: colors.accent,
+  },
+  cookingHistoryRow: {
+    marginTop: spacing.xs,
+  },
+  cookingHistoryNote: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   actions: {
     flexDirection: 'row',
