@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
@@ -108,17 +108,27 @@ export function RecipeDetailScreen({
   // getCookingHistory's own "no offline mirror" call — a recipe with no
   // cooking history yet just resolves to an empty array, not an error,
   // so there's nothing to show a load-failure state for.
-  useEffect(() => {
-    let cancelled = false;
-    getCookingHistory(recipeId)
-      .then((events) => {
-        if (!cancelled) setCookingHistory(events);
-      })
-      .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
-    return () => {
-      cancelled = true;
-    };
-  }, [recipeId]);
+  //
+  // useFocusEffect, not a plain useEffect keyed on recipeId: Cooking Mode
+  // is pushed on top of this screen and calls router.back() on
+  // completion, which returns to this same still-mounted instance rather
+  // than remounting it — a recipeId-only effect would never re-run, so a
+  // just-recorded event wouldn't appear until the screen was fully
+  // closed and reopened. Same pattern ThisWeekScreen uses to refresh on
+  // return.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getCookingHistory(recipeId)
+        .then((events) => {
+          if (!cancelled) setCookingHistory(events);
+        })
+        .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
+      return () => {
+        cancelled = true;
+      };
+    }, [recipeId]),
+  );
 
   useEffect(() => {
     let cancelled = false;

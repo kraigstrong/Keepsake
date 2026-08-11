@@ -52,7 +52,10 @@ export async function recordCookingEvent(input: RecordCookingEventInput): Promis
     recipe_id: input.recipeId,
     cooked_at: input.cookedAt,
     note: input.note,
-    client_event_id: input.clientEventId,
+    // Matches the RPC's client_event_id_param — the SQL parameter isn't
+    // named client_event_id (an ON CONFLICT target ambiguity, see the
+    // migration's own comment); PostgREST matches these keys by name.
+    client_event_id_param: input.clientEventId,
   });
   if (error) throw new Error(error.message);
 }

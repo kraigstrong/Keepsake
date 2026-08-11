@@ -29,7 +29,21 @@ jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }))
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../sync/offlineRecipes');
 jest.mock('../thisWeek/api');
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+// Real useFocusEffect only re-invokes its callback on a focus event, or
+// when the memoized callback's identity changes while still focused —
+// never on every unrelated re-render. This mock approximates that by
+// only calling a *new* callback identity, same pattern
+// ThisWeekScreen.test.tsx uses for its own useFocusEffect usage.
+let mockLastFocusEffect: (() => void) | null = null;
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+  useFocusEffect: jest.fn((effect: () => void) => {
+    if (effect !== mockLastFocusEffect) {
+      mockLastFocusEffect = effect;
+      effect();
+    }
+  }),
+}));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
 // missing-env-var throw.

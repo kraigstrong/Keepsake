@@ -81,7 +81,7 @@ describe('recordCookingEvent', () => {
       recipe_id: 'recipe-1',
       cooked_at: '2026-08-10T18:00:00.000Z',
       note: 'Kids loved this.',
-      client_event_id: 'event-1',
+      client_event_id_param: 'event-1',
     });
   });
 

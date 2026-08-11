@@ -9,11 +9,20 @@
 -- caller_household_id` guard on the conflict path means a guessed/reused
 -- client_event_id from a different household can't overwrite this one's
 -- row — returns null (raised below) instead of silently updating it.
+--
+-- Parameter is client_event_id_param, not client_event_id — an ON
+-- CONFLICT target column list only ever names table columns (it can't be
+-- qualified the way a WHERE/VALUES reference can), so a same-named
+-- parameter makes "client_event_id" genuinely ambiguous there, not just
+-- a style nit — caught by CI's real Postgres run (this environment has
+-- no Docker to catch it locally). Matches this codebase's existing
+-- _param suffix convention for exactly this collision (see
+-- get_or_create_current_weekly_plan's week_key_param).
 create or replace function public.record_cooking_event(
   recipe_id uuid,
   cooked_at timestamptz,
   note text,
-  client_event_id uuid
+  client_event_id_param uuid
 )
 returns public.cooking_events
 language plpgsql
@@ -40,7 +49,7 @@ begin
     (recipe_id, household_id, cooked_at, note, cooked_by, client_event_id)
   values
     (record_cooking_event.recipe_id, caller_household_id, record_cooking_event.cooked_at,
-     record_cooking_event.note, auth.uid(), record_cooking_event.client_event_id)
+     record_cooking_event.note, auth.uid(), client_event_id_param)
   on conflict (client_event_id) do update
     set cooked_at = excluded.cooked_at,
         note = excluded.note

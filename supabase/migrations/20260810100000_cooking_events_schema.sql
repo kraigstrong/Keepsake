@@ -33,3 +33,5 @@ create index if not exists idx_cooking_events_household_id on public.cooking_eve
 -- query pattern directly.
 create index if not exists idx_cooking_events_recipe_cooked_at
   on public.cooking_events (recipe_id, cooked_at desc);
+
+alter table public.cooking_events enable row level security;

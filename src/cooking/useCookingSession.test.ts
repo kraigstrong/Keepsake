@@ -163,4 +163,21 @@ describe('useCookingSession', () => {
     await waitFor(() => expect(result.current.loadError).toBe(true));
     expect(result.current.recipe).toBeNull();
   });
+
+  it('still loads the saved checklist when offline with a local recipe cache hit (regression: an early return used to skip it)', async () => {
+    mockedReadLocalRecipe.mockResolvedValue(recipe);
+    mockedFetchRecipe.mockRejectedValue(new Error('offline'));
+    mockedGetCookingSession.mockResolvedValue({
+      recipeId: RECIPE_ID,
+      checkedIngredientKeys: ['0-0'],
+      checkedInstructionKeys: [],
+      updatedAt: '2026-08-10T18:00:00.000Z',
+    });
+
+    const { result } = await renderHook(() => useCookingSession(RECIPE_ID));
+
+    await waitFor(() => expect(result.current.recipe).toEqual(recipe));
+    expect(result.current.loadError).toBe(false);
+    await waitFor(() => expect(result.current.checkedIngredientKeys).toEqual(new Set(['0-0'])));
+  });
 });

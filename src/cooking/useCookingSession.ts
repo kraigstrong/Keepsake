@@ -74,9 +74,18 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
         setIsLoading(false);
         setLoadError(false);
       } catch {
-        if (cancelled || haveData) return;
-        setLoadError(true);
-        setIsLoading(false);
+        // A live-fetch failure while offline is only a real error when
+        // there was no local cache to fall back on — but either way,
+        // this must fall through to the checklist load below rather
+        // than returning early, or a resumed offline cook would always
+        // show an empty checklist (a real bug: an early return here used
+        // to skip getCookingSession entirely whenever the local read had
+        // already succeeded).
+        if (cancelled) return;
+        if (!haveData) {
+          setLoadError(true);
+          setIsLoading(false);
+        }
       }
 
       // Checklist progress is a nice-to-have on top of the recipe itself
