@@ -6,9 +6,9 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 
 ## Current
 
-- **Phase:** 15 — Cooking Mode and Cooking History. Phases 12, 13, and 14 have all formally exited (12: Conditional Pass, 2026-08-07; 13 and 14: Pass, 2026-08-10 — see History table). Not yet started.
-- **Status:** No build scope started yet for Phase 15. Per ADR-0003, Phase 15 requires a physical-device demonstration (screen-awake and real kitchen-use behavior aren't representative on Simulator).
-- **Next action:** Run `start-phase` for Phase 15.
+- **Phase:** 15 — Cooking Mode and Cooking History. Phases 12, 13, and 14 have all formally exited (12: Conditional Pass, 2026-08-07; 13 and 14: Pass, 2026-08-10 — see History table). In progress on branch `phase-15-cooking-mode`.
+- **Status:** Foundation landed (3 commits, not yet pushed): ADR-0024 (design decisions — local/shared data split matching prd.md §17's own line, offline-outbox reuse of the import_outbox shape from ADR-0016, connectivity-gated plan removal), `cooking_events` server schema/RLS/RPCs (`record_cooking_event` idempotent on `client_event_id` for safe offline-outbox replay, `remove_confirmed_planning_entry` for COOK-05 — the RPC `weekly_plan_rpcs.sql`'s own comment flagged this phase would need), and local schema v10 (`cooking_sessions` for device-specific checklist progress, `cooking_event_outbox` for durable offline completion). 100 suites / 861 tests passing, `tsc`/`eslint`/`prettier`/`check:client-secrets` clean. pgTAP suite (`cooking_event_rpcs.test.sql`) not run locally (no Docker), same as every phase since 12 — CI is the real gate. No UI yet.
+- **Next action:** Continue the commit plan: domain logic (checklist state + outbox helpers) → server operations (submit/drain outbox) → client data access → Cooking Mode screen UI (single scrolling screen, `useCookingModeAwake` wired in, accessibility announcements) → Done Cooking flow (note prompt + remove-from-plan toggle) → cooking history UI on Recipe Detail → traceability update. Per ADR-0003, this phase's exit gate additionally needs a physical-device demonstration once build scope is complete (screen-awake/real kitchen-use aren't representative on Simulator).
 - **Blocked on:** Nothing.
 
 ## History
