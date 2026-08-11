@@ -2,18 +2,10 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { convertToSystem } from '../../server/units/convertUnit';
-import { formatIngredientLine } from '../../server/units/formatIngredientLine';
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
-import { scaleQuantity } from '../../server/units/scaleQuantity';
-import {
-  type Category,
-  fetchCategories,
-  fetchRecipe,
-  type IngredientSection,
-  type Recipe,
-} from './api';
+import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
 import { getHeroImageUrl } from './heroImage';
+import { DEFAULT_SERVINGS_WHEN_UNKNOWN, SCALE_PRESETS, scaledIngredientSections } from './scaling';
 import { Button } from '../components/Button';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
@@ -31,41 +23,6 @@ import {
 } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipeToThisWeek, fetchCurrentWeeklyPlan } from '../thisWeek/api';
-
-// A recipe whose yield doesn't parse to a serving count (free text like
-// "1 loaf") still needs some positive servings value to plan with —
-// this default is the same "typical household" assumption the design
-// doc's own seed recipes use throughout ("Serves 4").
-const DEFAULT_SERVINGS_WHEN_UNKNOWN = 4;
-
-// ADR-0018: presets are screen-local and reset every visit — a recipe
-// never "remembers" a prior scaling, Original is always one tap away.
-const SCALE_PRESETS: { label: string; multiplier: number }[] = [
-  { label: '½×', multiplier: 0.5 },
-  { label: '1×', multiplier: 1 },
-  { label: '1½×', multiplier: 1.5 },
-  { label: '2×', multiplier: 2 },
-  { label: '3×', multiplier: 3 },
-  { label: '4×', multiplier: 4 },
-];
-
-function scaledIngredientSections(
-  sections: IngredientSection[],
-  multiplier: number,
-  displayMode: 'original' | 'preferred',
-  preferredUnitSystem: UnitSystem | null,
-): { title: string | null; lines: string[] }[] {
-  return sections.map((section) => ({
-    title: section.title,
-    lines: section.lines.map((line) => {
-      let quantity = scaleQuantity(line, multiplier);
-      if (displayMode === 'preferred' && preferredUnitSystem) {
-        quantity = convertToSystem(quantity, preferredUnitSystem);
-      }
-      return formatIngredientLine({ ...line, ...quantity });
-    }),
-  }));
-}
 
 export interface RecipeDetailScreenProps {
   recipeId: string;
@@ -465,7 +422,14 @@ export function RecipeDetailScreen({
       </View>
 
       <Button
+        title="Start Cooking"
+        onPress={() => router.push(`/recipe/${recipeId}/cook`)}
+        testID="recipe-detail-start-cooking"
+      />
+
+      <Button
         title="Add to This Week"
+        variant="secondary"
         onPress={handleAddToThisWeek}
         testID="recipe-detail-add-to-this-week"
       />

@@ -79,8 +79,14 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
         setIsLoading(false);
       }
 
-      const db = await getDatabase();
-      const session = await getCookingSession(db, recipeId);
+      // Checklist progress is a nice-to-have on top of the recipe itself
+      // (which has already loaded above by this point, local or live) —
+      // a local-storage hiccup here degrades to an empty checklist rather
+      // than failing the whole screen the way the recipe load's own
+      // errors do.
+      const session = await getDatabase()
+        .then((db) => getCookingSession(db, recipeId))
+        .catch(() => null);
       if (cancelled) return;
       setCheckedIngredientKeys(new Set(session?.checkedIngredientKeys ?? []));
       setCheckedInstructionKeys(new Set(session?.checkedInstructionKeys ?? []));
@@ -98,14 +104,16 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
         const next = new Set(previous);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        getDatabase().then((db) =>
-          saveCookingSession(
-            db,
-            recipeId,
-            Array.from(next),
-            Array.from(checkedInstructionKeysRef.current),
-          ),
-        );
+        getDatabase()
+          .then((db) =>
+            saveCookingSession(
+              db,
+              recipeId,
+              Array.from(next),
+              Array.from(checkedInstructionKeysRef.current),
+            ),
+          )
+          .catch(() => undefined);
         return next;
       });
     },
@@ -118,14 +126,16 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
         const next = new Set(previous);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        getDatabase().then((db) =>
-          saveCookingSession(
-            db,
-            recipeId,
-            Array.from(checkedIngredientKeysRef.current),
-            Array.from(next),
-          ),
-        );
+        getDatabase()
+          .then((db) =>
+            saveCookingSession(
+              db,
+              recipeId,
+              Array.from(checkedIngredientKeysRef.current),
+              Array.from(next),
+            ),
+          )
+          .catch(() => undefined);
         return next;
       });
     },
@@ -135,7 +145,9 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
   const resetChecklist = useCallback(() => {
     setCheckedIngredientKeys(new Set());
     setCheckedInstructionKeys(new Set());
-    getDatabase().then((db) => clearCookingSession(db, recipeId));
+    getDatabase()
+      .then((db) => clearCookingSession(db, recipeId))
+      .catch(() => undefined);
   }, [recipeId]);
 
   return {

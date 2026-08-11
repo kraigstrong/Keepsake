@@ -191,5 +191,16 @@ describe('recipe routes', () => {
     });
   });
 
+  // Phase 15's cook route lives under the same auto-discovered
+  // app/recipe/_layout.tsx as history/edit above — no root-layout
+  // registration to forget, but tested here rather than assumed for the
+  // same reason those already are.
+  it('reaches the cooking mode screen at /recipe/[id]/cook', async () => {
+    act(() => router.push('/recipe/recipe-1/cook'));
+    await waitFor(() => {
+      expect(screen.getByTestId('cooking-mode-loading')).toBeOnTheScreen();
+    });
+  });
+
   afterAll(() => cleanup());
 });
