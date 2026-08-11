@@ -1,0 +1,53 @@
+# ADR-0025: Archive/Delete data model, asset cleanup, and reuse of Phase 6's tombstone plumbing
+
+- **Status:** Accepted
+- **Date:** 2026-08-11
+- **Phase:** 16
+
+## Context
+
+Phase 16's build scope (`docs/execution-plan.md:1165-1194`) lists ten bullets the PRD (`docs/prd.md` §20-21) describes only at the product level: Archive/Unarchive, move to Recently Deleted with confirmation, Restore, permanent delete, asset cleanup, tombstones, multi-member sync. Two prior phases already did real forward planning for this one specifically:
+
+- **ADR-0013 (Phase 6)** built `deleted_recipes` — a tombstone table + `before delete` trigger on `public.recipes` — explicitly "ahead of Phase 16's delete feature," noting "this trigger doesn't care why a row disappeared."
+- **`weekly_plan_rpcs.sql`'s own comment (Phase 12)** flagged that `add_to_weekly_plan`/`add_recipes_to_weekly_plan` will need `and archived_at is null` once this phase adds that column.
+
+This ADR is mostly about not re-deciding what those two already settled, and filling in what's still genuinely open: the exact data model, which of the two "gone" states (archived vs. deleted) each existing read path excludes, how asset cleanup actually happens without a service-role credential on the client, and where the two new list screens live given this app has no overflow-menu component yet.
+
+## Decision
+
+**1. Two independent nullable timestamps on `recipes`: `archived_at`, `deleted_at`.** Not a single `status` enum — prd.md §21 ("Delete lives beside Archive") describes them as parallel actions from the same surface, not a state machine where you must archive before deleting. `deleted_at is not null` takes precedence in every visibility rule below (a deleted-while-archived recipe is hidden from Archived Recipes too, not just Library) — Recently Deleted is meant to be the one place nothing else shows it. Restoring a recipe that was archived before it was deleted clears only `deleted_at`, so it lands back in Archived Recipes, not the main Library — the more conservative outcome, and free given the two columns don't overwrite each other.
+
+**2. Five narrow RPCs, same `SECURITY DEFINER` + re-derive-household-from-`auth.uid()` shape every mutating RPC has used since Phase 12:** `archive_recipe`, `unarchive_recipe`, `delete_recipe` (soft — sets `deleted_at`), `restore_recipe` (clears `deleted_at`), `permanently_delete_recipe`. The first four are plain `UPDATE`s that also bump `updated_at` — no new sync plumbing needed, the existing `(updated_at, id)`-cursored incremental pull (ADR-0013) already re-fetches a recipe whose `updated_at` moved, on every device, for free. `permanently_delete_recipe` is a real `DELETE FROM recipes` — Phase 6's `deleted_recipes` trigger fires exactly as already built, with zero changes; this ADR adds no new tombstone mechanism. Idempotent per SEC-07: a repeat call against an already-gone id affects 0 rows and returns success, not an error — this is the phase whose exit gate literally says "permanent deletion is complete and safe," and "safe" here means a retried request can't fail loudly for a reason that isn't really a problem.
+
+**3. `permanently_delete_recipe` only operates on an already-deleted recipe (`deleted_at is not null` required), never directly from Library.** Matches prd.md §21's described flow (Delete → Recently Deleted → restore-or-permanently-delete from there) and adds a mandatory two-step for the truly irreversible action, consistent with this app's general bias toward confirmable, staged destruction rather than one-tap nukes.
+
+**4. Asset cleanup happens client-side, after the RPC succeeds, using the same Storage client SDK uploads already use — not a server-side Storage API call.** `permanently_delete_recipe` returns the doomed row's `hero_image_path`/`original_photo_path` before deleting it; the client then calls `supabase.storage.from('recipe-images').remove([...])` for whichever paths were non-null, already permitted by the existing per-household-path-prefix bucket policy. No service-role key or `pg_net` needed. **Accepted residual risk, not new:** a network drop between the RPC succeeding and the client's cleanup call leaves an orphaned Storage object — the same class of gap ADR-0017/T15 already accepted for photo-import uploads, not a new problem this phase introduces. If storage-cost pressure ever makes this worth closing, Phase 9's 30-day-expiry pattern is the plausible fix, same as T15's own note says.
+
+**5. Visibility split by *why* a screen exists, not one blanket filter:**
+   - **Library, Search (FTS + trigram), the This-Week add-recipe picker, and Frequently Selected/Recently Added (both read through Library's own query)** all exclude `archived_at is not null or deleted_at is not null` — prd.md §20 names this exact list.
+   - **Archived Recipes** shows `archived_at is not null and deleted_at is null`.
+   - **Recently Deleted** shows `deleted_at is not null` (regardless of `archived_at`) — "shared across household" per prd.md §21, so every member sees the same list.
+   - **Recipe Detail itself stays reachable for an archived recipe** (Archived Recipes navigates into it, same screen, no special-cased view) — archiving hides a recipe from *listings*, prd.md §20 never says viewing it directly stops working.
+
+**6. Local SQLite mirror gains the same two columns (schema v11) — but only to make Library/Search's existing offline support (OFF-01/02) correctly exclude archived/deleted recipes.** Archived Recipes and Recently Deleted are **not** locally mirrored — direct, always-online queries, the same "no offline mirror" call ADR-0021 made for This Week and ADR-0024 made for cooking history. Nothing in prd.md's Offline section (§22, "Browsing / Searching / Cooking" supported, "Editing / Planning / Grocery export" require connectivity) lists archive/delete management as offline-required, and treating it as an editing-class mutation (connectivity required) is the more conservative, simpler default. Sync's incremental pull already carries `archived_at`/`deleted_at` through to local storage as ordinary recipe columns — no new sync-engine logic, just two more fields upserted and read back.
+
+**7. Archive/Delete actions live as buttons in Recipe Detail's existing action row (next to Edit/History/Original Photo), not a new overflow-menu component.** prd.md §20 says "Archive lives in overflow menu," but this app has never built an overflow menu — every other per-recipe action already lives in that same plain button row (`RecipeDetailScreen.tsx`'s `styles.actions`). Adding a menu component for two buttons, on an app this size, would be new UI surface this phase doesn't otherwise need. Developer-facing deviation, same category as ADR-0021's tap-based-reorder pivot — noted here rather than silently reinterpreted.
+
+**8. Archived Recipes and Recently Deleted are both reached from the Settings screen**, alongside household membership and preferences — the one existing navigation hub, matching prd.md §2's "few settings" posture rather than inventing a second one.
+
+**9. Both soft-delete and permanent-delete require confirmation via the existing `confirm()` helper (`src/components/confirm.ts`, native `Alert.alert`, `destructive` style).** prd.md §21 only states this explicitly for the soft-delete step ("Confirmation required"), but permanent delete is the actually-irreversible action — requiring confirmation there too is this phase's own judgment call, not a restatement of an ambiguous requirement, and consistent with Phase 15's own retrospective finding that an unconfirmed destructive action (Reset checklist) was a real gap worth avoiding here from the start.
+
+## Alternatives considered
+
+- **Single `lifecycle_state` enum (`active`/`archived`/`deleted`) instead of two timestamps.** Rejected: loses the "archived recipe that later got deleted, then restored back to archived" case for free: two independent columns fall out of the natural read/write pattern, an enum would need an explicit "previous state" field to recover the same behavior.
+- **Server-side Storage cleanup via a `pg_net` call from the delete trigger.** Rejected: this app has never given Postgres outbound HTTP capability, and introducing it for one cleanup call is disproportionate; the client already has the exact Storage permissions needed and already performs Storage writes directly (image upload).
+- **Mirror Archived Recipes/Recently Deleted into local SQLite too, for full offline parity.** Rejected: no PRD requirement asks for offline archive/delete management, and building a second local-mirror surface for two rarely-visited screens is speculative complexity this phase doesn't need to carry.
+- **A real overflow-menu component, matching prd.md's literal wording.** Rejected for now (decision 7) — tracked as a deviation, not silently dropped; worth building for real once a third action needs the same treatment.
+- **Allow `permanently_delete_recipe` directly from Library/Archived Recipes, skipping the Recently Deleted staging step.** Rejected: contradicts the flow prd.md §21 actually describes, and removes the one structural safeguard (a mandatory two-step) against the phase's most irreversible action.
+
+## Consequences
+
+- New Supabase migration set: `recipes` gains `archived_at`/`deleted_at` (nullable timestamptz, no default) + indexes matching the exclusion filters' actual WHERE shape; RLS unaffected (existing `is_household_member` policies already cover these rows, no new policy needed since it's the same table); five new RPCs.
+- New local schema v11: `archived_at`/`deleted_at` added to the local `recipes` mirror table.
+- Every existing Library/Search/planning-picker query (server and local) needs its `WHERE` clause extended — a real, if mechanical, touch across several files, called out explicitly as its own commit rather than folded silently into the schema commit.
+- `permanently_delete_recipe`'s asset cleanup is best-effort from the client's perspective (decision 4) — a known, accepted, non-blocking gap, not a defect to chase down this phase.
