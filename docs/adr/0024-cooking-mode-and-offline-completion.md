@@ -25,6 +25,8 @@ Screen-awake itself is already resolved — Phase 1's risk spike (`docs/risk-spi
 
 **5. Accessibility announcements use `AccessibilityInfo.announceForAccessibility`** (React Native core, no new dependency) for state changes VoiceOver users wouldn't otherwise catch from a plain visual change — an item checked, Done Cooking confirmed. First phase whose build scope calls this out explicitly; the mechanism itself is standard RN, not a new architectural decision.
 
+**6. Cooking history reads are always online, no local offline mirror** — `src/cooking/api.ts`'s `getCookingHistory` is a direct Postgrest select, the same "no `src/sync/*` mirror" convention This Week's own `api.ts` already established for planning data (ADR-0021). Nothing in the PRD's OFF-* requirements asks for offline *viewing* of cooking history (only OFF-03 checklist and OFF-05 completion queuing), so building a third local mirror table for it would be scope the phase doesn't need. Revisit only if a future phase adds that requirement.
+
 ## Alternatives considered
 
 - **Generalize `outbox.ts` into a shared engine now that a second outbox exists.** Rejected for the same reason ADR-0013 rejected a generic tombstone table ahead of its second case: copy the three-line pattern, generalize only once a third case makes the shape of the abstraction actually clear rather than guessed at.
