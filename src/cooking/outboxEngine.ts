@@ -1,8 +1,8 @@
 import { recordCookingEvent } from './api';
 import {
   listSubmittableCookingEventOutboxItems,
-  markCookingEventOutboxItemFailed,
   markCookingEventOutboxItemSubmitting,
+  recordCookingEventOutboxFailure,
   removeCookingEventOutboxItem,
 } from './outbox';
 import { getDatabase } from '../db/database';
@@ -18,6 +18,13 @@ import { logError } from '../observability';
  * 3) — there's nothing new to tell them when a delayed background sync
  * eventually succeeds, so this returns void rather than an outcome array
  * for a caller to turn into a toast.
+ *
+ * A failed item is retried on every later call, not given up on — see
+ * outbox.ts's listSubmittableCookingEventOutboxItems for why there's no
+ * terminal "failed" state here the way import_outbox has. This function
+ * itself doesn't loop-until-success within one call (a failure here just
+ * moves on to the next item in this run's fixed item list); the retry
+ * happens naturally on the next foreground/reconnect drain.
  *
  * Callers gate this on being signed in, online, and belonging to a
  * household, same contract as the import engine. getCurrentHouseholdId
@@ -46,7 +53,7 @@ export async function submitPendingCookingEvents(
       await removeCookingEventOutboxItem(db, item.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      await markCookingEventOutboxItemFailed(db, item.id, message);
+      await recordCookingEventOutboxFailure(db, item.id, message);
       logError(error, { context: 'submitCookingEventOutboxItem' });
     }
   }

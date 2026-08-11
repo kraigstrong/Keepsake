@@ -2,8 +2,8 @@ import { recordCookingEvent } from './api';
 import { submitPendingCookingEvents } from './outboxEngine';
 import {
   listSubmittableCookingEventOutboxItems,
-  markCookingEventOutboxItemFailed,
   markCookingEventOutboxItemSubmitting,
+  recordCookingEventOutboxFailure,
   removeCookingEventOutboxItem,
 } from './outbox';
 import { getDatabase } from '../db/database';
@@ -15,7 +15,7 @@ jest.mock('./api', () => ({ recordCookingEvent: jest.fn() }));
 jest.mock('./outbox', () => ({
   listSubmittableCookingEventOutboxItems: jest.fn(),
   markCookingEventOutboxItemSubmitting: jest.fn(),
-  markCookingEventOutboxItemFailed: jest.fn(),
+  recordCookingEventOutboxFailure: jest.fn(),
   removeCookingEventOutboxItem: jest.fn(),
 }));
 
@@ -23,7 +23,7 @@ const mockedGetDatabase = getDatabase as jest.Mock;
 const mockedRecordCookingEvent = recordCookingEvent as jest.Mock;
 const mockedListSubmittable = listSubmittableCookingEventOutboxItems as jest.Mock;
 const mockedMarkSubmitting = markCookingEventOutboxItemSubmitting as jest.Mock;
-const mockedMarkFailed = markCookingEventOutboxItemFailed as jest.Mock;
+const mockedRecordFailure = recordCookingEventOutboxFailure as jest.Mock;
 const mockedRemove = removeCookingEventOutboxItem as jest.Mock;
 const mockedLogError = logError as jest.Mock;
 
@@ -59,7 +59,7 @@ describe('submitPendingCookingEvents', () => {
       clientEventId: 'e1',
     });
     expect(mockedRemove).toHaveBeenCalledWith(fakeDb, 'e1');
-    expect(mockedMarkFailed).not.toHaveBeenCalled();
+    expect(mockedRecordFailure).not.toHaveBeenCalled();
   });
 
   it("passes the caller's household id through to the submittable-items query", async () => {
@@ -68,7 +68,7 @@ describe('submitPendingCookingEvents', () => {
     expect(mockedListSubmittable).toHaveBeenCalledWith(fakeDb, HOUSEHOLD_ID);
   });
 
-  it('marks a failure as failed, logs it, and leaves the row in the queue rather than removing it', async () => {
+  it('records a failure, logs it, and leaves the row in the queue rather than removing it', async () => {
     mockedListSubmittable.mockResolvedValue([
       { id: 'e1', recipeId: 'recipe-1', householdId: HOUSEHOLD_ID, cookedAt: 'x', note: null },
     ]);
@@ -76,9 +76,30 @@ describe('submitPendingCookingEvents', () => {
 
     await submitPendingCookingEvents(HOUSEHOLD_ID);
 
-    expect(mockedMarkFailed).toHaveBeenCalledWith(fakeDb, 'e1', 'recipe not found');
+    expect(mockedRecordFailure).toHaveBeenCalledWith(fakeDb, 'e1', 'recipe not found');
     expect(mockedRemove).not.toHaveBeenCalled();
     expect(mockedLogError).toHaveBeenCalled();
+  });
+
+  it('retries a previously-failed item on the next call rather than giving up on it', async () => {
+    // recordCookingEventOutboxFailure returns the row to 'pending'
+    // (outbox.ts's own contract) — listSubmittableCookingEventOutboxItems
+    // is mocked here per-call to reflect that, not asserting on the real
+    // SQL, since that's outbox.test.ts's own job.
+    mockedListSubmittable.mockResolvedValueOnce([
+      { id: 'e1', recipeId: 'recipe-1', householdId: HOUSEHOLD_ID, cookedAt: 'x', note: null },
+    ]);
+    mockedRecordCookingEvent.mockRejectedValueOnce(new Error('network error'));
+    await submitPendingCookingEvents(HOUSEHOLD_ID);
+    expect(mockedRemove).not.toHaveBeenCalled();
+
+    mockedListSubmittable.mockResolvedValueOnce([
+      { id: 'e1', recipeId: 'recipe-1', householdId: HOUSEHOLD_ID, cookedAt: 'x', note: null },
+    ]);
+    mockedRecordCookingEvent.mockResolvedValueOnce(undefined);
+    await submitPendingCookingEvents(HOUSEHOLD_ID);
+
+    expect(mockedRemove).toHaveBeenCalledWith(fakeDb, 'e1');
   });
 
   it('processes multiple items in order, each independently', async () => {
@@ -93,7 +114,7 @@ describe('submitPendingCookingEvents', () => {
     await submitPendingCookingEvents(HOUSEHOLD_ID);
 
     expect(mockedRemove).toHaveBeenCalledWith(fakeDb, 'e1');
-    expect(mockedMarkFailed).toHaveBeenCalledWith(fakeDb, 'e2', 'boom');
+    expect(mockedRecordFailure).toHaveBeenCalledWith(fakeDb, 'e2', 'boom');
   });
 
   it('stops the run if the signed-in household changes mid-drain', async () => {

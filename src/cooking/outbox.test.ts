@@ -1,8 +1,8 @@
 import {
   enqueueCookingEvent,
   listSubmittableCookingEventOutboxItems,
-  markCookingEventOutboxItemFailed,
   markCookingEventOutboxItemSubmitting,
+  recordCookingEventOutboxFailure,
   removeCookingEventOutboxItem,
   type LocalDb,
 } from './outbox';
@@ -116,11 +116,11 @@ describe('status transitions', () => {
     expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining("status = 'submitting'"), '1');
   });
 
-  it('markCookingEventOutboxItemFailed records the error message', async () => {
+  it('recordCookingEventOutboxFailure records the error but returns the row to pending, not a terminal state', async () => {
     const db = createMockDb();
-    await markCookingEventOutboxItemFailed(db, '1', 'boom');
+    await recordCookingEventOutboxFailure(db, '1', 'boom');
     expect(db.runAsync).toHaveBeenCalledWith(
-      expect.stringContaining("status = 'failed'"),
+      expect.stringContaining("status = 'pending'"),
       'boom',
       '1',
     );

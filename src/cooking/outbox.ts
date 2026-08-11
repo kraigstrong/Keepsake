@@ -20,7 +20,7 @@ export interface LocalDb {
   runAsync(source: string, ...params: unknown[]): Promise<unknown>;
 }
 
-export type CookingEventOutboxStatus = 'pending' | 'submitting' | 'failed';
+export type CookingEventOutboxStatus = 'pending' | 'submitting';
 
 export interface CookingEventOutboxItem {
   /** Also record_cooking_event()'s client_event_id idempotency key. */
@@ -91,13 +91,22 @@ export async function enqueueCookingEvent(
 }
 
 /**
- * Rows ready for a submission attempt: freshly queued ('pending') or
- * left mid-flight by an app kill during a previous attempt
- * ('submitting') — retrying the latter reuses the same id as
- * record_cooking_event()'s idempotency key, so a request the server
- * actually received isn't double-recorded. 'failed' rows are excluded,
- * same as import_outbox: a definitive negative answer is terminal for
- * this automatic engine. Oldest first.
+ * Every row not currently mid-flight is submittable — 'pending' (freshly
+ * queued, or a previous attempt that failed and was returned here by
+ * recordCookingEventOutboxFailure below) and 'submitting' (left mid-
+ * flight by an app kill during a previous attempt; retrying it reuses
+ * the same id as record_cooking_event()'s idempotency key, so a request
+ * the server actually received isn't double-recorded). Oldest first.
+ *
+ * Unlike import_outbox, there's no permanent-failure/retry-later
+ * distinction here (import has RETRY_LATER_MESSAGES for known rate-limit
+ * outcomes; nothing analogous exists for cooking events) — every failure
+ * is treated as retry-later, indefinitely, on the next foreground/
+ * reconnect drain. A stuck row (e.g. a household-ownership mismatch that
+ * can never resolve) costs one wasted RPC call per drain, not a silently
+ * lost completion — the tradeoff this app's own Phase 14 precedent
+ * (explicit "Retry failed items") argues for over a "give up" terminal
+ * state with no recovery path.
  */
 export async function listSubmittableCookingEventOutboxItems(
   db: LocalDb,
@@ -117,13 +126,21 @@ export async function markCookingEventOutboxItemSubmitting(db: LocalDb, id: stri
   await db.runAsync(`update cooking_event_outbox set status = 'submitting' where id = ?`, id);
 }
 
-export async function markCookingEventOutboxItemFailed(
+/**
+ * Records why an attempt failed and returns the row to 'pending' so the
+ * next drain retries it — see listSubmittableCookingEventOutboxItems's
+ * own comment for why there's no separate terminal 'failed' state.
+ * error_message is kept (not cleared) even across a later successful
+ * retry's own row deletion — there's nothing to clean up mid-flight,
+ * only a future observability surface would ever read it back.
+ */
+export async function recordCookingEventOutboxFailure(
   db: LocalDb,
   id: string,
   errorMessage: string,
 ): Promise<void> {
   await db.runAsync(
-    `update cooking_event_outbox set status = 'failed', error_message = ? where id = ?`,
+    `update cooking_event_outbox set status = 'pending', error_message = ? where id = ?`,
     errorMessage,
     id,
   );
