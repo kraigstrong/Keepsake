@@ -2,7 +2,7 @@ import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-import { randomId } from '../recipes/heroImage';
+import { randomId } from '../shared/randomId';
 import { supabase } from '../supabase/instance';
 
 export interface PickedPhoto {

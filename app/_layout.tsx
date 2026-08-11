@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { OfflineState } from '../src/components/OfflineState';
 import { ToastProvider, useToast } from '../src/components/Toast';
+import { submitPendingCookingEvents } from '../src/cooking/outboxEngine';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
 import {
@@ -76,6 +77,7 @@ function ConnectivityAwareApp() {
       onReconnect={() => {
         triggerHouseholdSync(householdId);
         triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
+        triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
       }}
     >
       <HouseholdSyncOnMount householdId={householdId} />
@@ -83,6 +85,10 @@ function ConnectivityAwareApp() {
         householdId={householdId}
         getCurrentHouseholdId={getCurrentHouseholdId}
         showToast={showToast}
+      />
+      <CookingEventOutboxLifecycle
+        householdId={householdId}
+        getCurrentHouseholdId={getCurrentHouseholdId}
       />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
@@ -95,6 +101,42 @@ function ConnectivityAwareApp() {
 function triggerHouseholdSync(householdId: string | null): void {
   if (!householdId) return;
   syncHousehold(householdId).catch((error) => logError(error, { context: 'householdSync' }));
+}
+
+// Same trigger shape as triggerImportOutboxWork (mount + foreground +
+// reconnect), simpler body: submitPendingCookingEvents returns void, not
+// an outcome array — there's no toast to show (ADR-0024, see
+// outboxEngine.ts's own header comment for why).
+function triggerCookingEventOutboxWork(
+  householdId: string | null,
+  getCurrentHouseholdId: () => string | null,
+): void {
+  if (!householdId) return;
+  submitPendingCookingEvents(householdId, getCurrentHouseholdId).catch((error) =>
+    logError(error, { context: 'cookingEventOutbox' }),
+  );
+}
+
+function CookingEventOutboxLifecycle({
+  householdId,
+  getCurrentHouseholdId,
+}: {
+  householdId: string | null;
+  getCurrentHouseholdId: () => string | null;
+}) {
+  useEffect(() => {
+    triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
+      }
+    });
+
+    return () => subscription.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getCurrentHouseholdId is a stable identity across renders; only householdId should re-trigger this.
+  }, [householdId]);
+  return null;
 }
 
 // Initial sync once the household is known (cold launch, per

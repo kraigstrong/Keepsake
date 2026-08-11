@@ -1,20 +1,13 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { convertToSystem } from '../../server/units/convertUnit';
-import { formatIngredientLine } from '../../server/units/formatIngredientLine';
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
-import { scaleQuantity } from '../../server/units/scaleQuantity';
-import {
-  type Category,
-  fetchCategories,
-  fetchRecipe,
-  type IngredientSection,
-  type Recipe,
-} from './api';
+import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
 import { getHeroImageUrl } from './heroImage';
+import { DEFAULT_SERVINGS_WHEN_UNKNOWN, SCALE_PRESETS, scaledIngredientSections } from './scaling';
 import { Button } from '../components/Button';
+import { type CookingEvent, getCookingHistory } from '../cooking/api';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
@@ -31,41 +24,6 @@ import {
 } from '../sync/offlineRecipes';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipeToThisWeek, fetchCurrentWeeklyPlan } from '../thisWeek/api';
-
-// A recipe whose yield doesn't parse to a serving count (free text like
-// "1 loaf") still needs some positive servings value to plan with —
-// this default is the same "typical household" assumption the design
-// doc's own seed recipes use throughout ("Serves 4").
-const DEFAULT_SERVINGS_WHEN_UNKNOWN = 4;
-
-// ADR-0018: presets are screen-local and reset every visit — a recipe
-// never "remembers" a prior scaling, Original is always one tap away.
-const SCALE_PRESETS: { label: string; multiplier: number }[] = [
-  { label: '½×', multiplier: 0.5 },
-  { label: '1×', multiplier: 1 },
-  { label: '1½×', multiplier: 1.5 },
-  { label: '2×', multiplier: 2 },
-  { label: '3×', multiplier: 3 },
-  { label: '4×', multiplier: 4 },
-];
-
-function scaledIngredientSections(
-  sections: IngredientSection[],
-  multiplier: number,
-  displayMode: 'original' | 'preferred',
-  preferredUnitSystem: UnitSystem | null,
-): { title: string | null; lines: string[] }[] {
-  return sections.map((section) => ({
-    title: section.title,
-    lines: section.lines.map((line) => {
-      let quantity = scaleQuantity(line, multiplier);
-      if (displayMode === 'preferred' && preferredUnitSystem) {
-        quantity = convertToSystem(quantity, preferredUnitSystem);
-      }
-      return formatIngredientLine({ ...line, ...quantity });
-    }),
-  }));
-}
 
 export interface RecipeDetailScreenProps {
   recipeId: string;
@@ -103,6 +61,7 @@ export function RecipeDetailScreen({
   const [categories, setCategories] = useState<Category[]>([]);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+  const [cookingHistory, setCookingHistory] = useState<CookingEvent[]>([]);
   // Both screen-local, reset every visit (ADR-0018) — never persisted.
   const [displayMode, setDisplayMode] = useState<'original' | 'preferred'>('preferred');
   const [multiplier, setMultiplier] = useState(1);
@@ -144,6 +103,32 @@ export function RecipeDetailScreen({
       cancelled = true;
     };
   }, [session]);
+
+  // REC-05/NOTE-01..03 (Phase 15, ADR-0024): always online, same as
+  // getCookingHistory's own "no offline mirror" call — a recipe with no
+  // cooking history yet just resolves to an empty array, not an error,
+  // so there's nothing to show a load-failure state for.
+  //
+  // useFocusEffect, not a plain useEffect keyed on recipeId: Cooking Mode
+  // is pushed on top of this screen and calls router.back() on
+  // completion, which returns to this same still-mounted instance rather
+  // than remounting it — a recipeId-only effect would never re-run, so a
+  // just-recorded event wouldn't appear until the screen was fully
+  // closed and reopened. Same pattern ThisWeekScreen uses to refresh on
+  // return.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getCookingHistory(recipeId)
+        .then((events) => {
+          if (!cancelled) setCookingHistory(events);
+        })
+        .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
+      return () => {
+        cancelled = true;
+      };
+    }, [recipeId]),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -429,6 +414,21 @@ export function RecipeDetailScreen({
         </View>
       )}
 
+      {cookingHistory.length > 0 && (
+        <View style={styles.section} testID="recipe-detail-cooking-history">
+          <Text style={styles.sectionHeading}>Cooking History</Text>
+          {/* Already newest-first (getCookingHistory) — NOTE-03's "newest
+              note preview appears near top" is exactly this ordering,
+              not a separate preview element. */}
+          {cookingHistory.map((event) => (
+            <View key={event.id} style={styles.cookingHistoryRow}>
+              <Text style={styles.line}>{formatCookedAt(event.cookedAt)}</Text>
+              {event.note && <Text style={styles.cookingHistoryNote}>{event.note}</Text>}
+            </View>
+          ))}
+        </View>
+      )}
+
       <View style={styles.actions}>
         <Pressable
           style={styles.editButton}
@@ -465,7 +465,14 @@ export function RecipeDetailScreen({
       </View>
 
       <Button
+        title="Start Cooking"
+        onPress={() => router.push(`/recipe/${recipeId}/cook`)}
+        testID="recipe-detail-start-cooking"
+      />
+
+      <Button
         title="Add to This Week"
+        variant="secondary"
         onPress={handleAddToThisWeek}
         testID="recipe-detail-add-to-this-week"
       />
@@ -476,6 +483,14 @@ export function RecipeDetailScreen({
 function openExternalUrl(url: string | null) {
   if (!url || !/^https?:\/\//i.test(url)) return;
   Linking.openURL(url);
+}
+
+function formatCookedAt(cookedAt: string): string {
+  return new Date(cookedAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 const styles = StyleSheet.create({
@@ -545,6 +560,13 @@ const styles = StyleSheet.create({
   },
   link: {
     color: colors.accent,
+  },
+  cookingHistoryRow: {
+    marginTop: spacing.xs,
+  },
+  cookingHistoryNote: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   actions: {
     flexDirection: 'row',

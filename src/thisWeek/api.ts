@@ -127,3 +127,17 @@ export async function reopenThisWeek(planId: string): Promise<void> {
   const { error } = await supabase.rpc('reopen_weekly_plan', { plan_id: planId });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * COOK-05's "optional removal from This Week" after Done Cooking, from a
+ * *confirmed* plan (Phase 15, ADR-0024) — removeFromThisWeek above only
+ * works in 'planning' state, this is the separate RPC that phase adds.
+ * Always online, same as every other planning mutation (OFF-04) — never
+ * queued through the cooking-event offline outbox, since it's a mutation
+ * against shared state a household member could be editing concurrently,
+ * not a safely-replayable append.
+ */
+export async function removeConfirmedEntryFromThisWeek(entryId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_confirmed_planning_entry', { entry_id: entryId });
+  if (error) throw new Error(error.message);
+}

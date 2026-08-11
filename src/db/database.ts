@@ -79,6 +79,11 @@ const RECIPE_MIRROR_TABLES = [
   'cached_images',
   'recipe_fts',
   'recipe_trigram',
+  // Device-specific checklist progress (Phase 15, ADR-0024) — plain UI
+  // state, safe to clear like everything else here. cooking_event_outbox
+  // is deliberately NOT in this list, same reasoning as import_outbox
+  // above.
+  'cooking_sessions',
 ] as const;
 
 export async function wipeDatabase(): Promise<void> {

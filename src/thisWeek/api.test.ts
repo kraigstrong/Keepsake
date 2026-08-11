@@ -3,6 +3,7 @@ import {
   addRecipeToThisWeek,
   confirmThisWeek,
   fetchCurrentWeeklyPlan,
+  removeConfirmedEntryFromThisWeek,
   removeFromThisWeek,
   reopenThisWeek,
   reorderThisWeek,
@@ -126,6 +127,14 @@ describe('mutations', () => {
     mockedRpc.mockResolvedValue({ error: null });
     await removeFromThisWeek('entry-1');
     expect(mockedRpc).toHaveBeenCalledWith('remove_planning_entry', { entry_id: 'entry-1' });
+  });
+
+  it('removeConfirmedEntryFromThisWeek calls remove_confirmed_planning_entry with the right args', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+    await removeConfirmedEntryFromThisWeek('entry-1');
+    expect(mockedRpc).toHaveBeenCalledWith('remove_confirmed_planning_entry', {
+      entry_id: 'entry-1',
+    });
   });
 
   it('confirmThisWeek calls confirm_weekly_plan with the right args', async () => {

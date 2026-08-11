@@ -6,6 +6,7 @@ import * as api from './api';
 import * as heroImage from './heroImage';
 import { RecipeDetailScreen, type RecipeDetailScreenProps } from './RecipeDetailScreen';
 import { ToastProvider } from '../components/Toast';
+import * as cookingApi from '../cooking/api';
 import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
@@ -22,12 +23,27 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 
 jest.mock('./api');
 jest.mock('./heroImage');
+jest.mock('../cooking/api');
 jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../sync/offlineRecipes');
 jest.mock('../thisWeek/api');
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+// Real useFocusEffect only re-invokes its callback on a focus event, or
+// when the memoized callback's identity changes while still focused —
+// never on every unrelated re-render. This mock approximates that by
+// only calling a *new* callback identity, same pattern
+// ThisWeekScreen.test.tsx uses for its own useFocusEffect usage.
+let mockLastFocusEffect: (() => void) | null = null;
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+  useFocusEffect: jest.fn((effect: () => void) => {
+    if (effect !== mockLastFocusEffect) {
+      mockLastFocusEffect = effect;
+      effect();
+    }
+  }),
+}));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
 // missing-env-var throw.
@@ -35,6 +51,7 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
+const mockedCookingApi = cookingApi as jest.Mocked<typeof cookingApi>;
 const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
@@ -113,6 +130,7 @@ beforeEach(() => {
     entries: [],
   });
   mockedThisWeekApi.addRecipeToThisWeek.mockResolvedValue(undefined);
+  mockedCookingApi.getCookingHistory.mockResolvedValue([]);
   jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
 });
 
@@ -399,4 +417,48 @@ it('shows a locked-plan-specific toast when the current week is confirmed', asyn
   await waitFor(() =>
     expect(screen.getByText("This week's plan is locked — reopen it to add recipes")).toBeTruthy(),
   );
+});
+
+describe('cooking history (Phase 15, REC-05/NOTE-01..03)', () => {
+  it('does not show a Cooking History section when there is none yet', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedCookingApi.getCookingHistory.mockResolvedValue([]);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await waitFor(() =>
+      expect(mockedCookingApi.getCookingHistory).toHaveBeenCalledWith('recipe-1'),
+    );
+
+    expect(screen.queryByTestId('recipe-detail-cooking-history')).toBeNull();
+  });
+
+  it('shows cooking events newest-first, with their notes, once loaded', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedCookingApi.getCookingHistory.mockResolvedValue([
+      {
+        id: 'event-2',
+        recipeId: 'recipe-1',
+        cookedAt: '2026-08-10T18:00:00.000Z',
+        note: 'Kids loved this.',
+      },
+      { id: 'event-1', recipeId: 'recipe-1', cookedAt: '2026-08-01T18:00:00.000Z', note: null },
+    ]);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    await waitFor(() => expect(screen.getByTestId('recipe-detail-cooking-history')).toBeTruthy());
+    expect(screen.getByText('Kids loved this.')).toBeTruthy();
+    expect(screen.getByText('Aug 10, 2026')).toBeTruthy();
+    expect(screen.getByText('Aug 1, 2026')).toBeTruthy();
+  });
+
+  it('does not show a Cooking History section when the load fails', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedCookingApi.getCookingHistory.mockRejectedValue(new Error('offline'));
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await waitFor(() => expect(mockedCookingApi.getCookingHistory).toHaveBeenCalled());
+
+    expect(screen.queryByTestId('recipe-detail-cooking-history')).toBeNull();
+  });
 });
