@@ -6,16 +6,25 @@ import { enqueueCookingEvent } from './outbox';
 import { submitPendingCookingEvents } from './outboxEngine';
 import { useCookingSession } from './useCookingSession';
 import { ToastProvider } from '../components/Toast';
+import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
 import { useHousehold } from '../household/HouseholdProvider';
+import { logError } from '../observability';
 import type { Recipe } from '../recipes/api';
+import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 jest.mock('./useCookingSession', () => ({ useCookingSession: jest.fn() }));
 jest.mock('./outbox', () => ({ enqueueCookingEvent: jest.fn() }));
 jest.mock('./outboxEngine', () => ({ submitPendingCookingEvents: jest.fn() }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
+jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
 jest.mock('../keepAwake/useCookingModeAwake', () => ({ useCookingModeAwake: jest.fn() }));
+jest.mock('../observability', () => ({ logError: jest.fn() }));
+jest.mock('../thisWeek/api', () => ({
+  fetchCurrentWeeklyPlan: jest.fn(),
+  removeConfirmedEntryFromThisWeek: jest.fn(),
+}));
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 // ./useCookingSession is auto-mocked above, but Jest still loads the real
 // module once to derive its shape, which pulls in recipes/api.ts and
@@ -28,7 +37,11 @@ const mockedEnqueueCookingEvent = enqueueCookingEvent as jest.Mock;
 const mockedSubmitPendingCookingEvents = submitPendingCookingEvents as jest.Mock;
 const mockedGetDatabase = getDatabase as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
+const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedFetchCurrentWeeklyPlan = fetchCurrentWeeklyPlan as jest.Mock;
+const mockedRemoveConfirmedEntry = removeConfirmedEntryFromThisWeek as jest.Mock;
+const mockedLogError = logError as jest.Mock;
 
 const back = jest.fn();
 const fakeDb = { fake: 'db' };
@@ -66,11 +79,26 @@ const recipe: Recipe = {
 };
 
 async function renderCookingModeScreen() {
-  return await render(
+  const result = await render(
     <ToastProvider>
       <CookingModeScreen recipeId="recipe-1" />
     </ToastProvider>,
   );
+  // Every test starts from the plan-lookup effect having settled, same
+  // as useCookingSession's own load — avoids "not wrapped in act"
+  // noise from that effect resolving mid-assertion.
+  await waitFor(() => expect(mockedFetchCurrentWeeklyPlan).toHaveBeenCalled());
+  return result;
+}
+
+// Opening the sheet flips Modal's `visible` via a state update rather
+// than an initial prop (unlike Sheet.test.tsx's own tests, which start
+// already visible) — React 19's test renderer needs an explicit flush
+// before the sheet's children are queryable, same "act must be awaited"
+// class of issue as elsewhere in this session's tests.
+async function openDoneCookingSheet() {
+  fireEvent.press(screen.getByTestId('cooking-mode-done-button'));
+  await waitFor(() => expect(screen.getByTestId('done-cooking-sheet')).toBeTruthy());
 }
 
 let toggleIngredient: jest.Mock;
@@ -84,8 +112,12 @@ beforeEach(() => {
   resetChecklist = jest.fn();
   mockedUseRouter.mockReturnValue({ back });
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
+  mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedGetDatabase.mockResolvedValue(fakeDb);
   mockedSubmitPendingCookingEvents.mockResolvedValue(undefined);
+  // No confirmed plan by default — most tests don't care about the
+  // removal toggle; the tests that do override this explicitly.
+  mockedFetchCurrentWeeklyPlan.mockRejectedValue(new Error('no current plan'));
   mockedUseCookingSession.mockReturnValue({
     recipe,
     isLoading: false,
@@ -110,7 +142,11 @@ describe('CookingModeScreen', () => {
       toggleInstruction,
       resetChecklist,
     });
-    await renderCookingModeScreen();
+    await render(
+      <ToastProvider>
+        <CookingModeScreen recipeId="recipe-1" />
+      </ToastProvider>,
+    );
     expect(screen.getByTestId('cooking-mode-loading')).toBeTruthy();
   });
 
@@ -125,7 +161,11 @@ describe('CookingModeScreen', () => {
       toggleInstruction,
       resetChecklist,
     });
-    await renderCookingModeScreen();
+    await render(
+      <ToastProvider>
+        <CookingModeScreen recipeId="recipe-1" />
+      </ToastProvider>,
+    );
     expect(screen.getByTestId('cooking-mode-load-error')).toBeTruthy();
   });
 
@@ -172,39 +212,199 @@ describe('CookingModeScreen', () => {
     expect(resetChecklist).toHaveBeenCalled();
   });
 
-  it('Done Cooking enqueues a cooking event, clears the checklist, and navigates back', async () => {
-    mockedEnqueueCookingEvent.mockResolvedValue(undefined);
-    await renderCookingModeScreen();
-
-    fireEvent.press(screen.getByTestId('cooking-mode-done-button'));
-
-    await waitFor(() =>
-      expect(mockedEnqueueCookingEvent).toHaveBeenCalledWith(
-        fakeDb,
-        'recipe-1',
-        'h1',
-        expect.any(String),
-        null,
-      ),
-    );
-    expect(resetChecklist).toHaveBeenCalled();
-    expect(back).toHaveBeenCalled();
-    expect(mockedSubmitPendingCookingEvents).toHaveBeenCalledWith('h1');
-  });
-
-  it('does nothing when Done Cooking is tapped without a household', async () => {
-    mockedUseHousehold.mockReturnValue({ household: null });
-    await renderCookingModeScreen();
-
-    fireEvent.press(screen.getByTestId('cooking-mode-done-button'));
-
-    await Promise.resolve();
-    expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
-  });
-
   it('scaling preset chips rescale ingredient quantities', async () => {
     await renderCookingModeScreen();
     fireEvent.press(screen.getByTestId('cooking-mode-scale-preset-2'));
     await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
+  });
+
+  describe('Done Cooking', () => {
+    it('tapping Done Cooking opens the confirmation sheet rather than completing immediately', async () => {
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      expect(screen.getByTestId('done-cooking-sheet')).toBeTruthy();
+      expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
+    });
+
+    it('confirming with no note enqueues a cooking event with a null note, clears the checklist, and navigates back', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() =>
+        expect(mockedEnqueueCookingEvent).toHaveBeenCalledWith(
+          fakeDb,
+          'recipe-1',
+          'h1',
+          expect.any(String),
+          null,
+        ),
+      );
+      expect(resetChecklist).toHaveBeenCalled();
+      expect(back).toHaveBeenCalled();
+      expect(mockedSubmitPendingCookingEvents).toHaveBeenCalledWith('h1');
+    });
+
+    it('confirming with a note trims it and passes it through', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      fireEvent.changeText(screen.getByTestId('done-cooking-note-input'), '  Needed more salt.  ');
+      await waitFor(() =>
+        expect(screen.getByTestId('done-cooking-note-input').props.value).toBe(
+          '  Needed more salt.  ',
+        ),
+      );
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() =>
+        expect(mockedEnqueueCookingEvent).toHaveBeenCalledWith(
+          fakeDb,
+          'recipe-1',
+          'h1',
+          expect.any(String),
+          'Needed more salt.',
+        ),
+      );
+    });
+
+    it('does nothing when Done Cooking is tapped without a household', async () => {
+      mockedUseHousehold.mockReturnValue({ household: null });
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await Promise.resolve();
+      expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
+    });
+
+    it('does not show the remove-from-plan toggle when this recipe is not on a confirmed plan', async () => {
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
+    });
+
+    it('does not show the remove-from-plan toggle while offline, even with a matching confirmed entry', async () => {
+      mockedUseConnectivity.mockReturnValue({ isOnline: false });
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 4,
+            position: 0,
+          },
+        ],
+      });
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
+    });
+
+    it('shows the toggle and removes the plan entry when confirmed with it checked', async () => {
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 4,
+            position: 0,
+          },
+        ],
+      });
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      mockedRemoveConfirmedEntry.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      await waitFor(() =>
+        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
+      );
+
+      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+        ).toEqual({ checked: true }),
+      );
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() => expect(mockedRemoveConfirmedEntry).toHaveBeenCalledWith('entry-1'));
+    });
+
+    it('leaves the plan entry alone when the toggle is never checked, even if it was available', async () => {
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 4,
+            position: 0,
+          },
+        ],
+      });
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      await waitFor(() =>
+        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
+      );
+
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
+      expect(mockedRemoveConfirmedEntry).not.toHaveBeenCalled();
+    });
+
+    it('a failed removal is logged and toasted, but does not undo the already-recorded completion', async () => {
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 4,
+            position: 0,
+          },
+        ],
+      });
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      mockedRemoveConfirmedEntry.mockRejectedValue(new Error('network error'));
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      await waitFor(() =>
+        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
+      );
+
+      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+        ).toEqual({ checked: true }),
+      );
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() => expect(mockedLogError).toHaveBeenCalled());
+      expect(mockedEnqueueCookingEvent).toHaveBeenCalled();
+      expect(back).toHaveBeenCalled();
+    });
   });
 });

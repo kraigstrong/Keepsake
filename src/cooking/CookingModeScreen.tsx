@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { DoneCookingSheet } from './DoneCookingSheet';
 import { enqueueCookingEvent } from './outbox';
 import { submitPendingCookingEvents } from './outboxEngine';
 import { useCookingSession } from './useCookingSession';
@@ -10,11 +11,14 @@ import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
+import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useCookingModeAwake } from '../keepAwake/useCookingModeAwake';
+import { logError } from '../observability';
 import { SCALE_PRESETS, scaledIngredientSections } from '../recipes/scaling';
 import { colors, radii, spacing, typography } from '../theme/tokens';
+import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 export interface CookingModeScreenProps {
   recipeId: string;
@@ -59,15 +63,17 @@ function CheckableRow({
  * and checklist persistence (COOK-03/04, ADR-0024) are both delegated —
  * this component is purely the view over useCookingSession's state.
  *
- * Done Cooking here records completion with no note and no This-Week
- * removal — the richer confirmation sheet (note prompt + remove-from-
- * plan toggle, COOK-05/06) is Phase 15's next commit, layered on top of
- * this same completeCooking path rather than replacing it.
+ * Done Cooking opens DoneCookingSheet (COOK-05/06: optional note,
+ * optional This-Week removal) rather than completing immediately; the
+ * actual completion path (enqueue → clear checklist → sync attempt →
+ * navigate back) lives here, unchanged from the plain version, and the
+ * sheet is purely what feeds it a note and a remove-from-plan choice.
  */
 export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   useCookingModeAwake();
   const router = useRouter();
   const { household } = useHousehold();
+  const { isOnline } = useConnectivity();
   const { showToast } = useToast();
   const {
     recipe,
@@ -81,6 +87,31 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   } = useCookingSession(recipeId);
   const [multiplier, setMultiplier] = useState(1);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [doneCookingSheetVisible, setDoneCookingSheetVisible] = useState(false);
+  // Set only when this recipe is on the household's current *confirmed*
+  // plan — ADR-0024 decision 4: the removal toggle only ever appears
+  // when there's actually a confirmed plan entry to remove.
+  const [planEntryId, setPlanEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCurrentWeeklyPlan()
+      .then((plan) => {
+        if (cancelled) return;
+        if (plan.status !== 'confirmed') {
+          setPlanEntryId(null);
+          return;
+        }
+        const entry = plan.entries.find((candidate) => candidate.recipeId === recipeId);
+        setPlanEntryId(entry ? entry.id : null);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanEntryId(null); // no confirmed plan — fine, the toggle just won't show
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recipeId]);
 
   if (isLoading) {
     return <LoadingState label="Loading recipe…" testID="cooking-mode-loading" />;
@@ -109,17 +140,32 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
     );
   }
 
-  async function handleDoneCooking() {
+  async function handleDoneCooking(note: string | null, removeFromPlan: boolean) {
     if (!household || isCompleting) return;
     setIsCompleting(true);
     try {
       const db = await getDatabase();
-      await enqueueCookingEvent(db, recipeId, household.id, new Date().toISOString(), null);
+      await enqueueCookingEvent(db, recipeId, household.id, new Date().toISOString(), note);
       resetChecklist();
+      setDoneCookingSheetVisible(false);
       showToast('Nice work — marked as cooked');
       // Best-effort immediate sync; the outbox drain on next
       // foreground/reconnect (app/_layout.tsx) covers it either way.
       submitPendingCookingEvents(household.id).catch(() => undefined);
+
+      // Removal is a direct, connectivity-gated call (ADR-0024 decision
+      // 4), never queued — and best-effort relative to the completion
+      // above: the cooking event is already recorded by this point, so a
+      // failure here shouldn't read as "Done Cooking didn't work."
+      if (removeFromPlan && planEntryId) {
+        try {
+          await removeConfirmedEntryFromThisWeek(planEntryId);
+        } catch (error) {
+          logError(error, { context: 'removeConfirmedEntryFromThisWeek' });
+          showToast("Cooked it, but couldn't remove it from This Week");
+        }
+      }
+
       router.back();
     } catch {
       // Unlike the sync attempt above, the *local* enqueue is the actual
@@ -206,9 +252,17 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
 
       <Button
         title="Done Cooking"
-        onPress={handleDoneCooking}
+        onPress={() => setDoneCookingSheetVisible(true)}
         disabled={isCompleting}
         testID="cooking-mode-done-button"
+      />
+
+      <DoneCookingSheet
+        visible={doneCookingSheetVisible}
+        onDismiss={() => setDoneCookingSheetVisible(false)}
+        onConfirm={handleDoneCooking}
+        canRemoveFromPlan={planEntryId != null && isOnline}
+        isSubmitting={isCompleting}
       />
     </ScrollView>
   );
