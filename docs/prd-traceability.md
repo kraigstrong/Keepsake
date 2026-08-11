@@ -108,12 +108,14 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | WEEK-03 | Confirming increments planned count | 12 | Done (tested)† |
 | WEEK-04 | Cards show image and title | 12 | Done (tested) |
 | WEEK-05 | Drag-to-reorder | 12 | Done (tested)‡ |
-| WEEK-06 | Ordered shortlist, not a meal calendar (no weekday/meal assignment) | 12 | Done (untested) |
+| WEEK-06 | Ordered shortlist, not a meal calendar (no weekday/meal assignment) | 12 | Done (untested)‖ |
 | WEEK-07 | Multi-member synchronization of the shared plan | 12 | Done (tested)§ |
 
 † pgTAP evidence only (`supabase/tests/database/weekly_plan_rpcs.test.sql`) — not run locally (no Docker in this environment, see `docs/history/phase-12-this-week-planning.md`); CI is the real gate before merge.
 ‡ Implemented as tap-based up/down move buttons, not literal drag-and-drop — `react-native-draggable-flatlist` is incompatible with this app's `react-native-reanimated` 4.5.1 (throws at module load); developer-approved pivot, see ADR-0021 and `docs/history/phase-12-this-week-planning.md`.
 § Refetch-on-focus/reconnect, not a live subscription — no Realtime in this app yet (ADR-0021's own tradeoff, explicitly deferred, not an oversight).
+
+‖ A negative/absence requirement with no natural automated assertion; visually confirmed on physical device during the 2026-08-08/09 Phase 12/13/14 walkthrough (`docs/history/phase-12-this-week-planning.md`) — stays "untested" in the status-column sense (no test asserts the absence), not a gap.
 
 ## Frequently Selected (FREQ)
 
@@ -154,9 +156,9 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | GRO-06 | Staples omitted by default | 13 | Done (tested)¶ |
 | GRO-07 | No editing within the export flow | 13 / 14 | Done (tested)¶§ |
 
-¶ Phase 13's own pgTAP coverage (`supabase/tests/database/grocery_item_selection_rpc.test.sql`) is CI-only, not run locally (no Docker in this environment); Jest coverage for the generation/merge/category/staple logic (`server/groceries/*.test.ts`, `src/groceries/api.test.ts`, `src/groceries/GroceryReviewScreen.test.tsx`) ran locally. No live Simulator/device walkthrough performed yet — see `docs/current.md`.
+¶ Phase 13's own pgTAP coverage (`supabase/tests/database/grocery_item_selection_rpc.test.sql`) is CI-only, not run locally (no Docker in this environment); Jest coverage for the generation/merge/category/staple logic (`server/groceries/*.test.ts`, `src/groceries/api.test.ts`, `src/groceries/GroceryReviewScreen.test.tsx`) ran locally. Live physical-device walkthrough performed 2026-08-08/09, found and fixed five generation/categorization bugs ([PR #47](https://github.com/kraigstrong/Keepsake/pull/47)); see `docs/history/phase-13-grocery-generation.md`.
 
-§ Phase 14 has no server component at all (ADR-0023 — export bookkeeping is local-only) and so no pgTAP; Jest coverage (`src/reminders/*.test.ts`, `src/groceries/GroceryExportPanel.test.tsx`) mocks EventKit/permissions/local SQLite. ADR-0003 requires a **physical device**, not just Simulator, for this phase's exit gate (screen-awake-adjacent native-capability class) — not yet performed, deliberately deferred alongside Phase 13's own walkthrough to an upcoming live-testing round; see `docs/current.md`.
+§ Phase 14 has no server component at all (ADR-0023 — export bookkeeping is local-only) and so no pgTAP; Jest coverage (`src/reminders/*.test.ts`, `src/groceries/GroceryExportPanel.test.tsx`) mocks EventKit/permissions/local SQLite. ADR-0003 requires a **physical device**, not just Simulator, for this phase's exit gate (screen-awake-adjacent native-capability class) — performed 2026-08-08/09 alongside Phase 13's own walkthrough; found and fixed a real stale-export-dedup bug (ADR-0023 amendment, [PR #47](https://github.com/kraigstrong/Keepsake/pull/47)); see `docs/history/phase-14-reminders-export.md`.
 
 ## Lifecycle: Archive & Delete (LIFE)
 

@@ -58,6 +58,6 @@ No new credentials introduced this phase.
 
 ## Conditional Pass follow-ups
 
-1. **No physical/Simulator device walkthrough of the This Week flow yet.** Not required by ADR-0003 for this phase, but not yet performed either — do before treating WEEK-01..07 as fully closed in practice.
+1. ~~**No physical/Simulator device walkthrough of the This Week flow yet.**~~ **Resolved 2026-08-08/09.** Performed as part of the combined Phase 12/13/14 physical-device testing round (see `docs/history/phase-13-grocery-generation.md`, `docs/history/phase-14-reminders-export.md`); fixes from that round landed in [PR #47](https://github.com/kraigstrong/Keepsake/pull/47). WEEK-01..07 treated as fully closed in practice as of that round.
 2. **WEEK-05 tap-based reorder** — acceptable deviation per ADR-0021, revisit only if `react-native-draggable-flatlist` (or an alternative) becomes compatible with a future `react-native-reanimated` upgrade.
 3. **WEEK-07 refetch-based sync** — acceptable deviation per ADR-0021, revisit if/when Realtime is adopted elsewhere in the app.
