@@ -42,6 +42,8 @@ interface LocalRecipeRow {
   category_ids: string;
   ingredient_sections: string;
   instruction_sections: string;
+  archived_at: string | null;
+  deleted_at: string | null;
 }
 
 function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
@@ -62,6 +64,8 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
     categoryIds: JSON.parse(row.category_ids) as string[],
     ingredientSections: JSON.parse(row.ingredient_sections) as IngredientSection[],
     instructionSections: JSON.parse(row.instruction_sections) as RecipeSection[],
+    archivedAt: row.archived_at,
+    deletedAt: row.deleted_at,
   };
 }
 

@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -208,5 +208,16 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
       created_at text not null
     )`,
     `create index if not exists idx_cooking_event_outbox_status on cooking_event_outbox (status)`,
+  ],
+  // Archive/delete lifecycle (Phase 16, ADR-0025). Mirrors the server's
+  // new recipes.archived_at/deleted_at so Library/Search's existing
+  // offline support (OFF-01/02) can exclude them locally too — no
+  // resync-cursor reset needed, same reasoning as v6/v8: the server
+  // columns also default to null for every pre-existing recipe, so an
+  // already-synced local row being null here is already consistent, not
+  // stale.
+  11: [
+    `alter table recipes add column archived_at text`,
+    `alter table recipes add column deleted_at text`,
   ],
 };

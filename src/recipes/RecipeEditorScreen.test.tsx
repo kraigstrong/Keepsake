@@ -190,6 +190,8 @@ describe('RecipeEditorScreen — edit mode', () => {
       },
     ],
     instructionSections: [{ title: null, lines: ['Roast it.'] }],
+    archivedAt: null,
+    deletedAt: null,
   };
 
   it('loads and populates the fetched recipe', async () => {

@@ -98,6 +98,8 @@ const recipe: api.Recipe = {
     },
   ],
   instructionSections: [{ title: null, lines: ['Preheat the oven.', 'Roast it.'] }],
+  archivedAt: null,
+  deletedAt: null,
 };
 
 beforeEach(() => {

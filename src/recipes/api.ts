@@ -57,6 +57,13 @@ export interface Recipe {
   categoryIds: string[];
   ingredientSections: IngredientSection[];
   instructionSections: RecipeSection[];
+  // Phase 16 (ADR-0025) — read-only here, same reasoning as
+  // originalPhotoPath: neither is ever set through save_recipe's
+  // update branch, only through the dedicated archive_recipe/
+  // delete_recipe/etc RPCs, so RecipeSavePayload below doesn't carry
+  // them.
+  archivedAt: string | null;
+  deletedAt: string | null;
 }
 
 export interface RecipeSavePayload {
@@ -175,6 +182,8 @@ interface FetchedRecipeRow {
   source_url: string | null;
   source_attribution: string | null;
   tags: string[];
+  archived_at: string | null;
+  deleted_at: string | null;
   recipe_ingredient_sections: FetchedSection<FetchedIngredientLine>[];
   recipe_instruction_sections: FetchedSection<FetchedLine>[];
   recipe_categories: { category_id: string }[];
@@ -189,7 +198,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     .from('recipes')
     .select(
       `id, version, title, hero_image_path, original_photo_path, active_time_minutes, total_time_minutes, yield_text,
-       servings_count, permanent_notes, source_url, source_attribution, tags,
+       servings_count, permanent_notes, source_url, source_attribution, tags, archived_at, deleted_at,
        recipe_ingredient_sections (
          title, sort_order,
          recipe_ingredients ( line_text, quantity_min, quantity_max, unit, ingredient_text, sort_order )
@@ -217,6 +226,8 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     sourceUrl: row.source_url,
     sourceAttribution: row.source_attribution,
     tags: row.tags,
+    archivedAt: row.archived_at,
+    deletedAt: row.deleted_at,
     categoryIds: row.recipe_categories.map((c) => c.category_id),
     ingredientSections: bySortOrder(row.recipe_ingredient_sections).map((section) => ({
       title: section.title,

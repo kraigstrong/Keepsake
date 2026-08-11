@@ -76,6 +76,8 @@ function makeRecipe(
     instructionSections: [],
     createdAt: updatedAt,
     updatedAt,
+    archivedAt: null,
+    deletedAt: null,
   };
 }
 
