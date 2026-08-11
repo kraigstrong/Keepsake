@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -180,5 +180,33 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
       primary key (weekly_plan_id, item_hash)
     )`,
     `create index if not exists idx_grocery_exports_household_id on grocery_exports (household_id)`,
+  ],
+  // Phase 15 cooking mode (ADR-0024). Two tables, matching the PRD's own
+  // local/shared split: cooking_sessions is device-specific checklist
+  // progress (cleared on sign-out like any other rebuildable UI state,
+  // via wipeDatabase()'s RECIPE_MIRROR_TABLES — see database.ts);
+  // cooking_event_outbox is the durable local queue for offline
+  // completion (OFF-05), copying import_outbox's shape (Phase 9) rather
+  // than inventing a new one, and deliberately excluded from the wipe
+  // list for the same reason: an unsynced cooking completion is the only
+  // copy of that event until the server confirms it.
+  10: [
+    `create table if not exists cooking_sessions (
+      recipe_id text primary key,
+      checked_ingredient_keys text not null,
+      checked_instruction_keys text not null,
+      updated_at text not null
+    )`,
+    `create table if not exists cooking_event_outbox (
+      id text primary key,
+      recipe_id text not null,
+      household_id text not null,
+      cooked_at text not null,
+      note text,
+      status text not null,
+      error_message text,
+      created_at text not null
+    )`,
+    `create index if not exists idx_cooking_event_outbox_status on cooking_event_outbox (status)`,
   ],
 };
