@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import { CookingModeScreen } from './CookingModeScreen';
@@ -220,6 +220,122 @@ describe('CookingModeScreen', () => {
     await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
   });
 
+  describe('defaulting the scale to the This-Week plan (developer feedback: first walkthrough)', () => {
+    it('defaults to the planned servings when this recipe is on the confirmed plan at a different count', async () => {
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 8,
+            position: 0,
+          },
+        ],
+      });
+
+      await renderCookingModeScreen();
+
+      await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
+      expect(screen.getByTestId('cooking-mode-scale-preset-2').props.accessibilityState).toEqual(
+        expect.objectContaining({ selected: true }),
+      );
+    });
+
+    it('a manual scale-chip tap is never overwritten once the plan lookup resolves late', async () => {
+      let resolvePlan: (plan: unknown) => void;
+      mockedFetchCurrentWeeklyPlan.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePlan = resolve;
+        }),
+      );
+
+      await render(
+        <ToastProvider>
+          <CookingModeScreen recipeId="recipe-1" />
+        </ToastProvider>,
+      );
+      fireEvent.press(screen.getByTestId('cooking-mode-scale-preset-2'));
+      await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
+
+      // Codex review, PR #50: waiting on the mock having been *called*
+      // proves nothing — that happened synchronously on mount, before
+      // the promise below even resolves. Wrapping the resolve in `act`
+      // and then asserting on something that only appears once the
+      // resolved plan's state has actually committed (the remove-toggle,
+      // gated on planEntryId) is what actually exercises the race.
+      await act(async () => {
+        resolvePlan!({
+          id: 'plan-1',
+          status: 'confirmed',
+          entries: [
+            {
+              id: 'entry-1',
+              recipeId: 'recipe-1',
+              title: '',
+              heroImagePath: null,
+              servings: 4,
+              position: 0,
+            },
+          ],
+        });
+      });
+      fireEvent.press(screen.getByTestId('cooking-mode-done-button'));
+      await waitFor(() =>
+        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
+      );
+
+      // Plan says 1x (4/4), but the user already chose 2x before it
+      // resolved — stays 2x.
+      expect(screen.getByText(/2 whole chicken/)).toBeTruthy();
+    });
+
+    it('does not touch the scale when there is no matching confirmed plan entry', async () => {
+      await renderCookingModeScreen();
+      expect(screen.getByText(/1 whole chicken/)).toBeTruthy();
+    });
+
+    // Codex review, PR #50: this used to skip defaulting the scale
+    // entirely whenever recipe.servingsCount was null, discarding
+    // planServings. It now assumes the same base
+    // (DEFAULT_SERVINGS_WHEN_UNKNOWN, 4) RecipeDetailScreen's
+    // servingsToAdd and generateGroceryList's multiplierFor both
+    // already assume, recovering the intended multiplier instead of
+    // silently doing nothing.
+    it('defaults the scale against the assumed base when the recipe has no parsed servings count', async () => {
+      mockedUseCookingSession.mockReturnValue({
+        recipe: { ...recipe, servingsCount: null },
+        isLoading: false,
+        loadError: false,
+        checkedIngredientKeys: new Set<string>(),
+        checkedInstructionKeys: new Set<string>(),
+        toggleIngredient,
+        toggleInstruction,
+        resetChecklist,
+      });
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 8,
+            position: 0,
+          },
+        ],
+      });
+
+      await renderCookingModeScreen();
+      expect(screen.getByText(/2 whole chicken/)).toBeTruthy();
+    });
+  });
+
   describe('Done Cooking', () => {
     it('tapping Done Cooking opens the confirmation sheet rather than completing immediately', async () => {
       await renderCookingModeScreen();
@@ -311,7 +427,7 @@ describe('CookingModeScreen', () => {
       expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
     });
 
-    it('shows the toggle and removes the plan entry when confirmed with it checked', async () => {
+    it('defaults the toggle to checked and removes the plan entry on confirm, untouched', async () => {
       mockedFetchCurrentWeeklyPlan.mockResolvedValue({
         id: 'plan-1',
         status: 'confirmed',
@@ -331,21 +447,98 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
       await waitFor(() =>
-        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
-      );
-
-      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
-      await waitFor(() =>
         expect(
           screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
         ).toEqual({ checked: true }),
       );
+
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedRemoveConfirmedEntry).toHaveBeenCalledWith('entry-1'));
     });
 
-    it('leaves the plan entry alone when the toggle is never checked, even if it was available', async () => {
+    // Codex review, PR #50: the toggle's default was only ever applied
+    // on the sheet's own visible false->true transition. Opening the
+    // sheet while the plan lookup is still pending, then letting it
+    // resolve *while the sheet stays open*, flips canRemoveFromPlan
+    // false->true with visible unchanged — the toggle appeared and
+    // stayed unchecked instead of defaulting to checked.
+    it('defaults the toggle to checked once plan eligibility resolves while the sheet is already open', async () => {
+      let resolvePlan: (plan: unknown) => void;
+      mockedFetchCurrentWeeklyPlan.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePlan = resolve;
+        }),
+      );
+
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
+
+      await act(async () => {
+        resolvePlan!({
+          id: 'plan-1',
+          status: 'confirmed',
+          entries: [
+            {
+              id: 'entry-1',
+              recipeId: 'recipe-1',
+              title: '',
+              heroImagePath: null,
+              servings: 4,
+              position: 0,
+            },
+          ],
+        });
+      });
+
+      expect(
+        screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+      ).toEqual({ checked: true });
+    });
+
+    it('a manual uncheck before plan eligibility resolves is not overwritten once it does', async () => {
+      let resolvePlan: (plan: unknown) => void;
+      mockedFetchCurrentWeeklyPlan.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePlan = resolve;
+        }),
+      );
+
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+      expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
+
+      await act(async () => {
+        resolvePlan!({
+          id: 'plan-1',
+          status: 'confirmed',
+          entries: [
+            {
+              id: 'entry-1',
+              recipeId: 'recipe-1',
+              title: '',
+              heroImagePath: null,
+              servings: 4,
+              position: 0,
+            },
+          ],
+        });
+      });
+      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+        ).toEqual({ checked: false }),
+      );
+
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
+      expect(mockedRemoveConfirmedEntry).not.toHaveBeenCalled();
+    });
+
+    it('leaves the plan entry alone when the default-checked toggle is unchecked before confirming', async () => {
       mockedFetchCurrentWeeklyPlan.mockResolvedValue({
         id: 'plan-1',
         status: 'confirmed',
@@ -367,6 +560,12 @@ describe('CookingModeScreen', () => {
         expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
       );
 
+      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+        ).toEqual({ checked: false }),
+      );
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
@@ -393,15 +592,11 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
       await waitFor(() =>
-        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
-      );
-
-      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
-      await waitFor(() =>
         expect(
           screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
         ).toEqual({ checked: true }),
       );
+
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedLogError).toHaveBeenCalled());

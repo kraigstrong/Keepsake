@@ -396,6 +396,21 @@ it('falls back to a default serving count when the recipe has none', async () =>
   expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 4);
 });
 
+it('scales the default serving count by the selected preset when the recipe has no parsed servings count (developer walkthrough feedback)', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, servingsCount: null, yieldText: '1 loaf' });
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+  // No stepper renders for this recipe (no parsed base count), but the
+  // scale presets still do — this is exactly the path that used to
+  // silently drop the multiplier.
+  expect(screen.queryByTestId('recipe-servings-stepper')).toBeNull();
+  await fireEvent.press(screen.getByTestId('recipe-scale-preset-2'));
+  await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
+
+  await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 8);
+});
+
 it('shows an error toast when adding to This Week fails', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
   mockedThisWeekApi.fetchCurrentWeeklyPlan.mockRejectedValue(new Error('offline'));

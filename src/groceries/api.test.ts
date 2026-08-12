@@ -130,6 +130,28 @@ describe('fetchGroceryReview', () => {
     await expect(fetchGroceryReview('plan-1')).rejects.toThrow('boom');
   });
 
+  // The pure scaling math (generateGroceryList.test.ts) already covers
+  // this multiplier; this is the integration half — proving the live
+  // Supabase row shape (planning_entries.servings vs. the embedded
+  // recipe's servings_count) actually reaches that math unchanged, not
+  // just the shape this file's own mock/type declares.
+  it('scales amounts when the plan entry servings differ from the recipe base', async () => {
+    mockFromForTables({
+      planning_entries: {
+        data: [{ ...PLANNING_ENTRIES_ROW, servings: 8 }],
+        error: null,
+      },
+      grocery_item_selections: { data: [], error: null },
+    });
+
+    const result = await fetchGroceryReview('plan-1');
+
+    expect(result.items.find((item) => item.category === 'produce')?.amounts).toEqual(['2 onion']);
+    expect(result.items.find((item) => item.category === 'pantry')?.amounts).toEqual([
+      '2 tsp salt',
+    ]);
+  });
+
   it('throws when fetching planning entries fails', async () => {
     mockFromForTables({
       planning_entries: { data: null, error: new Error('boom') },

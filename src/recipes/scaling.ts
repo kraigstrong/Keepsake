@@ -1,16 +1,19 @@
 import { convertToSystem } from '../../server/units/convertUnit';
 import { formatIngredientLine } from '../../server/units/formatIngredientLine';
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
-import { scaleQuantity } from '../../server/units/scaleQuantity';
+import { ASSUMED_SERVINGS_WHEN_UNKNOWN, scaleQuantity } from '../../server/units/scaleQuantity';
 import type { IngredientSection } from './api';
 
 // A recipe whose yield doesn't parse to a serving count (free text like
 // "1 loaf") still needs some positive servings value to plan with —
 // this default is the same "typical household" assumption the design
-// doc's own seed recipes use throughout ("Serves 4"). Shared between
-// RecipeDetailScreen and CookingModeScreen (Phase 15) — both scale the
-// same recipe data the same way (ADR-0018).
-export const DEFAULT_SERVINGS_WHEN_UNKNOWN = 4;
+// doc's own seed recipes use throughout ("Serves 4"). Re-exported from
+// scaleQuantity.ts, not redefined here — generateGroceryList.ts and
+// CookingModeScreen's plan-default now assume the exact same base when
+// reading a stored count back (Codex review, PR #50), and server/ code
+// can't import from src/, so the single source of truth has to live on
+// the server/ side.
+export const DEFAULT_SERVINGS_WHEN_UNKNOWN = ASSUMED_SERVINGS_WHEN_UNKNOWN;
 
 // ADR-0018: presets are screen-local and reset every visit — a recipe
 // never "remembers" a prior scaling, Original is always one tap away.

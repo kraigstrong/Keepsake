@@ -241,6 +241,17 @@ export function RecipeDetailScreen({
     recipe.servingsCount != null
       ? Math.max(1, Math.round(recipe.servingsCount * multiplier))
       : null;
+  // Distinct from scaledServings above, which stays null on purpose to
+  // hide the stepper for a recipe with no parsed servings count
+  // (recipes without one still scale via the presets, just not an
+  // arbitrary count). This is what actually gets sent when adding to
+  // This Week — it must reflect the selected preset even then, scaling
+  // from DEFAULT_SERVINGS_WHEN_UNKNOWN instead. Without this, selecting
+  // e.g. 2x visibly doubled the on-screen ingredients but silently
+  // added at a flat default anyway (developer walkthrough feedback,
+  // reproduced with a real recipe whose yield never parsed).
+  const servingsToAdd =
+    scaledServings ?? Math.max(1, Math.round(DEFAULT_SERVINGS_WHEN_UNKNOWN * multiplier));
 
   const timingParts = [
     recipe.activeTimeMinutes != null ? `Active ${recipe.activeTimeMinutes} min` : null,
@@ -271,7 +282,7 @@ export function RecipeDetailScreen({
   async function handleAddToThisWeek() {
     try {
       const plan = await fetchCurrentWeeklyPlan();
-      await addRecipeToThisWeek(plan.id, recipeId, scaledServings ?? DEFAULT_SERVINGS_WHEN_UNKNOWN);
+      await addRecipeToThisWeek(plan.id, recipeId, servingsToAdd);
       showToast('Added to This Week');
     } catch (error) {
       // add_to_weekly_plan raises this exact message when the current

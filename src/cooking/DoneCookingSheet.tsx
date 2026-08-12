@@ -31,12 +31,49 @@ export function DoneCookingSheet({
   isSubmitting,
 }: DoneCookingSheetProps) {
   const [note, setNote] = useState('');
-  const [removeFromPlan, setRemoveFromPlan] = useState(false);
+  // Defaults checked when shown at all — canRemoveFromPlan already means
+  // this recipe is on the current confirmed plan, so "I just cooked
+  // this, take it off the list" is the common case, not something to
+  // opt into on every completion (developer feedback: first walkthrough
+  // found the unchecked default surprising). Still a real toggle, not a
+  // forced action — pressing it once before confirming opts back out.
+  const [removeFromPlan, setRemoveFromPlan] = useState(canRemoveFromPlan);
+  // This sheet is mounted once and just toggles `visible` (CookingModeScreen
+  // never remounts it), while canRemoveFromPlan only resolves to its real
+  // value after an async plan fetch — a plain useState(canRemoveFromPlan)
+  // initializer would freeze on whatever it was at first mount. Reset the
+  // default on each open instead, same "adjust state during render on a
+  // prop change" pattern RecipeDetailScreen uses for its own per-recipe
+  // reset, not a useEffect.
+  const [lastVisible, setLastVisible] = useState(visible);
+  // userToggled tracks whether the toggle should still be treated as
+  // "untouched" — both blocks below only apply a default while this is
+  // false, so neither one clobbers a choice the user already made.
+  const [userToggled, setUserToggled] = useState(false);
+  if (visible !== lastVisible) {
+    setLastVisible(visible);
+    if (visible) {
+      setRemoveFromPlan(canRemoveFromPlan);
+      setUserToggled(false);
+    }
+  }
+  // Codex review, PR #50: the block above only fires on visible's own
+  // false->true edge. If the sheet was already open when the plan
+  // lookup was still pending (canRemoveFromPlan false at that point),
+  // and it resolves *while* the sheet stays open, canRemoveFromPlan
+  // flips false->true without visible ever changing — this block covers
+  // that case, still only when the user hasn't already touched it.
+  const [lastCanRemoveFromPlan, setLastCanRemoveFromPlan] = useState(canRemoveFromPlan);
+  if (canRemoveFromPlan !== lastCanRemoveFromPlan) {
+    setLastCanRemoveFromPlan(canRemoveFromPlan);
+    if (visible && canRemoveFromPlan && !userToggled) {
+      setRemoveFromPlan(true);
+    }
+  }
 
   function handleConfirm() {
     onConfirm(note.trim() || null, canRemoveFromPlan && removeFromPlan);
     setNote('');
-    setRemoveFromPlan(false);
   }
 
   return (
@@ -56,7 +93,10 @@ export function DoneCookingSheet({
       {canRemoveFromPlan && (
         <Pressable
           style={styles.toggleRow}
-          onPress={() => setRemoveFromPlan((previous) => !previous)}
+          onPress={() => {
+            setUserToggled(true);
+            setRemoveFromPlan((previous) => !previous);
+          }}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: removeFromPlan }}
           testID="done-cooking-remove-from-plan-toggle"
