@@ -1,13 +1,15 @@
 -- Phase 15 cooking event RPCs (ADR-0024): record_cooking_event,
 -- remove_confirmed_planning_entry. Covers server authorization, the
 -- idempotent-replay guarantee the local offline outbox depends on
--- (ADR-0024 decision 3), cross-household rejection, and
+-- (ADR-0024 decision 3), cross-household rejection,
 -- remove_confirmed_planning_entry's "confirmed plans only" restriction
--- plus its deliberate no-op on recipes.planned_count (FREQ-01).
+-- plus its deliberate no-op on recipes.planned_count (FREQ-01), and
+-- (2026-08-12 walkthrough feedback) that it reopens a plan to
+-- 'planning' once its last entry is removed, but not before.
 
 begin;
 
-select plan(15);
+select plan(18);
 
 insert into auth.users (id, email)
 values
@@ -30,6 +32,8 @@ insert into public.recipes (id, household_id, title, created_by)
 values
   ('20000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    'Recipe A1', '11111111-1111-1111-1111-111111111111'),
+  ('20000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'Recipe A2', '11111111-1111-1111-1111-111111111111'),
   ('20000000-0000-0000-0000-000000000003', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
    'Recipe B1', '33333333-3333-3333-3333-333333333333');
 
@@ -164,6 +168,42 @@ select throws_ok(
   format($$ select public.remove_confirmed_planning_entry(%L) $$, (select id from entry_a)),
   'planning entry not found or not removable',
   'remove_confirmed_planning_entry: rejects removing the same entry twice'
+);
+
+-- Auto-reopen when emptied (developer walkthrough feedback, 2026-08-12):
+-- plan_a's only entry was just removed above, so it should already be
+-- back in 'planning' state — the empty state's own "Add recipes" button
+-- can just work, no "Edit Plan" detour required.
+select is(
+  (select status from public.weekly_plans where id = (select id from plan_a)),
+  'planning',
+  'remove_confirmed_planning_entry: reopens the plan once its last entry is removed'
+);
+
+create temporary table plan_b as
+select * from public.get_or_create_current_weekly_plan('2026-W34');
+create temporary table entry_b1 as
+select * from public.add_to_weekly_plan(
+  (select id from plan_b), '20000000-0000-0000-0000-000000000001', 4
+);
+create temporary table entry_b2 as
+select * from public.add_to_weekly_plan(
+  (select id from plan_b), '20000000-0000-0000-0000-000000000002', 2
+);
+select public.confirm_weekly_plan((select id from plan_b));
+
+select public.remove_confirmed_planning_entry((select id from entry_b1));
+select is(
+  (select status from public.weekly_plans where id = (select id from plan_b)),
+  'confirmed',
+  'remove_confirmed_planning_entry: stays confirmed while other entries remain'
+);
+
+select public.remove_confirmed_planning_entry((select id from entry_b2));
+select is(
+  (select status from public.weekly_plans where id = (select id from plan_b)),
+  'planning',
+  'remove_confirmed_planning_entry: reopens once the last remaining entry is also removed'
 );
 
 select * from finish();
