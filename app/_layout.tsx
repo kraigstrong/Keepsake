@@ -1,11 +1,12 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef } from 'react';
-import { AppState, View } from 'react-native';
+import { AppState, Pressable, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
+import { ChevronLeftIcon } from '../src/components/icons/ChevronLeftIcon';
 import { OfflineState } from '../src/components/OfflineState';
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { submitPendingCookingEvents } from '../src/cooking/outboxEngine';
@@ -227,6 +228,7 @@ function OfflineBanner() {
 // a real loading state — swapped for the shared loading component once
 // that exists (later Phase 2 commit).
 function AuthenticatedRouteBoundary() {
+  const router = useRouter();
   const { session, isLoading: sessionLoading } = useSession();
   const { profile, household, isLoading: householdLoading } = useHousehold();
   useDevAutoSignIn();
@@ -257,6 +259,27 @@ function AuthenticatedRouteBoundary() {
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.textPrimary,
             headerShadowVisible: false,
+          }}
+        />
+        <Stack.Screen
+          name="archived-recipes"
+          options={{
+            headerShown: true,
+            title: 'Archived Recipes',
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.textPrimary,
+            headerShadowVisible: false,
+            headerLeft: () => (
+              <Pressable
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={10}
+                testID="archived-recipes-back-button"
+              >
+                <ChevronLeftIcon color={colors.textPrimary} size={26} />
+              </Pressable>
+            ),
           }}
         />
       </Stack.Protected>
