@@ -36,9 +36,13 @@ describe('fetchCurrentWeeklyPlan', () => {
                 {
                   id: 'entry-1',
                   recipe_id: 'recipe-1',
-                  servings: 4,
+                  multiplier: 2,
                   position: 0,
-                  recipe: { title: 'Herb Roast Chicken', hero_image_path: 'households/1/hero.jpg' },
+                  recipe: {
+                    title: 'Herb Roast Chicken',
+                    hero_image_path: 'households/1/hero.jpg',
+                    servings_count: 4,
+                  },
                 },
               ],
               error: null,
@@ -56,7 +60,8 @@ describe('fetchCurrentWeeklyPlan', () => {
           recipeId: 'recipe-1',
           title: 'Herb Roast Chicken',
           heroImagePath: 'households/1/hero.jpg',
-          servings: 4,
+          multiplier: 2,
+          servingsCount: 4,
           position: 0,
         },
       ],
@@ -93,24 +98,24 @@ describe('fetchCurrentWeeklyPlan', () => {
 describe('mutations', () => {
   it('addRecipeToThisWeek calls add_to_weekly_plan with the right args', async () => {
     mockedRpc.mockResolvedValue({ error: null });
-    await addRecipeToThisWeek('plan-1', 'recipe-1', 4);
+    await addRecipeToThisWeek('plan-1', 'recipe-1', 2);
     expect(mockedRpc).toHaveBeenCalledWith('add_to_weekly_plan', {
       plan_id: 'plan-1',
       recipe_id: 'recipe-1',
-      servings: 4,
+      multiplier: 2,
     });
   });
 
   it('addRecipesToThisWeek calls add_recipes_to_weekly_plan with parallel arrays', async () => {
     mockedRpc.mockResolvedValue({ error: null });
     await addRecipesToThisWeek('plan-1', [
-      { recipeId: 'r1', servings: 4 },
-      { recipeId: 'r2', servings: 2 },
+      { recipeId: 'r1', multiplier: 2 },
+      { recipeId: 'r2', multiplier: 0.5 },
     ]);
     expect(mockedRpc).toHaveBeenCalledWith('add_recipes_to_weekly_plan', {
       plan_id: 'plan-1',
       recipe_ids: ['r1', 'r2'],
-      servings_list: [4, 2],
+      multiplier_list: [2, 0.5],
     });
   });
 

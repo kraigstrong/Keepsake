@@ -71,7 +71,8 @@ function entry(overrides: Partial<ThisWeekEntry> = {}): ThisWeekEntry {
     recipeId: overrides.recipeId ?? 'recipe-1',
     title: overrides.title ?? 'Herb Roast Chicken',
     heroImagePath: overrides.heroImagePath ?? null,
-    servings: overrides.servings ?? 4,
+    multiplier: overrides.multiplier ?? 1,
+    servingsCount: overrides.servingsCount ?? 4,
     position: overrides.position ?? 0,
   };
 }
@@ -132,7 +133,7 @@ it('shows the empty state with an Add recipes action', async () => {
 
 it('renders planning rows with title and servings, and a Confirm Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
-    plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', servings: 4 })] }),
+    plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', servingsCount: 4 })] }),
   );
 
   renderThisWeekScreen();
@@ -186,7 +187,7 @@ it('reverts the optimistic confirm if the server call fails', async () => {
 it('removes an entry, shows an Undo banner, and restores it on Undo', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({
-      entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', recipeId: 'r1', servings: 4 })],
+      entries: [entry({ id: 'e1', title: 'Herb Roast Chicken', recipeId: 'r1', multiplier: 2 })],
     }),
   );
 
@@ -203,7 +204,7 @@ it('removes an entry, shows an Undo banner, and restores it on Undo', async () =
   await fireEvent.press(screen.getByTestId('this-week-undo-button'));
 
   await waitFor(() =>
-    expect(mockedApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'r1', 4),
+    expect(mockedApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'r1', 2),
   );
 });
 
