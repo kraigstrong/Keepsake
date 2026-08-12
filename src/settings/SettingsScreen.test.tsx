@@ -46,6 +46,14 @@ describe('lifecycle navigation (Phase 16, ADR-0025 decision 8)', () => {
 
     expect(push).toHaveBeenCalledWith('/archived-recipes');
   });
+
+  it('navigates to Recently Deleted', async () => {
+    await render(<SettingsScreen />);
+
+    await fireEvent.press(screen.getByTestId('settings-recently-deleted-row'));
+
+    expect(push).toHaveBeenCalledWith('/recently-deleted');
+  });
 });
 
 describe('preferred unit system (ADR-0018, UNIT-02)', () => {

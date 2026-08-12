@@ -141,6 +141,11 @@ export function SettingsScreen() {
           onPress={() => router.push('/archived-recipes')}
           testID="settings-archived-recipes-row"
         />
+        <Row
+          title="Recently Deleted"
+          onPress={() => router.push('/recently-deleted')}
+          testID="settings-recently-deleted-row"
+        />
       </View>
 
       <Text style={styles.sectionTitle}>Household</Text>

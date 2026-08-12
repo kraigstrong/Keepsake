@@ -282,6 +282,27 @@ function AuthenticatedRouteBoundary() {
             ),
           }}
         />
+        <Stack.Screen
+          name="recently-deleted"
+          options={{
+            headerShown: true,
+            title: 'Recently Deleted',
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.textPrimary,
+            headerShadowVisible: false,
+            headerLeft: () => (
+              <Pressable
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={10}
+                testID="recently-deleted-back-button"
+              >
+                <ChevronLeftIcon color={colors.textPrimary} size={26} />
+              </Pressable>
+            ),
+          }}
+        />
       </Stack.Protected>
       <Stack.Protected guard={needsOnboarding}>
         <Stack.Screen name="onboarding" />
