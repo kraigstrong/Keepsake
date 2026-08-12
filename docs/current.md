@@ -6,10 +6,10 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 
 ## Current
 
-- **Phase:** 16 — Archive, Recently Deleted, and Destructive Lifecycle. Phases 12–15 have all formally exited (12: Conditional Pass, 2026-08-07; 13/14: Pass, 2026-08-10; 15: Conditional Pass, 2026-08-11 — see History table).
-- **Status:** Build scope complete: ADR-0025 + 10 commits — schema/RPCs/pgTAP, local schema v11 + sync mirror, Library/Search/This-Week-picker exclusions, import duplicate-detection exclusion, client data layer, Recipe Detail archive/delete actions, Archived Recipes screen, Recently Deleted screen. 109 suites / 957 tests passing locally; pgTAP is CI-only (no Docker locally). Not yet formally exited. Per ADR-0003, not on the physical-device-required list — Simulator is sufficient at exit.
-- **Next action:** Run `exit-phase` for Phase 16.
-- **Blocked on:** Nothing.
+- **Phase:** 16 — Archive, Recently Deleted, and Destructive Lifecycle. Build scope merged ([PR #49](https://github.com/kraigstrong/Keepsake/pull/49), 2026-08-12). Phases 12–15 have all formally exited (12: Conditional Pass, 2026-08-07; 13/14: Pass, 2026-08-10; 15: Conditional Pass, 2026-08-11 — see History table).
+- **Status:** Phase 16's first real developer walkthrough (2026-08-12, physical device) found 6 issues, on branch `phase-16-walkthrough-feedback`: Done Cooking's remove-from-plan toggle now defaults checked; Cooking Mode defaults its scale to the This-Week plan's servings; a confirmed plan now auto-reopens once its last entry is removed (was a dead end — the empty state's own "Add recipes" button silently failed against a locked plan); the extraction prompt now lists "Cook's Note" alongside "Chef's Note" (root-caused against a real page); Recipe Detail's Add-to-This-Week no longer silently drops the selected scale when a recipe's servings count never parsed (root-caused by querying live data — found the real recipe behind it). One disclosed, not fixed per explicit developer instruction: Archive/Delete's button placement on Recipe Detail (UX complaint, not a defect). Investigating the last two also surfaced **ADR-0026** (multiplier as the canonical scaling unit) — the root cause both servings bugs share, scoped as a cross-cutting fix bigger than a bug patch, deliberately not started here.
+- **Next action:** Push `phase-16-walkthrough-feedback` and open a PR for review. Separately, a future session implements ADR-0026 (developer's own call to start that in a new chat) — read it before touching `planning_entries`, `add_to_weekly_plan`/`add_recipes_to_weekly_plan`, grocery generation, or Cooking Mode's scaling default.
+- **Blocked on:** Nothing. Phase 16 itself has not yet run `exit-phase` — reasonable to fold this walkthrough round's evidence into that when it happens, rather than exiting before the first real device pass landed.
 
 ## History
 
