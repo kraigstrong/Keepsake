@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { useRouter } from 'expo-router';
 
 import { SettingsScreen } from './SettingsScreen';
 import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useSession } from '../session/SessionProvider';
 
+jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
@@ -16,12 +18,15 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
+const mockedUseRouter = useRouter as jest.Mock;
 
 const signOut = jest.fn();
 const setPassword = jest.fn();
+const push = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockedUseRouter.mockReturnValue({ push });
   mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } }, signOut, setPassword });
   mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue([]);
@@ -31,6 +36,24 @@ beforeEach(() => {
     preferredUnitSystem: 'us_customary',
   });
   mockedHouseholdApi.updateProfile.mockResolvedValue(undefined);
+});
+
+describe('lifecycle navigation (Phase 16, ADR-0025 decision 8)', () => {
+  it('navigates to Archived Recipes', async () => {
+    await render(<SettingsScreen />);
+
+    await fireEvent.press(screen.getByTestId('settings-archived-recipes-row'));
+
+    expect(push).toHaveBeenCalledWith('/archived-recipes');
+  });
+
+  it('navigates to Recently Deleted', async () => {
+    await render(<SettingsScreen />);
+
+    await fireEvent.press(screen.getByTestId('settings-recently-deleted-row'));
+
+    expect(push).toHaveBeenCalledWith('/recently-deleted');
+  });
 });
 
 describe('preferred unit system (ADR-0018, UNIT-02)', () => {

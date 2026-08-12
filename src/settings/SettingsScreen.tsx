@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -25,6 +26,7 @@ import { colors, spacing, typography } from '../theme/tokens';
 // keeps working either way, this just adds an alternative for whoever
 // wants one.
 export function SettingsScreen() {
+  const router = useRouter();
   const { session, signOut, setPassword } = useSession();
   const { household } = useHousehold();
   const [members, setMembers] = useState<HouseholdMember[]>([]);
@@ -132,6 +134,20 @@ export function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container} testID="settings-placeholder">
+      <Text style={styles.sectionTitle}>Recipes</Text>
+      <View testID="settings-recipes-list">
+        <Row
+          title="Archived Recipes"
+          onPress={() => router.push('/archived-recipes')}
+          testID="settings-archived-recipes-row"
+        />
+        <Row
+          title="Recently Deleted"
+          onPress={() => router.push('/recently-deleted')}
+          testID="settings-recently-deleted-row"
+        />
+      </View>
+
       <Text style={styles.sectionTitle}>Household</Text>
       {isLoadingMembers ? (
         <LoadingState testID="settings-members-loading" />

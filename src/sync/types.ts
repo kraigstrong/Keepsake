@@ -27,6 +27,11 @@ export interface SyncedRecipe {
   instructionSections: RecipeSection[];
   createdAt: string;
   updatedAt: string;
+  // Phase 16 (ADR-0025) — the recipe's own soft archive/delete state, not
+  // to be confused with DeletedRecipeTombstone below (that's the
+  // separate hard-delete record, ADR-0013).
+  archivedAt: string | null;
+  deletedAt: string | null;
 }
 
 export interface DeletedRecipeTombstone {

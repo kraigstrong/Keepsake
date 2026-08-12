@@ -57,6 +57,8 @@ const recipe: SyncedRecipe = {
   instructionSections: [{ title: null, lines: ['Brown the beef.'] }],
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-05T00:00:00.000Z',
+  archivedAt: null,
+  deletedAt: null,
 };
 
 describe('readSyncState', () => {
@@ -146,6 +148,8 @@ describe('upsertRecipes', () => {
       JSON.stringify(recipe.instructionSections),
       recipe.createdAt,
       recipe.updatedAt,
+      recipe.archivedAt,
+      recipe.deletedAt,
       expect.any(String),
     );
   });

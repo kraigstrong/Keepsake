@@ -25,6 +25,11 @@ import { MIGRATIONS } from '../db/schema';
  * tables) and has one dedicated cross-household test proving the join
  * actually excludes another household's row, not just that same-
  * household search still works.
+ *
+ * ADR-0025 (Phase 16): the same join also excludes archived/deleted
+ * recipes now, so migration 11 (archived_at/deleted_at) runs here too —
+ * not every migration in between, only the ones this file's queries
+ * actually touch.
  */
 
 const HOUSEHOLD_ID = 'hh-search-correctness';
@@ -33,6 +38,7 @@ function createSearchDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   for (const statement of MIGRATIONS[1]!) db.exec(statement);
   for (const statement of MIGRATIONS[2]!) db.exec(statement);
+  for (const statement of MIGRATIONS[11]!) db.exec(statement);
   return db;
 }
 

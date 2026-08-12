@@ -3,12 +3,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
-import { type Category, fetchCategories, fetchRecipe, type Recipe } from './api';
+import {
+  archiveRecipe,
+  type Category,
+  deleteRecipe,
+  fetchCategories,
+  fetchRecipe,
+  type Recipe,
+  unarchiveRecipe,
+} from './api';
 import { getHeroImageUrl } from './heroImage';
 import { DEFAULT_SERVINGS_WHEN_UNKNOWN, SCALE_PRESETS, scaledIngredientSections } from './scaling';
 import { Button } from '../components/Button';
 import { type CookingEvent, getCookingHistory } from '../cooking/api';
 import { Chip } from '../components/Chip';
+import { confirm } from '../components/confirm';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
@@ -278,6 +287,50 @@ export function RecipeDetailScreen({
     }
   }
 
+  // LIFE-01/02 (Phase 16, ADR-0025 decision 5): the recipe stays loaded
+  // once archived — only Library/Search/etc hide it — so this toggles
+  // in place rather than navigating away.
+  async function handleToggleArchive() {
+    if (!recipe) return;
+    const wasArchived = recipe.archivedAt != null;
+    try {
+      if (wasArchived) {
+        await unarchiveRecipe(recipeId);
+        setRecipe({ ...recipe, archivedAt: null });
+        showToast('Recipe unarchived');
+      } else {
+        await archiveRecipe(recipeId);
+        setRecipe({ ...recipe, archivedAt: new Date().toISOString() });
+        showToast('Recipe archived');
+      }
+    } catch {
+      showToast(wasArchived ? "Couldn't unarchive recipe" : "Couldn't archive recipe");
+    }
+  }
+
+  // LIFE-03/04 (ADR-0025 decision 9): confirm() gates the destructive
+  // step; a deleted recipe no longer belongs on this screen (it's gone
+  // from Library too), so this navigates back rather than staying put
+  // the way archive does.
+  async function handleDelete() {
+    if (!recipe) return;
+    const confirmed = await confirm({
+      title: 'Delete this recipe?',
+      message:
+        'It moves to Recently Deleted, where you can restore it or permanently delete it later.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteRecipe(recipeId);
+      showToast('Recipe deleted');
+      router.back();
+    } catch {
+      showToast("Couldn't delete recipe");
+    }
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -462,6 +515,22 @@ export function RecipeDetailScreen({
             <Text style={styles.editButtonLabel}>Original Photo</Text>
           </Pressable>
         )}
+        <Pressable
+          style={styles.editButton}
+          accessibilityRole="button"
+          onPress={handleToggleArchive}
+          testID="recipe-detail-archive-button"
+        >
+          <Text style={styles.editButtonLabel}>{recipe.archivedAt ? 'Unarchive' : 'Archive'}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.editButton}
+          accessibilityRole="button"
+          onPress={handleDelete}
+          testID="recipe-detail-delete-button"
+        >
+          <Text style={styles.editButtonLabel}>Delete</Text>
+        </Pressable>
       </View>
 
       <Button
@@ -470,12 +539,21 @@ export function RecipeDetailScreen({
         testID="recipe-detail-start-cooking"
       />
 
-      <Button
-        title="Add to This Week"
-        variant="secondary"
-        onPress={handleAddToThisWeek}
-        testID="recipe-detail-add-to-this-week"
-      />
+      {/* LIFE-01 (ADR-0025): Archive hides a recipe from Planning —
+          add_to_weekly_plan now rejects an archived recipe id
+          server-side, so this stays hidden rather than offering a
+          button that would just error. Not shown for a deleted recipe
+          either, but Recipe Detail is never reached for one (Recently
+          Deleted doesn't navigate into it), so archivedAt is the only
+          state this actually needs to check. */}
+      {!recipe.archivedAt && (
+        <Button
+          title="Add to This Week"
+          variant="secondary"
+          onPress={handleAddToThisWeek}
+          testID="recipe-detail-add-to-this-week"
+        />
+      )}
     </ScrollView>
   );
 }

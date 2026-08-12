@@ -1,13 +1,20 @@
 import {
+  archiveRecipe,
   deleteDraft,
+  deleteRecipe,
+  fetchArchivedRecipes,
   fetchCategories,
+  fetchDeletedRecipes,
   fetchDraft,
   fetchRecipe,
   fetchRecipeVersions,
   fetchRecipes,
+  permanentlyDeleteRecipe,
+  restoreRecipe,
   restoreRecipeVersion,
   saveDraft,
   saveRecipe,
+  unarchiveRecipe,
 } from './api';
 import { supabase } from '../supabase/instance';
 
@@ -15,6 +22,7 @@ jest.mock('../supabase/instance', () => ({
   supabase: {
     from: jest.fn(),
     rpc: jest.fn(),
+    storage: { from: jest.fn() },
   },
 }));
 
@@ -27,14 +35,18 @@ describe('fetchRecipes', () => {
   it('returns id/title/servingsCount summaries', async () => {
     mockedFrom.mockReturnValue({
       select: () => ({
-        order: () =>
-          Promise.resolve({
-            data: [
-              { id: 'r1', title: 'Chili', servings_count: 6 },
-              { id: 'r2', title: 'Tacos', servings_count: null },
-            ],
-            error: null,
+        is: () => ({
+          is: () => ({
+            order: () =>
+              Promise.resolve({
+                data: [
+                  { id: 'r1', title: 'Chili', servings_count: 6 },
+                  { id: 'r2', title: 'Tacos', servings_count: null },
+                ],
+                error: null,
+              }),
           }),
+        }),
       }),
     });
 
@@ -45,9 +57,27 @@ describe('fetchRecipes', () => {
     expect(mockedFrom).toHaveBeenCalledWith('recipes');
   });
 
+  it('excludes archived and deleted recipes (Phase 16, ADR-0025)', async () => {
+    const order = jest.fn(() => Promise.resolve({ data: [], error: null }));
+    const secondIs = jest.fn(() => ({ order }));
+    const firstIs = jest.fn(() => ({ is: secondIs }));
+    mockedFrom.mockReturnValue({ select: () => ({ is: firstIs }) });
+
+    await fetchRecipes();
+
+    expect(firstIs).toHaveBeenCalledWith('archived_at', null);
+    expect(secondIs).toHaveBeenCalledWith('deleted_at', null);
+  });
+
   it('throws on a Supabase error', async () => {
     mockedFrom.mockReturnValue({
-      select: () => ({ order: () => Promise.resolve({ data: null, error: new Error('boom') }) }),
+      select: () => ({
+        is: () => ({
+          is: () => ({
+            order: () => Promise.resolve({ data: null, error: new Error('boom') }),
+          }),
+        }),
+      }),
     });
 
     await expect(fetchRecipes()).rejects.toThrow('boom');
@@ -332,5 +362,135 @@ describe('drafts', () => {
     await deleteDraft(null);
 
     expect(mockedRpc).toHaveBeenCalledWith('delete_draft', { recipe_id_param: null });
+  });
+});
+
+describe('archive/delete/restore (Phase 16, ADR-0025)', () => {
+  it('archiveRecipe calls archive_recipe', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await archiveRecipe('r1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('archive_recipe', { recipe_id: 'r1' });
+  });
+
+  it('archiveRecipe throws on a Supabase error', async () => {
+    mockedRpc.mockResolvedValue({ error: new Error('recipe not found') });
+
+    await expect(archiveRecipe('r1')).rejects.toThrow('recipe not found');
+  });
+
+  it('unarchiveRecipe calls unarchive_recipe', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await unarchiveRecipe('r1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('unarchive_recipe', { recipe_id: 'r1' });
+  });
+
+  it('deleteRecipe calls delete_recipe', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await deleteRecipe('r1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('delete_recipe', { recipe_id: 'r1' });
+  });
+
+  it('restoreRecipe calls restore_recipe', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await restoreRecipe('r1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('restore_recipe', { recipe_id: 'r1' });
+  });
+
+  describe('permanentlyDeleteRecipe', () => {
+    it('removes both storage paths when the deleted recipe had them', async () => {
+      mockedRpc.mockResolvedValue({
+        data: [{ hero_image_path: 'h1/r1.jpg', original_photo_path: 'h1/r1-original.jpg' }],
+        error: null,
+      });
+      const remove = jest.fn().mockResolvedValue({ error: null });
+      const mockedStorage = supabase.storage as unknown as { from: jest.Mock };
+      mockedStorage.from = jest.fn(() => ({ remove }));
+
+      await permanentlyDeleteRecipe('r1');
+
+      expect(mockedRpc).toHaveBeenCalledWith('permanently_delete_recipe', { recipe_id: 'r1' });
+      expect(mockedStorage.from).toHaveBeenCalledWith('recipe-images');
+      expect(remove).toHaveBeenCalledWith(['h1/r1.jpg', 'h1/r1-original.jpg']);
+    });
+
+    it('skips storage cleanup when both paths are null', async () => {
+      mockedRpc.mockResolvedValue({
+        data: [{ hero_image_path: null, original_photo_path: null }],
+        error: null,
+      });
+      const mockedStorage = supabase.storage as unknown as { from: jest.Mock };
+      mockedStorage.from = jest.fn();
+
+      await permanentlyDeleteRecipe('r1');
+
+      expect(mockedStorage.from).not.toHaveBeenCalled();
+    });
+
+    it('skips storage cleanup on a quiet-retry (empty row set)', async () => {
+      mockedRpc.mockResolvedValue({ data: [], error: null });
+      const mockedStorage = supabase.storage as unknown as { from: jest.Mock };
+      mockedStorage.from = jest.fn();
+
+      await permanentlyDeleteRecipe('r1');
+
+      expect(mockedStorage.from).not.toHaveBeenCalled();
+    });
+
+    it('throws on a Supabase error without attempting storage cleanup', async () => {
+      mockedRpc.mockResolvedValue({ error: new Error('recipe is not deleted') });
+      const mockedStorage = supabase.storage as unknown as { from: jest.Mock };
+      mockedStorage.from = jest.fn();
+
+      await expect(permanentlyDeleteRecipe('r1')).rejects.toThrow('recipe is not deleted');
+      expect(mockedStorage.from).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('fetchArchivedRecipes', () => {
+  it('queries archived, non-deleted recipes newest-first', async () => {
+    const order = jest.fn(() =>
+      Promise.resolve({
+        data: [{ id: 'r1', title: 'Chili', archived_at: '2026-08-10T00:00:00Z' }],
+        error: null,
+      }),
+    );
+    const is = jest.fn(() => ({ order }));
+    const not = jest.fn(() => ({ is }));
+    mockedFrom.mockReturnValue({ select: () => ({ not }) });
+
+    await expect(fetchArchivedRecipes()).resolves.toEqual([
+      { id: 'r1', title: 'Chili', archivedAt: '2026-08-10T00:00:00Z' },
+    ]);
+    expect(not).toHaveBeenCalledWith('archived_at', 'is', null);
+    expect(is).toHaveBeenCalledWith('deleted_at', null);
+    expect(order).toHaveBeenCalledWith('archived_at', { ascending: false });
+  });
+});
+
+describe('fetchDeletedRecipes', () => {
+  it('queries deleted recipes newest-first, regardless of archived_at', async () => {
+    const order = jest.fn(() =>
+      Promise.resolve({
+        data: [{ id: 'r1', title: 'Chili', deleted_at: '2026-08-10T00:00:00Z' }],
+        error: null,
+      }),
+    );
+    const not = jest.fn(() => ({ order }));
+    mockedFrom.mockReturnValue({ select: () => ({ not }) });
+
+    await expect(fetchDeletedRecipes()).resolves.toEqual([
+      { id: 'r1', title: 'Chili', deletedAt: '2026-08-10T00:00:00Z' },
+    ]);
+    expect(not).toHaveBeenCalledWith('deleted_at', 'is', null);
+    expect(order).toHaveBeenCalledWith('deleted_at', { ascending: false });
   });
 });

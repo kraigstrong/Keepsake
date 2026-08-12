@@ -42,6 +42,8 @@ interface LocalRecipeRow {
   category_ids: string;
   ingredient_sections: string;
   instruction_sections: string;
+  archived_at: string | null;
+  deleted_at: string | null;
 }
 
 function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
@@ -62,6 +64,8 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
     categoryIds: JSON.parse(row.category_ids) as string[],
     ingredientSections: JSON.parse(row.ingredient_sections) as IngredientSection[],
     instructionSections: JSON.parse(row.instruction_sections) as RecipeSection[],
+    archivedAt: row.archived_at,
+    deletedAt: row.deleted_at,
   };
 }
 
@@ -79,10 +83,17 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
 // household-scoped filtering, not a successful wipe, is the actual
 // local-data authorization boundary; the wipe stays as best-effort
 // cleanup on top of it.
+//
+// readLocalLibraryRecipes also excludes archived/deleted recipes (Phase
+// 16, ADR-0025) — Library/Search/the planning picker are the surfaces
+// prd.md §20 names. readLocalRecipe below deliberately stays unfiltered:
+// Recipe Detail must still load an archived recipe (Archived Recipes
+// navigates straight into it), and there's no reason to make the id-based
+// lookup enforce a rule only the *listing* screens need.
 export async function readLocalLibraryRecipes(householdId: string): Promise<LibraryRecipe[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<LibraryRecipeRow>(
-    'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? order by title',
+    'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
     householdId,
   );
   return rows.map((row) => ({

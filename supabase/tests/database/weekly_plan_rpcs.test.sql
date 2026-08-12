@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(41);
+select plan(45);
 
 insert into auth.users (id, email)
 values
@@ -35,7 +35,19 @@ values
   ('20000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    'Recipe A2', '11111111-1111-1111-1111-111111111111'),
   ('20000000-0000-0000-0000-000000000003', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-   'Recipe B1', '33333333-3333-3333-3333-333333333333');
+   'Recipe B1', '33333333-3333-3333-3333-333333333333'),
+  -- Codex review, PR #49: archived_at/deleted_at didn't exist when this
+  -- suite was first written (Phase 12) — add_to_weekly_plan/
+  -- add_recipes_to_weekly_plan need to reject both states server-side
+  -- (ADR-0025 decision 5, LIFE-01), not just rely on the This-Week
+  -- add-recipe picker's own client-side query excluding them.
+  ('20000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'Recipe A3 (archived)', '11111111-1111-1111-1111-111111111111'),
+  ('20000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'Recipe A4 (deleted)', '11111111-1111-1111-1111-111111111111');
+
+update public.recipes set archived_at = now() where id = '20000000-0000-0000-0000-000000000004';
+update public.recipes set deleted_at = now() where id = '20000000-0000-0000-0000-000000000005';
 
 set local role authenticated;
 
@@ -101,6 +113,22 @@ select throws_ok(
   ),
   'recipe not found',
   'add_to_weekly_plan: rejects a recipe belonging to a different household'
+);
+select throws_ok(
+  format(
+    $$ select public.add_to_weekly_plan(%L, '20000000-0000-0000-0000-000000000004', 2) $$,
+    (select id from plan_a)
+  ),
+  'recipe not found',
+  'add_to_weekly_plan: rejects an archived recipe'
+);
+select throws_ok(
+  format(
+    $$ select public.add_to_weekly_plan(%L, '20000000-0000-0000-0000-000000000005', 2) $$,
+    (select id from plan_a)
+  ),
+  'recipe not found',
+  'add_to_weekly_plan: rejects a deleted recipe'
 );
 
 select set_config(
@@ -190,10 +218,34 @@ select throws_ok(
   'recipe not found',
   'add_recipes_to_weekly_plan: rejects a batch containing a cross-household recipe'
 );
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(
+         %L,
+         array['20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000004']::uuid[],
+         array[4, 2]
+       ) $$,
+    (select id from plan_batch)
+  ),
+  'recipe not found',
+  'add_recipes_to_weekly_plan: rejects a batch containing an archived recipe'
+);
+select throws_ok(
+  format(
+    $$ select public.add_recipes_to_weekly_plan(
+         %L,
+         array['20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000005']::uuid[],
+         array[4, 2]
+       ) $$,
+    (select id from plan_batch)
+  ),
+  'recipe not found',
+  'add_recipes_to_weekly_plan: rejects a batch containing a deleted recipe'
+);
 select is(
   (select count(*)::int from public.planning_entries where weekly_plan_id = (select id from plan_batch)),
   2,
-  'add_recipes_to_weekly_plan: the rejected batch inserted nothing at all (all-or-nothing)'
+  'add_recipes_to_weekly_plan: the rejected batches inserted nothing at all (all-or-nothing)'
 );
 
 select set_config(

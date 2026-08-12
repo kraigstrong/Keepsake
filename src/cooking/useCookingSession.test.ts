@@ -55,6 +55,8 @@ const recipe: Recipe = {
   categoryIds: [],
   ingredientSections: [{ title: null, lines: [] }],
   instructionSections: [{ title: null, lines: ['Preheat oven.'] }],
+  archivedAt: null,
+  deletedAt: null,
 };
 
 beforeEach(() => {

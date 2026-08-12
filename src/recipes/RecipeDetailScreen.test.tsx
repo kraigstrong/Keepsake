@@ -5,6 +5,7 @@ import { Linking } from 'react-native';
 import * as api from './api';
 import * as heroImage from './heroImage';
 import { RecipeDetailScreen, type RecipeDetailScreenProps } from './RecipeDetailScreen';
+import { confirm } from '../components/confirm';
 import { ToastProvider } from '../components/Toast';
 import * as cookingApi from '../cooking/api';
 import * as householdApi from '../household/api';
@@ -23,6 +24,7 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 
 jest.mock('./api');
 jest.mock('./heroImage');
+jest.mock('../components/confirm');
 jest.mock('../cooking/api');
 jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
@@ -58,8 +60,10 @@ const mockedUseSession = useSession as jest.Mock;
 const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes>;
 const mockedThisWeekApi = thisWeekApi as jest.Mocked<typeof thisWeekApi>;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedConfirm = confirm as jest.Mock;
 
 const push = jest.fn();
+const back = jest.fn();
 
 const recipe: api.Recipe = {
   id: 'recipe-1',
@@ -98,11 +102,13 @@ const recipe: api.Recipe = {
     },
   ],
   instructionSections: [{ title: null, lines: ['Preheat the oven.', 'Roast it.'] }],
+  archivedAt: null,
+  deletedAt: null,
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedUseRouter.mockReturnValue({ push });
+  mockedUseRouter.mockReturnValue({ push, back });
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedHouseholdApi.fetchProfile.mockResolvedValue({
@@ -460,5 +466,114 @@ describe('cooking history (Phase 15, REC-05/NOTE-01..03)', () => {
     await waitFor(() => expect(mockedCookingApi.getCookingHistory).toHaveBeenCalled());
 
     expect(screen.queryByTestId('recipe-detail-cooking-history')).toBeNull();
+  });
+});
+
+describe('archive/delete (Phase 16, ADR-0025)', () => {
+  it('shows an Archive button for an active recipe', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    expect(screen.getByText('Archive')).toBeTruthy();
+  });
+
+  it('archives the recipe and flips the button to Unarchive', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedApi.archiveRecipe.mockResolvedValue(undefined);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+
+    await waitFor(() => expect(mockedApi.archiveRecipe).toHaveBeenCalledWith('recipe-1'));
+    expect(screen.getByText('Recipe archived')).toBeTruthy();
+    expect(screen.getByText('Unarchive')).toBeTruthy();
+  });
+
+  it('unarchives an already-archived recipe and flips the button back to Archive', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      ...recipe,
+      archivedAt: '2026-08-10T00:00:00.000Z',
+    });
+    mockedApi.unarchiveRecipe.mockResolvedValue(undefined);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    expect(screen.getByText('Unarchive')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+
+    await waitFor(() => expect(mockedApi.unarchiveRecipe).toHaveBeenCalledWith('recipe-1'));
+    expect(screen.getByText('Recipe unarchived')).toBeTruthy();
+    expect(screen.getByText('Archive')).toBeTruthy();
+  });
+
+  it('shows an error toast when archiving fails, without flipping the button', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedApi.archiveRecipe.mockRejectedValue(new Error('offline'));
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+
+    await waitFor(() => expect(screen.getByText("Couldn't archive recipe")).toBeTruthy());
+    expect(screen.getByText('Archive')).toBeTruthy();
+  });
+
+  it('does nothing when Delete is pressed and the confirmation is declined', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedConfirm.mockResolvedValue(false);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+
+    await waitFor(() => expect(mockedConfirm).toHaveBeenCalled());
+    expect(mockedApi.deleteRecipe).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('deletes the recipe and navigates back after confirming', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedConfirm.mockResolvedValue(true);
+    mockedApi.deleteRecipe.mockResolvedValue(undefined);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+
+    await waitFor(() => expect(mockedApi.deleteRecipe).toHaveBeenCalledWith('recipe-1'));
+    expect(back).toHaveBeenCalled();
+  });
+
+  it('shows an error toast and stays on the screen when delete fails after confirming', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedConfirm.mockResolvedValue(true);
+    mockedApi.deleteRecipe.mockRejectedValue(new Error('offline'));
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+
+    await waitFor(() => expect(screen.getByText("Couldn't delete recipe")).toBeTruthy());
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('hides Add to This Week for an archived recipe (LIFE-01)', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      ...recipe,
+      archivedAt: '2026-08-10T00:00:00.000Z',
+    });
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    expect(screen.queryByTestId('recipe-detail-add-to-this-week')).toBeNull();
+  });
+
+  it('hides Add to This Week immediately after archiving, without a reload', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedApi.archiveRecipe.mockResolvedValue(undefined);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    expect(screen.getByTestId('recipe-detail-add-to-this-week')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+
+    await waitFor(() => expect(screen.queryByTestId('recipe-detail-add-to-this-week')).toBeNull());
   });
 });

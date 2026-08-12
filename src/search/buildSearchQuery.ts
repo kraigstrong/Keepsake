@@ -33,7 +33,10 @@ export interface TierMatchQuery {
  * column filter either), so the household scope is applied as an outer
  * join against recipes — bm25() itself still runs unfiltered/unaliased
  * inside the subquery (its argument must name the FTS5 table directly),
- * with the join+limit applied after ranking.
+ * with the join+limit applied after ranking. Same join now also excludes
+ * archived/deleted recipes (Phase 16, ADR-0025) — recipe_fts has no
+ * archived_at/deleted_at of its own either, same reasoning as household
+ * scoping, so this is the one place that filter needs to live for search.
  */
 function buildColumnMatchQuery(
   column: string,
@@ -50,7 +53,7 @@ function buildColumnMatchQuery(
            where recipe_fts match ?
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ?
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
        order by t.rank
        limit ${limit}
     `,
@@ -89,7 +92,7 @@ export function buildEverythingMatchQuery(
            where recipe_fts match ?
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ?
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
        order by t.rank
        limit ${limit}
     `,
@@ -168,7 +171,7 @@ export function buildFuzzyMatchQuery(
            group by recipe_id
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ?
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
        order by t.shared desc
        limit ${limit}
     `,
