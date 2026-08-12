@@ -113,6 +113,15 @@ grant execute on function public.delete_recipe(uuid) to authenticated;
 -- going — the user asked to get their recipe back, not to arbitrate
 -- which copy owns a URL. Only recipe_id changes what's compared;
 -- source_attribution is untouched either way.
+--
+-- Amended (Codex review, PR #49): the url_taken EXISTS check above is a
+-- plain, non-locking read — a concurrent import of the same URL between
+-- that check and the UPDATE below committing could still find url_taken
+-- false and then hit the unique-index violation this whole amendment
+-- exists to avoid. Catching unique_violation and retrying once with
+-- source_url forced to null closes that gap unconditionally: null is
+-- excluded from the partial unique index, so the retry can never
+-- collide, regardless of how the race actually interleaved.
 create or replace function public.restore_recipe(recipe_id uuid)
 returns public.recipes
 language plpgsql
@@ -148,12 +157,21 @@ begin
       and other.id <> restore_recipe.recipe_id
   );
 
-  update public.recipes
-  set deleted_at = null,
-      source_url = case when url_taken then null else source_url end,
-      updated_at = now()
-  where id = restore_recipe.recipe_id and household_id = caller_household_id
-  returning * into result_recipe;
+  begin
+    update public.recipes
+    set deleted_at = null,
+        source_url = case when url_taken then null else source_url end,
+        updated_at = now()
+    where id = restore_recipe.recipe_id and household_id = caller_household_id
+    returning * into result_recipe;
+  exception when unique_violation then
+    update public.recipes
+    set deleted_at = null,
+        source_url = null,
+        updated_at = now()
+    where id = restore_recipe.recipe_id and household_id = caller_household_id
+    returning * into result_recipe;
+  end;
 
   -- Codex review, PR #49: without this, a row that vanished between the
   -- SELECT above and this UPDATE (e.g. a concurrent

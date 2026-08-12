@@ -73,6 +73,7 @@ Older phases (4, 5, 7, 11) also exited Conditional Pass on a generic "no live Si
 - **Phase 15 — Reset checklist has no confirmation or undo**, unlike this app's own precedent (This Week's remove has Undo). Revisit alongside any other Cooking Mode UX pass.
 - **Phase 15 — "Start Cooking" vs. "Add to This Week" button emphasis on Recipe Detail** — an unconfirmed UI-emphasis call (Start Cooking made primary); revisit if usage or developer feedback suggests the wrong one is primary.
 - **Phase 15 — `submitPendingCookingEvents` call inside `CookingModeScreen`'s Done Cooking handler skips the account-switch-guard callback** `app/_layout.tsx`'s own wiring uses (ADR-0020's TOCTOU fix). Very low practical risk; close when convenient.
+- **Phase 16 — a permanently-deleted recipe can leave a zombie cooking-event outbox item.** An unsynced Phase 15 cooking-completion event for a recipe that gets `permanently_delete_recipe`d before it syncs retries forever (no terminal-failure state in `submitPendingCookingEvents`, by ADR-0024's own design) against a recipe that's actually gone, logging an error every foreground/reconnect drain. Narrow trigger window, bounded to log noise/wasted calls — a real fix needs a terminal/no-op outcome added to the outbox's retry classification (an ADR-0024 design change), not a contained patch. Found by Codex review, PR #49; see ADR-0025's 2026-08-12 amendment.
 
 ## Open questions for the developer
 
