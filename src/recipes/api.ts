@@ -326,3 +326,87 @@ export async function deleteDraft(recipeId: string | null): Promise<void> {
   const { error } = await supabase.rpc('delete_draft', { recipe_id_param: recipeId });
   if (error) throw error;
 }
+
+// Phase 16 (ADR-0025). Confirmation is the caller's job (decision 9) —
+// these just perform the action once asked.
+export async function archiveRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('archive_recipe', { recipe_id: recipeId });
+  if (error) throw error;
+}
+
+export async function unarchiveRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('unarchive_recipe', { recipe_id: recipeId });
+  if (error) throw error;
+}
+
+export async function deleteRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_recipe', { recipe_id: recipeId });
+  if (error) throw error;
+}
+
+export async function restoreRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_recipe', { recipe_id: recipeId });
+  if (error) throw error;
+}
+
+// LIFE-07. The RPC returns the doomed row's Storage paths rather than
+// deleting them itself (ADR-0025 decision 4); a cleanup failure here is
+// swallowed, not rethrown — the recipe row is already gone by this
+// point, and an orphaned object is the same accepted low-severity gap
+// as T15, not a reason to surface an error for an action that, from the
+// user's perspective, already completed.
+export async function permanentlyDeleteRecipe(recipeId: string): Promise<void> {
+  const { data, error } = await supabase.rpc('permanently_delete_recipe', {
+    recipe_id: recipeId,
+  });
+  if (error) throw error;
+
+  const row = (data as { hero_image_path: string | null; original_photo_path: string | null }[])[0];
+  const paths = [row?.hero_image_path, row?.original_photo_path].filter(
+    (path): path is string => path != null,
+  );
+  if (paths.length === 0) return;
+
+  await supabase.storage.from('recipe-images').remove(paths);
+}
+
+export interface ArchivedRecipeSummary {
+  id: string;
+  title: string;
+  archivedAt: string;
+}
+
+export async function fetchArchivedRecipes(): Promise<ArchivedRecipeSummary[]> {
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id, title, archived_at')
+    .not('archived_at', 'is', null)
+    .is('deleted_at', null)
+    .order('archived_at', { ascending: false });
+  if (error) throw error;
+  return (data as { id: string; title: string; archived_at: string }[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    archivedAt: row.archived_at,
+  }));
+}
+
+export interface DeletedRecipeSummary {
+  id: string;
+  title: string;
+  deletedAt: string;
+}
+
+export async function fetchDeletedRecipes(): Promise<DeletedRecipeSummary[]> {
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id, title, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error) throw error;
+  return (data as { id: string; title: string; deleted_at: string }[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    deletedAt: row.deleted_at,
+  }));
+}
