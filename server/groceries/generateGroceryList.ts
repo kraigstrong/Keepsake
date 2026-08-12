@@ -8,7 +8,7 @@
  */
 
 import { unitClass, convertQuantity } from '../units/quantityVocabulary.ts';
-import { scaleQuantity } from '../units/scaleQuantity.ts';
+import { ASSUMED_SERVINGS_WHEN_UNKNOWN, scaleQuantity } from '../units/scaleQuantity.ts';
 import { formatIngredientLine } from '../units/formatIngredientLine.ts';
 import type { ParsedIngredientLine } from '../units/parseQuantity.ts';
 import { canonicalKey } from './canonicalKey.ts';
@@ -59,11 +59,16 @@ function groceryDisplayText(ingredientText: string): string {
   return ingredientText.split(',', 1)[0]!.trim();
 }
 
+// Codex review, PR #50: previously returned 1 (unscaled) whenever
+// recipeServingsCount was null, silently discarding entry.servings —
+// including a value the client had already scaled by the user's chosen
+// multiplier (RecipeDetailScreen's servingsToAdd). Assuming the same
+// base (ASSUMED_SERVINGS_WHEN_UNKNOWN) the client assumed when it
+// computed that value recovers the intended multiplier instead of
+// dropping it. A stopgap — ADR-0026 removes this whole assumed-base
+// round-trip by storing the multiplier directly.
 function multiplierFor(entry: PlanningEntryForGroceries): number {
-  if (!entry.recipeServingsCount) {
-    return 1;
-  }
-  return entry.servings / entry.recipeServingsCount;
+  return entry.servings / (entry.recipeServingsCount ?? ASSUMED_SERVINGS_WHEN_UNKNOWN);
 }
 
 function sumSubgroup(occurrences: ScaledOccurrence[]): string {

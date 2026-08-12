@@ -157,9 +157,27 @@ describe('generateGroceryList', () => {
       expect(findItem(items, 'onion')!.amounts).toEqual(['2 onion']);
     });
 
-    it('does not scale a recipe with no parsed servings count', () => {
+    // Codex review, PR #50: this used to always return multiplier 1 for
+    // a recipe with no parsed servings count, silently discarding
+    // entry.servings — even when the client had already scaled that
+    // value by the user's chosen multiplier (RecipeDetailScreen's
+    // servingsToAdd). It now assumes the same base
+    // (ASSUMED_SERVINGS_WHEN_UNKNOWN, 4) the client assumed, recovering
+    // the intended multiplier instead of dropping it. Stopgap — ADR-0026
+    // removes the whole assumed-base round-trip.
+    it('scales a recipe with no parsed servings count against the same assumed base the client used', () => {
       const items = generateGroceryList([
         entry('r1', 8, null, [
+          line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'onion')!.amounts).toEqual(['2 onion']);
+    });
+
+    it('does not scale a recipe with no parsed servings count when entered at the assumed base itself', () => {
+      const items = generateGroceryList([
+        entry('r1', 4, null, [
           line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' }),
         ]),
       ]);
