@@ -292,7 +292,7 @@ export function ThisWeekScreen() {
           <Text style={styles.rowTitle} numberOfLines={1}>
             {item.title}
           </Text>
-          <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
+          <Text style={styles.rowSubtitle}>{describeServings(item)}</Text>
         </View>
         <Text style={styles.chevron}>{'›'}</Text>
       </Pressable>

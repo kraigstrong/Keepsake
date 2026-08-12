@@ -72,7 +72,7 @@ function entry(overrides: Partial<ThisWeekEntry> = {}): ThisWeekEntry {
     title: overrides.title ?? 'Herb Roast Chicken',
     heroImagePath: overrides.heroImagePath ?? null,
     multiplier: overrides.multiplier ?? 1,
-    servingsCount: overrides.servingsCount ?? 4,
+    servingsCount: 'servingsCount' in overrides ? overrides.servingsCount! : 4,
     position: overrides.position ?? 0,
   };
 }
@@ -142,6 +142,22 @@ it('renders planning rows with title and servings, and a Confirm Plan button', a
   expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
   expect(screen.getByText('Serves 4')).toBeTruthy();
   expect(screen.getByTestId('this-week-confirm-plan')).toBeTruthy();
+});
+
+// ADR-0026 decision 6: a recipe with no parsed servings count (ADR-0018)
+// has nothing to multiply into a serving count, so the row shows the
+// bare multiplier instead.
+it('shows the bare multiplier for a recipe with no parsed servings count', async () => {
+  mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
+    plan({
+      entries: [entry({ id: 'e1', title: 'Sourdough Loaf', multiplier: 1.5, servingsCount: null })],
+    }),
+  );
+
+  renderThisWeekScreen();
+
+  await waitFor(() => expect(screen.getByTestId('this-week-entry-e1')).toBeTruthy());
+  expect(screen.getByText('1.5×')).toBeTruthy();
 });
 
 it('shows an Add recipes button (same treatment as the empty state) once the plan has entries', async () => {
@@ -272,7 +288,10 @@ it('disables move-up on the first entry and move-down on the last entry', async 
 
 it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit Plan button', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
-    plan({ status: 'confirmed', entries: [entry({ id: 'e1', recipeId: 'r1' })] }),
+    plan({
+      status: 'confirmed',
+      entries: [entry({ id: 'e1', recipeId: 'r1', multiplier: 2, servingsCount: 4 })],
+    }),
   );
 
   renderThisWeekScreen();
@@ -281,6 +300,7 @@ it('shows confirmed rows with a chevron that navigate to the recipe, and an Edit
   expect(screen.queryByTestId('this-week-confirm-plan')).toBeNull();
   expect(screen.queryByTestId('this-week-add-recipes')).toBeNull();
   expect(screen.queryByTestId('this-week-entry-move-up-e1')).toBeNull();
+  expect(screen.getByText('Serves 8')).toBeTruthy();
 
   await fireEvent.press(screen.getByTestId('this-week-entry-e1'));
   expect(push).toHaveBeenCalledWith('/recipe/r1');

@@ -4,19 +4,19 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
+import { SCALE_PRESETS } from '../recipes/scaling';
 import { Button } from '../components/Button';
+import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipesToThisWeek } from './api';
 
-// Same "typical household" default RecipeDetailScreen falls back to
-// when a recipe has no parseable serving count (ADR-0018) — used here
-// only when a selected recipe's own servingsCount is null; otherwise
-// each recipe seeds its stepper from its actual parsed/saved value.
-const DEFAULT_SERVINGS = 4;
 const MIN_SERVINGS = 1;
+// ADR-0018: presets are screen-local and reset every visit, same as
+// RecipeDetailScreen's own scaling controls.
+const DEFAULT_MULTIPLIER = 1;
 
 export interface AddToThisWeekScreenProps {
   planId: string;
@@ -34,7 +34,13 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // ADR-0026 decision 3: a recipe with a known servingsCount keeps the
+  // servings-based stepper (servingsById, converted to a multiplier at
+  // submit); a recipe with none (e.g. "makes 24 cookies" — no servings
+  // concept to step through, ADR-0018) uses the same preset chips
+  // RecipeDetailScreen's own scaling controls already offer instead.
   const [servingsById, setServingsById] = useState<Record<string, number>>({});
+  const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -63,7 +69,21 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
       for (const id of selectedIds) {
         if (next[id] === undefined) {
           const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
-          next[id] = recipe?.servingsCount ?? DEFAULT_SERVINGS;
+          if (recipe?.servingsCount != null) {
+            next[id] = recipe.servingsCount;
+          }
+        }
+      }
+      return next;
+    });
+    setMultiplierById((prev) => {
+      const next = { ...prev };
+      for (const id of selectedIds) {
+        if (next[id] === undefined) {
+          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
+          if (recipe?.servingsCount == null) {
+            next[id] = DEFAULT_MULTIPLIER;
+          }
         }
       }
       return next;
@@ -71,10 +91,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     setStep('servings');
   }
 
-  function adjustServings(id: string, delta: number) {
+  function adjustServings(id: string, servingsCount: number, delta: number) {
     setServingsById((prev) => ({
       ...prev,
-      [id]: Math.max(MIN_SERVINGS, (prev[id] ?? DEFAULT_SERVINGS) + delta),
+      [id]: Math.max(MIN_SERVINGS, (prev[id] ?? servingsCount) + delta),
     }));
   }
 
@@ -89,7 +109,14 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     try {
       await addRecipesToThisWeek(
         planId,
-        selectedIds.map((id) => ({ recipeId: id, servings: servingsById[id] ?? DEFAULT_SERVINGS })),
+        selectedIds.map((id) => {
+          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
+          if (recipe?.servingsCount != null) {
+            const servings = servingsById[id] ?? recipe.servingsCount;
+            return { recipeId: id, multiplier: servings / recipe.servingsCount };
+          }
+          return { recipeId: id, multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER };
+        }),
       );
       showToast(
         selectedIds.length === 1
@@ -186,40 +213,67 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
       ) : (
         <>
           <ScrollView style={styles.list}>
-            {selectedRecipes.map((recipe) => (
-              <View
-                key={recipe.id}
-                style={styles.row}
-                testID={`add-to-this-week-servings-${recipe.id}`}
-              >
-                <Text style={styles.rowTitle} numberOfLines={1}>
-                  {recipe.title}
-                </Text>
-                <View style={styles.servingsStepper}>
-                  <Pressable
-                    onPress={() => adjustServings(recipe.id, -1)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Fewer servings for ${recipe.title}`}
-                    hitSlop={8}
-                    testID={`add-to-this-week-servings-decrement-${recipe.id}`}
-                  >
-                    <Text style={styles.servingsButton}>{'−'}</Text>
-                  </Pressable>
-                  <Text style={styles.servingsLabel}>
-                    {servingsById[recipe.id] ?? DEFAULT_SERVINGS}
+            {selectedRecipes.map((recipe) =>
+              recipe.servingsCount != null ? (
+                <View
+                  key={recipe.id}
+                  style={styles.row}
+                  testID={`add-to-this-week-servings-${recipe.id}`}
+                >
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {recipe.title}
                   </Text>
-                  <Pressable
-                    onPress={() => adjustServings(recipe.id, 1)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`More servings for ${recipe.title}`}
-                    hitSlop={8}
-                    testID={`add-to-this-week-servings-increment-${recipe.id}`}
-                  >
-                    <Text style={styles.servingsButton}>{'+'}</Text>
-                  </Pressable>
+                  <View style={styles.servingsStepper}>
+                    <Pressable
+                      onPress={() => adjustServings(recipe.id, recipe.servingsCount!, -1)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Fewer servings for ${recipe.title}`}
+                      hitSlop={8}
+                      testID={`add-to-this-week-servings-decrement-${recipe.id}`}
+                    >
+                      <Text style={styles.servingsButton}>{'−'}</Text>
+                    </Pressable>
+                    <Text style={styles.servingsLabel}>
+                      {servingsById[recipe.id] ?? recipe.servingsCount}
+                    </Text>
+                    <Pressable
+                      onPress={() => adjustServings(recipe.id, recipe.servingsCount!, 1)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`More servings for ${recipe.title}`}
+                      hitSlop={8}
+                      testID={`add-to-this-week-servings-increment-${recipe.id}`}
+                    >
+                      <Text style={styles.servingsButton}>{'+'}</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ) : (
+                <View
+                  key={recipe.id}
+                  style={[styles.row, styles.chipsRow]}
+                  testID={`add-to-this-week-servings-${recipe.id}`}
+                >
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {recipe.title}
+                  </Text>
+                  <View style={styles.chipGroup}>
+                    {SCALE_PRESETS.map((preset) => (
+                      <Chip
+                        key={preset.label}
+                        label={preset.label}
+                        selected={
+                          (multiplierById[recipe.id] ?? DEFAULT_MULTIPLIER) === preset.multiplier
+                        }
+                        onPress={() =>
+                          setMultiplierById((prev) => ({ ...prev, [recipe.id]: preset.multiplier }))
+                        }
+                        testID={`add-to-this-week-scale-preset-${recipe.id}-${preset.multiplier}`}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ),
+            )}
           </ScrollView>
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
@@ -314,6 +368,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  chipsRow: {
+    flexWrap: 'wrap',
+  },
+  chipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   servingsButton: {
     ...typography.heading,
