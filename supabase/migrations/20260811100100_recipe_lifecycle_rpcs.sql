@@ -155,6 +155,16 @@ begin
   where id = restore_recipe.recipe_id and household_id = caller_household_id
   returning * into result_recipe;
 
+  -- Codex review, PR #49: without this, a row that vanished between the
+  -- SELECT above and this UPDATE (e.g. a concurrent
+  -- permanently_delete_recipe on the same id) would silently return a
+  -- null result_recipe instead of raising — every sibling RPC in this
+  -- file already guards its final write this way, this one just missed
+  -- it originally.
+  if result_recipe is null then
+    raise exception 'recipe not found or not deleted' using errcode = 'P0001';
+  end if;
+
   return result_recipe;
 end;
 $$;
@@ -182,6 +192,16 @@ grant execute on function public.restore_recipe(uuid) to authenticated;
 -- earlier successful call (a safe retry, returns quietly), no tombstone
 -- means the id is bogus or belongs to a different household (raises,
 -- same as every other RPC's household check).
+--
+-- Amended (Codex review, PR #49): the original version re-derived these
+-- outcomes from a separate SELECT taken before the DELETE, which left a
+-- TOCTOU gap — a concurrent restore_recipe between that SELECT and this
+-- statement's own DELETE could clear deleted_at on the row, and the
+-- DELETE below (filtered only on id/household, not deleted_at) would
+-- still remove the now-active recipe. `deleted_at is not null` now lives
+-- in the DELETE's own WHERE clause, so the deleted-state check and the
+-- delete are the same atomic statement; every outcome below is derived
+-- from whether *that* statement found a row, not from an earlier read.
 create or replace function public.permanently_delete_recipe(recipe_id uuid)
 returns table (hero_image_path text, original_photo_path text)
 language plpgsql
@@ -190,35 +210,43 @@ set search_path = public
 as $$
 declare
   caller_household_id uuid;
-  current_deleted_at timestamptz;
+  still_exists boolean;
 begin
   caller_household_id := public.my_household_id();
   if caller_household_id is null then
     raise exception 'caller does not belong to a household' using errcode = 'P0001';
   end if;
 
-  select r.deleted_at into current_deleted_at
-  from public.recipes r
-  where r.id = permanently_delete_recipe.recipe_id and r.household_id = caller_household_id;
+  return query
+    delete from public.recipes r
+    where r.id = permanently_delete_recipe.recipe_id
+      and r.household_id = caller_household_id
+      and r.deleted_at is not null
+    returning r.hero_image_path, r.original_photo_path;
 
-  if found and current_deleted_at is null then
+  if found then
+    return;
+  end if;
+
+  -- Nothing deleted: distinguish "still active" (never soft-deleted, or
+  -- restored out from under a racing call) from "already permanently
+  -- deleted by an earlier call" from "bogus id / wrong household".
+  select exists (
+    select 1 from public.recipes r
+    where r.id = permanently_delete_recipe.recipe_id and r.household_id = caller_household_id
+  ) into still_exists;
+
+  if still_exists then
     raise exception 'recipe is not deleted' using errcode = 'P0001';
   end if;
 
-  if not found then
-    if not exists (
-      select 1 from public.deleted_recipes dr
-      where dr.id = permanently_delete_recipe.recipe_id and dr.household_id = caller_household_id
-    ) then
-      raise exception 'recipe not found' using errcode = 'P0001';
-    end if;
-    return; -- already permanently deleted by an earlier call — quiet retry
+  if not exists (
+    select 1 from public.deleted_recipes dr
+    where dr.id = permanently_delete_recipe.recipe_id and dr.household_id = caller_household_id
+  ) then
+    raise exception 'recipe not found' using errcode = 'P0001';
   end if;
-
-  return query
-    delete from public.recipes r
-    where r.id = permanently_delete_recipe.recipe_id and r.household_id = caller_household_id
-    returning r.hero_image_path, r.original_photo_path;
+  -- already permanently deleted by an earlier call — quiet retry
 end;
 $$;
 

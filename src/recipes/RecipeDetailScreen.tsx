@@ -539,12 +539,21 @@ export function RecipeDetailScreen({
         testID="recipe-detail-start-cooking"
       />
 
-      <Button
-        title="Add to This Week"
-        variant="secondary"
-        onPress={handleAddToThisWeek}
-        testID="recipe-detail-add-to-this-week"
-      />
+      {/* LIFE-01 (ADR-0025): Archive hides a recipe from Planning —
+          add_to_weekly_plan now rejects an archived recipe id
+          server-side, so this stays hidden rather than offering a
+          button that would just error. Not shown for a deleted recipe
+          either, but Recipe Detail is never reached for one (Recently
+          Deleted doesn't navigate into it), so archivedAt is the only
+          state this actually needs to check. */}
+      {!recipe.archivedAt && (
+        <Button
+          title="Add to This Week"
+          variant="secondary"
+          onPress={handleAddToThisWeek}
+          testID="recipe-detail-add-to-this-week"
+        />
+      )}
     </ScrollView>
   );
 }

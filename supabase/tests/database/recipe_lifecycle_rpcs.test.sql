@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(25);
+select plan(29);
 
 insert into auth.users (id, email)
 values
@@ -163,6 +163,77 @@ select is(
   (select count(*)::int from public.permanently_delete_recipe('20000000-0000-0000-0000-000000000004')),
   0,
   'permanently_delete_recipe: a repeat call against an already-gone id is a safe no-op, not an error'
+);
+
+-- permanently_delete_recipe / TOCTOU (Codex review, PR #49): the
+-- deleted-state check now lives in the DELETE's own WHERE clause, not a
+-- separate earlier SELECT, precisely so a row that stopped being
+-- deleted between "decide to delete" and "delete" can't be removed
+-- anyway. True concurrent-session interleaving isn't expressible in
+-- pgTAP's single-transaction model (see docs/current.md's own note on
+-- this same limitation for Phase 11.5) — this instead proves the fixed
+-- code path directly: delete, restore, then attempt permanent delete
+-- again. The old implementation's separate SELECT would have raised the
+-- same message here too (this exact sequence isn't itself the race),
+-- but it confirms the rewritten atomic-DELETE version didn't regress
+-- this case while closing the race a concurrent caller could hit.
+select public.delete_recipe('20000000-0000-0000-0000-000000000002');
+select public.restore_recipe('20000000-0000-0000-0000-000000000002');
+select throws_ok(
+  $$ select public.permanently_delete_recipe('20000000-0000-0000-0000-000000000002') $$,
+  'recipe is not deleted',
+  'permanently_delete_recipe: a restored recipe cannot be permanently deleted'
+);
+
+-- permanently_delete_recipe / import_jobs FK cleanup (Codex review, PR
+-- #49): a recipe referenced by import_jobs.recipe_id or
+-- duplicate_of_recipe_id (Phase 8 schema, plain FKs with no ON DELETE
+-- clause) used to make this hard DELETE raise a foreign-key violation —
+-- 20260811130000_recipe_lifecycle_security_fixes.sql sets both to ON
+-- DELETE SET NULL. authenticated has no INSERT grant on recipes/
+-- import_jobs (every write goes through a SECURITY DEFINER RPC), same
+-- reset-role technique the source_url-collision fixture above uses.
+reset role;
+insert into public.recipes (id, household_id, title, created_by)
+values (
+  '20000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  'Recipe A5 (imported)', '11111111-1111-1111-1111-111111111111'
+);
+insert into public.import_jobs
+  (id, household_id, created_by, source_url, normalized_url, status, recipe_id)
+values (
+  '30000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  '11111111-1111-1111-1111-111111111111', 'https://example.test/a5', 'example.test/a5',
+  'complete', '20000000-0000-0000-0000-000000000006'
+);
+insert into public.import_jobs
+  (id, household_id, created_by, source_url, normalized_url, status, duplicate_of_recipe_id)
+values (
+  '30000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  '11111111-1111-1111-1111-111111111111', 'https://example.test/a5-again', 'example.test/a5-again',
+  'complete', '20000000-0000-0000-0000-000000000006'
+);
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+select public.delete_recipe('20000000-0000-0000-0000-000000000006');
+select is(
+  (select count(*)::int from public.permanently_delete_recipe('20000000-0000-0000-0000-000000000006')),
+  1,
+  'permanently_delete_recipe: succeeds for a recipe still referenced by import_jobs'
+);
+select is(
+  (select recipe_id from public.import_jobs where id = '30000000-0000-0000-0000-000000000001'),
+  null,
+  'permanently_delete_recipe: nulls out import_jobs.recipe_id rather than leaving a dangling FK'
+);
+select is(
+  (select duplicate_of_recipe_id from public.import_jobs where id = '30000000-0000-0000-0000-000000000002'),
+  null,
+  'permanently_delete_recipe: nulls out import_jobs.duplicate_of_recipe_id rather than leaving a dangling FK'
 );
 
 -- Cross-household rejection

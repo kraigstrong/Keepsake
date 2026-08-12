@@ -553,4 +553,27 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     await waitFor(() => expect(screen.getByText("Couldn't delete recipe")).toBeTruthy());
     expect(back).not.toHaveBeenCalled();
   });
+
+  it('hides Add to This Week for an archived recipe (LIFE-01)', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      ...recipe,
+      archivedAt: '2026-08-10T00:00:00.000Z',
+    });
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    expect(screen.queryByTestId('recipe-detail-add-to-this-week')).toBeNull();
+  });
+
+  it('hides Add to This Week immediately after archiving, without a reload', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedApi.archiveRecipe.mockResolvedValue(undefined);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    expect(screen.getByTestId('recipe-detail-add-to-this-week')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+
+    await waitFor(() => expect(screen.queryByTestId('recipe-detail-add-to-this-week')).toBeNull());
+  });
 });
