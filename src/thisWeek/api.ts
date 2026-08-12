@@ -8,7 +8,9 @@ export interface ThisWeekEntry {
   recipeId: string;
   title: string;
   heroImagePath: string | null;
-  servings: number;
+  multiplier: number;
+  /** recipes.servings_count — null when the recipe's yield didn't parse (ADR-0018). */
+  servingsCount: number | null;
   position: number;
 }
 
@@ -26,9 +28,9 @@ interface WeeklyPlanRow {
 interface PlanningEntryRow {
   id: string;
   recipe_id: string;
-  servings: number;
+  multiplier: number;
   position: number;
-  recipe: { title: string; hero_image_path: string | null } | null;
+  recipe: { title: string; hero_image_path: string | null; servings_count: number | null } | null;
 }
 
 /**
@@ -48,7 +50,9 @@ export async function fetchCurrentWeeklyPlan(): Promise<ThisWeekPlan> {
 
   const { data: entries, error: entriesError } = await supabase
     .from('planning_entries')
-    .select('id, recipe_id, servings, position, recipe:recipes(title, hero_image_path)')
+    .select(
+      'id, recipe_id, multiplier, position, recipe:recipes(title, hero_image_path, servings_count)',
+    )
     .eq('weekly_plan_id', planRow.id)
     .order('position');
   if (entriesError) {
@@ -63,7 +67,8 @@ export async function fetchCurrentWeeklyPlan(): Promise<ThisWeekPlan> {
       recipeId: row.recipe_id,
       title: row.recipe?.title ?? '',
       heroImagePath: row.recipe?.hero_image_path ?? null,
-      servings: row.servings,
+      multiplier: row.multiplier,
+      servingsCount: row.recipe?.servings_count ?? null,
       position: row.position,
     })),
   };
@@ -72,19 +77,19 @@ export async function fetchCurrentWeeklyPlan(): Promise<ThisWeekPlan> {
 export async function addRecipeToThisWeek(
   planId: string,
   recipeId: string,
-  servings: number,
+  multiplier: number,
 ): Promise<void> {
   const { error } = await supabase.rpc('add_to_weekly_plan', {
     plan_id: planId,
     recipe_id: recipeId,
-    servings,
+    multiplier,
   });
   if (error) throw new Error(error.message);
 }
 
 export interface ThisWeekSelection {
   recipeId: string;
-  servings: number;
+  multiplier: number;
 }
 
 // Batch counterpart of addRecipeToThisWeek — one atomic RPC call for the
@@ -100,7 +105,7 @@ export async function addRecipesToThisWeek(
   const { error } = await supabase.rpc('add_recipes_to_weekly_plan', {
     plan_id: planId,
     recipe_ids: selections.map((s) => s.recipeId),
-    servings_list: selections.map((s) => s.servings),
+    multiplier_list: selections.map((s) => s.multiplier),
   });
   if (error) throw new Error(error.message);
 }

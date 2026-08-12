@@ -34,6 +34,16 @@ interface RemovedEntryState {
   entry: ThisWeekEntry;
 }
 
+// ADR-0026 decision 6: display, not storage, decides servings vs.
+// multiplier per recipe — same conditional RecipeDetailScreen's
+// timingParts already applies to its own scaling state.
+function describeServings(entry: ThisWeekEntry): string {
+  if (entry.servingsCount != null) {
+    return `Serves ${Math.round(entry.servingsCount * entry.multiplier)}`;
+  }
+  return `${Math.round(entry.multiplier * 100) / 100}×`;
+}
+
 /**
  * OFF-04 / ADR-0021: This Week is always-online, no local mirror — a
  * failed load or mutation while offline is a normal, expected outcome
@@ -157,7 +167,7 @@ export function ThisWeekScreen() {
     const { entry } = removed;
     setRemoved(null);
     try {
-      await addRecipeToThisWeek(plan.id, entry.recipeId, entry.servings);
+      await addRecipeToThisWeek(plan.id, entry.recipeId, entry.multiplier);
       load();
     } catch {
       showToast("Couldn't restore that recipe");
@@ -235,7 +245,7 @@ export function ThisWeekScreen() {
             <Text style={styles.rowTitle} numberOfLines={1}>
               {item.title}
             </Text>
-            <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
+            <Text style={styles.rowSubtitle}>{describeServings(item)}</Text>
           </View>
           <View style={styles.moveButtons}>
             <Pressable
@@ -282,7 +292,7 @@ export function ThisWeekScreen() {
           <Text style={styles.rowTitle} numberOfLines={1}>
             {item.title}
           </Text>
-          <Text style={styles.rowSubtitle}>Serves {item.servings}</Text>
+          <Text style={styles.rowSubtitle}>{describeServings(item)}</Text>
         </View>
         <Text style={styles.chevron}>{'›'}</Text>
       </Pressable>

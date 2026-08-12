@@ -45,9 +45,8 @@ interface FetchedIngredientLine {
 }
 interface FetchedPlanningEntryRow {
   recipe_id: string;
-  servings: number;
+  multiplier: number;
   recipe: {
-    servings_count: number | null;
     recipe_ingredient_sections: { recipe_ingredients: FetchedIngredientLine[] }[];
   } | null;
 }
@@ -82,9 +81,8 @@ export async function fetchGroceryReview(planId: string): Promise<GroceryReviewL
   const { data: entries, error: entriesError } = await supabase
     .from('planning_entries')
     .select(
-      `recipe_id, servings,
+      `recipe_id, multiplier,
        recipe:recipes (
-         servings_count,
          recipe_ingredient_sections (
            recipe_ingredients ( line_text, quantity_min, quantity_max, unit, ingredient_text )
          )
@@ -97,8 +95,7 @@ export async function fetchGroceryReview(planId: string): Promise<GroceryReviewL
     (entries ?? []) as unknown as FetchedPlanningEntryRow[]
   ).map((row) => ({
     recipeId: row.recipe_id,
-    servings: row.servings,
-    recipeServingsCount: row.recipe?.servings_count ?? null,
+    multiplier: row.multiplier,
     ingredientLines: (row.recipe?.recipe_ingredient_sections ?? []).flatMap((section) =>
       section.recipe_ingredients.map(toParsedLine),
     ),

@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(45);
+select plan(46);
 
 insert into auth.users (id, email)
 values
@@ -151,6 +151,22 @@ select set_config(
   true
 );
 
+-- ADR-0026: multiplier is numeric, not integer — a fractional value
+-- (impossible for the old absolute-servings representation) must
+-- round-trip exactly. Its own plan/week, not plan_a, so it doesn't
+-- disturb plan_a's later position/count assumptions.
+create temporary table plan_fractional as
+select * from public.get_or_create_current_weekly_plan('2026-W34');
+create temporary table entry_fractional as
+select * from public.add_to_weekly_plan(
+  (select id from plan_fractional), '20000000-0000-0000-0000-000000000001', 1.5
+);
+select is(
+  (select multiplier from entry_fractional),
+  1.5,
+  'add_to_weekly_plan: a fractional multiplier round-trips exactly'
+);
+
 -- add_recipes_to_weekly_plan (batch — Codex review, PR #36): a fresh
 -- plan/week, kept separate from plan_a's later confirm/reopen state
 -- machine tests below.
@@ -181,7 +197,7 @@ select is(
 
 select throws_ok(
   format(
-    $$ select public.add_recipes_to_weekly_plan(%L, array[]::uuid[], array[]::integer[]) $$,
+    $$ select public.add_recipes_to_weekly_plan(%L, array[]::uuid[], array[]::numeric[]) $$,
     (select id from plan_batch)
   ),
   'recipe_ids must not be empty',
@@ -193,7 +209,7 @@ select throws_ok(
     $$ select public.add_recipes_to_weekly_plan(%L, array['20000000-0000-0000-0000-000000000001']::uuid[], array[1, 2]) $$,
     (select id from plan_batch)
   ),
-  'recipe_ids and servings_list must be the same length',
+  'recipe_ids and multiplier_list must be the same length',
   'add_recipes_to_weekly_plan: rejects mismatched array lengths'
 );
 
@@ -202,8 +218,8 @@ select throws_ok(
     $$ select public.add_recipes_to_weekly_plan(%L, array['20000000-0000-0000-0000-000000000001']::uuid[], array[0]) $$,
     (select id from plan_batch)
   ),
-  'servings must be positive',
-  'add_recipes_to_weekly_plan: rejects a non-positive serving count'
+  'multiplier must be positive',
+  'add_recipes_to_weekly_plan: rejects a non-positive multiplier'
 );
 
 select throws_ok(

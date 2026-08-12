@@ -77,25 +77,33 @@ it('disables Next until at least one recipe is selected, then advances to the se
   expect(screen.queryByTestId('add-to-this-week-servings-r2')).toBeNull();
 });
 
-it('defaults servings to 4 when a recipe has no parsed serving count, and adjusts with the stepper', async () => {
+// ADR-0026 decision 3: a recipe with no parsed servings count (e.g.
+// "makes 24 cookies" — no servings concept to step through, ADR-0018)
+// gets the same preset chips RecipeDetailScreen's own scaling controls
+// offer, not a numeric stepper defaulted to a fabricated count.
+it('shows preset chips instead of a stepper when a recipe has no parsed servings count', async () => {
   await renderScreen();
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
 
-  expect(screen.getByText('4')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-increment-r1'));
-  expect(screen.getByText('5')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-decrement-r1'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-decrement-r1'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-decrement-r1'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-decrement-r1'));
-  // Never below 1.
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(screen.queryByTestId('add-to-this-week-servings-increment-r1')).toBeNull();
+  expect(screen.getByTestId('add-to-this-week-scale-preset-r1-1').props.accessibilityState).toEqual(
+    expect.objectContaining({ selected: true }),
+  );
+
+  await fireEvent.press(screen.getByTestId('add-to-this-week-scale-preset-r1-2'));
+
+  expect(screen.getByTestId('add-to-this-week-scale-preset-r1-2').props.accessibilityState).toEqual(
+    expect.objectContaining({ selected: true }),
+  );
+  expect(screen.getByTestId('add-to-this-week-scale-preset-r1-1').props.accessibilityState).toEqual(
+    expect.objectContaining({ selected: false }),
+  );
 });
 
-it("seeds servings from the recipe's own servingsCount instead of the 4-serving default", async () => {
+it("seeds the stepper from the recipe's own servingsCount when it's known", async () => {
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
     { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6 },
     { id: 'r2', title: 'Tacos', servingsCount: null },
@@ -124,21 +132,31 @@ it('going back from the servings step preserves the selection', async () => {
   );
 });
 
-it('submits the whole selection in one batch call, then navigates back', async () => {
+it('submits the whole selection as multipliers in one batch call, then navigates back', async () => {
+  // Mixed selection — one recipe with a known servingsCount (stepper),
+  // one without (chips) — exercises both conversions to multiplier at
+  // once.
+  mockedRecipesApi.fetchRecipes.mockResolvedValue([
+    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: 4 },
+    { id: 'r2', title: 'Tacos', servingsCount: null },
+  ]);
+
   await renderScreen();
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r2'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-increment-r2'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-increment-r1'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-scale-preset-r2-2'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));
 
   await waitFor(() => expect(back).toHaveBeenCalled());
   expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledTimes(1);
   expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledWith('plan-1', [
-    { recipeId: 'r1', servings: 4 },
-    { recipeId: 'r2', servings: 5 },
+    // r1: servingsCount 4, incremented once to 5 -> 5/4.
+    { recipeId: 'r1', multiplier: 1.25 },
+    { recipeId: 'r2', multiplier: 2 },
   ]);
   expect(screen.getByText('Added 2 recipes to This Week')).toBeTruthy();
 });

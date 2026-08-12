@@ -231,7 +231,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 8,
+            multiplier: 2,
             position: 0,
           },
         ],
@@ -277,7 +277,7 @@ describe('CookingModeScreen', () => {
               recipeId: 'recipe-1',
               title: '',
               heroImagePath: null,
-              servings: 4,
+              multiplier: 1,
               position: 0,
             },
           ],
@@ -298,14 +298,11 @@ describe('CookingModeScreen', () => {
       expect(screen.getByText(/1 whole chicken/)).toBeTruthy();
     });
 
-    // Codex review, PR #50: this used to skip defaulting the scale
-    // entirely whenever recipe.servingsCount was null, discarding
-    // planServings. It now assumes the same base
-    // (DEFAULT_SERVINGS_WHEN_UNKNOWN, 4) RecipeDetailScreen's
-    // servingsToAdd and generateGroceryList's multiplierFor both
-    // already assume, recovering the intended multiplier instead of
-    // silently doing nothing.
-    it('defaults the scale against the assumed base when the recipe has no parsed servings count', async () => {
+    // ADR-0026: the plan entry's multiplier is read directly, with no
+    // dependency on recipe.servingsCount at all — a null servings count
+    // (this used to skip defaulting the scale entirely, Codex review,
+    // PR #50) no longer matters here one way or the other.
+    it('defaults the scale from the plan entry even when the recipe has no parsed servings count', async () => {
       mockedUseCookingSession.mockReturnValue({
         recipe: { ...recipe, servingsCount: null },
         isLoading: false,
@@ -325,7 +322,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 8,
+            multiplier: 2,
             position: 0,
           },
         ],
@@ -417,7 +414,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 4,
+            multiplier: 1,
             position: 0,
           },
         ],
@@ -437,7 +434,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 4,
+            multiplier: 1,
             position: 0,
           },
         ],
@@ -485,7 +482,7 @@ describe('CookingModeScreen', () => {
               recipeId: 'recipe-1',
               title: '',
               heroImagePath: null,
-              servings: 4,
+              multiplier: 1,
               position: 0,
             },
           ],
@@ -519,7 +516,7 @@ describe('CookingModeScreen', () => {
               recipeId: 'recipe-1',
               title: '',
               heroImagePath: null,
-              servings: 4,
+              multiplier: 1,
               position: 0,
             },
           ],
@@ -548,7 +545,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 4,
+            multiplier: 1,
             position: 0,
           },
         ],
@@ -582,7 +579,7 @@ describe('CookingModeScreen', () => {
             recipeId: 'recipe-1',
             title: '',
             heroImagePath: null,
-            servings: 4,
+            multiplier: 1,
             position: 0,
           },
         ],

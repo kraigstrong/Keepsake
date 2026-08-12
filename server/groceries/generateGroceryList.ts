@@ -8,7 +8,7 @@
  */
 
 import { unitClass, convertQuantity } from '../units/quantityVocabulary.ts';
-import { ASSUMED_SERVINGS_WHEN_UNKNOWN, scaleQuantity } from '../units/scaleQuantity.ts';
+import { scaleQuantity } from '../units/scaleQuantity.ts';
 import { formatIngredientLine } from '../units/formatIngredientLine.ts';
 import type { ParsedIngredientLine } from '../units/parseQuantity.ts';
 import { canonicalKey } from './canonicalKey.ts';
@@ -18,10 +18,8 @@ import { isStaple } from './staples.ts';
 
 export interface PlanningEntryForGroceries {
   recipeId: string;
-  /** planning_entries.servings — the target serving count for this entry. */
-  servings: number;
-  /** recipes.servings_count — null when the recipe's yield didn't parse (ADR-0018). */
-  recipeServingsCount: number | null;
+  /** planning_entries.multiplier (ADR-0026) — the scale factor for this entry. */
+  multiplier: number;
   ingredientLines: readonly ParsedIngredientLine[];
 }
 
@@ -59,18 +57,6 @@ function groceryDisplayText(ingredientText: string): string {
   return ingredientText.split(',', 1)[0]!.trim();
 }
 
-// Codex review, PR #50: previously returned 1 (unscaled) whenever
-// recipeServingsCount was null, silently discarding entry.servings —
-// including a value the client had already scaled by the user's chosen
-// multiplier (RecipeDetailScreen's servingsToAdd). Assuming the same
-// base (ASSUMED_SERVINGS_WHEN_UNKNOWN) the client assumed when it
-// computed that value recovers the intended multiplier instead of
-// dropping it. A stopgap — ADR-0026 removes this whole assumed-base
-// round-trip by storing the multiplier directly.
-function multiplierFor(entry: PlanningEntryForGroceries): number {
-  return entry.servings / (entry.recipeServingsCount ?? ASSUMED_SERVINGS_WHEN_UNKNOWN);
-}
-
 function sumSubgroup(occurrences: ScaledOccurrence[]): string {
   const first = occurrences[0]!;
   if (first.quantityMin === null || occurrences.length === 1) {
@@ -105,9 +91,8 @@ export function generateGroceryList(entries: readonly PlanningEntryForGroceries[
   const groups = new Map<string, ScaledOccurrence[]>();
 
   for (const entry of entries) {
-    const multiplier = multiplierFor(entry);
     for (const line of entry.ingredientLines) {
-      const scaled = scaleQuantity(line, multiplier);
+      const scaled = scaleQuantity(line, entry.multiplier);
       const identityText = line.ingredientText ?? line.lineText;
       const key = canonicalKey(identityText);
       if (key.length === 0) {

@@ -16,11 +16,7 @@ import { getDatabase } from '../db/database';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useCookingModeAwake } from '../keepAwake/useCookingModeAwake';
 import { logError } from '../observability';
-import {
-  DEFAULT_SERVINGS_WHEN_UNKNOWN,
-  SCALE_PRESETS,
-  scaledIngredientSections,
-} from '../recipes/scaling';
+import { SCALE_PRESETS, scaledIngredientSections } from '../recipes/scaling';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
@@ -96,11 +92,11 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   // plan — ADR-0024 decision 4: the removal toggle only ever appears
   // when there's actually a confirmed plan entry to remove.
   const [planEntryId, setPlanEntryId] = useState<string | null>(null);
-  // planServings/planLookupDone exist only to default the scale below —
+  // planMultiplier/planLookupDone exist only to default the scale below —
   // a silent scope-narrowing found during Phase 16 review (Cooking Mode
-  // never honored the servings This Week already committed to), now
+  // never honored the scale This Week already committed to), now
   // confirmed as a real pain point by developer walkthrough feedback.
-  const [planServings, setPlanServings] = useState<number | null>(null);
+  const [planMultiplier, setPlanMultiplier] = useState<number | null>(null);
   const [planLookupDone, setPlanLookupDone] = useState(false);
 
   useEffect(() => {
@@ -113,14 +109,14 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
             ? plan.entries.find((candidate) => candidate.recipeId === recipeId)
             : undefined;
         setPlanEntryId(entry ? entry.id : null);
-        setPlanServings(entry ? entry.servings : null);
+        setPlanMultiplier(entry ? entry.multiplier : null);
       })
       .catch(() => {
         // no confirmed plan — fine, the toggle just won't show and the
         // scale stays at its own default
         if (!cancelled) {
           setPlanEntryId(null);
-          setPlanServings(null);
+          setPlanMultiplier(null);
         }
       })
       .finally(() => {
@@ -143,16 +139,8 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   const [appliedPlanDefault, setAppliedPlanDefault] = useState(false);
   if (!appliedPlanDefault && planLookupDone && recipe) {
     setAppliedPlanDefault(true);
-    if (planServings != null) {
-      // Same assumed-base convention as RecipeDetailScreen's
-      // servingsToAdd and generateGroceryList's multiplierFor (Codex
-      // review, PR #50) — recipe.servingsCount being null no longer
-      // means "skip the default," it means "assume
-      // DEFAULT_SERVINGS_WHEN_UNKNOWN was the base," so a plan entry
-      // scaled against that same assumption (Recipe Detail's fallback)
-      // still recovers the right multiplier here. Stopgap — ADR-0026
-      // removes the whole assumed-base round-trip.
-      setMultiplier(planServings / (recipe.servingsCount ?? DEFAULT_SERVINGS_WHEN_UNKNOWN));
+    if (planMultiplier != null) {
+      setMultiplier(planMultiplier);
     }
   }
 

@@ -364,18 +364,18 @@ it('shows no toast when navigated to normally (not from an import)', async () =>
   expect(screen.queryByText('Already in your library')).toBeNull();
 });
 
-it('adds the recipe to This Week at the currently displayed serving count', async () => {
+it('adds the recipe to This Week at the currently selected multiplier', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
   await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
 
   await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
-  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 4);
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 1);
   expect(screen.getByText('Added to This Week')).toBeTruthy();
 });
 
-it('adds at the scaled serving count after adjusting the stepper', async () => {
+it('adds at the multiplier implied by the stepper after adjusting it', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
@@ -383,20 +383,27 @@ it('adds at the scaled serving count after adjusting the stepper', async () => {
   await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
 
   await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
-  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 5);
+  // recipe.servingsCount is 4; incrementing once moves 4 -> 5 servings,
+  // i.e. a 1.25x multiplier.
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 1.25);
 });
 
-it('falls back to a default serving count when the recipe has none', async () => {
+// ADR-0026: addRecipeToThisWeek now takes the screen's own multiplier
+// directly, not a serving count derived (with a fallback base) from
+// recipe.servingsCount. A recipe with no parsed servings count still
+// adds correctly at whatever multiplier is selected — there's no
+// absolute count to fall back to or drop.
+it('adds at multiplier 1 by default even when the recipe has no parsed servings count', async () => {
   mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, servingsCount: null, yieldText: '1 loaf' });
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
   await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
 
   await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
-  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 4);
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 1);
 });
 
-it('scales the default serving count by the selected preset when the recipe has no parsed servings count (developer walkthrough feedback)', async () => {
+it('adds at the selected preset multiplier when the recipe has no parsed servings count (developer walkthrough feedback)', async () => {
   mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, servingsCount: null, yieldText: '1 loaf' });
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
@@ -408,7 +415,7 @@ it('scales the default serving count by the selected preset when the recipe has 
   await fireEvent.press(screen.getByTestId('recipe-detail-add-to-this-week'));
 
   await waitFor(() => expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalled());
-  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 8);
+  expect(mockedThisWeekApi.addRecipeToThisWeek).toHaveBeenCalledWith('plan-1', 'recipe-1', 2);
 });
 
 it('shows an error toast when adding to This Week fails', async () => {
