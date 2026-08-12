@@ -31,12 +31,29 @@ export function DoneCookingSheet({
   isSubmitting,
 }: DoneCookingSheetProps) {
   const [note, setNote] = useState('');
-  const [removeFromPlan, setRemoveFromPlan] = useState(false);
+  // Defaults checked when shown at all — canRemoveFromPlan already means
+  // this recipe is on the current confirmed plan, so "I just cooked
+  // this, take it off the list" is the common case, not something to
+  // opt into on every completion (developer feedback: first walkthrough
+  // found the unchecked default surprising). Still a real toggle, not a
+  // forced action — pressing it once before confirming opts back out.
+  const [removeFromPlan, setRemoveFromPlan] = useState(canRemoveFromPlan);
+  // This sheet is mounted once and just toggles `visible` (CookingModeScreen
+  // never remounts it), while canRemoveFromPlan only resolves to its real
+  // value after an async plan fetch — a plain useState(canRemoveFromPlan)
+  // initializer would freeze on whatever it was at first mount. Reset the
+  // default on each open instead, same "adjust state during render on a
+  // prop change" pattern RecipeDetailScreen uses for its own per-recipe
+  // reset, not a useEffect.
+  const [lastVisible, setLastVisible] = useState(visible);
+  if (visible !== lastVisible) {
+    setLastVisible(visible);
+    if (visible) setRemoveFromPlan(canRemoveFromPlan);
+  }
 
   function handleConfirm() {
     onConfirm(note.trim() || null, canRemoveFromPlan && removeFromPlan);
     setNote('');
-    setRemoveFromPlan(false);
   }
 
   return (

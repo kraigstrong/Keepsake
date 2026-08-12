@@ -92,26 +92,53 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   // plan — ADR-0024 decision 4: the removal toggle only ever appears
   // when there's actually a confirmed plan entry to remove.
   const [planEntryId, setPlanEntryId] = useState<string | null>(null);
+  // planServings/planLookupDone exist only to default the scale below —
+  // a silent scope-narrowing found during Phase 16 review (Cooking Mode
+  // never honored the servings This Week already committed to), now
+  // confirmed as a real pain point by developer walkthrough feedback.
+  const [planServings, setPlanServings] = useState<number | null>(null);
+  const [planLookupDone, setPlanLookupDone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetchCurrentWeeklyPlan()
       .then((plan) => {
         if (cancelled) return;
-        if (plan.status !== 'confirmed') {
-          setPlanEntryId(null);
-          return;
-        }
-        const entry = plan.entries.find((candidate) => candidate.recipeId === recipeId);
+        const entry =
+          plan.status === 'confirmed'
+            ? plan.entries.find((candidate) => candidate.recipeId === recipeId)
+            : undefined;
         setPlanEntryId(entry ? entry.id : null);
+        setPlanServings(entry ? entry.servings : null);
       })
       .catch(() => {
-        if (!cancelled) setPlanEntryId(null); // no confirmed plan — fine, the toggle just won't show
+        // no confirmed plan — fine, the toggle just won't show and the
+        // scale stays at its own default
+        if (!cancelled) {
+          setPlanEntryId(null);
+          setPlanServings(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPlanLookupDone(true);
       });
     return () => {
       cancelled = true;
     };
   }, [recipeId]);
+
+  // Same "adjust state during render" pattern as DoneCookingSheet's own
+  // reset, and RecipeDetailScreen's per-recipe reset before it — not an
+  // effect, and applied exactly once (`appliedPlanDefault`) so a manual
+  // scale-chip tap afterward is never silently overwritten by a slow
+  // plan-fetch resolving late.
+  const [appliedPlanDefault, setAppliedPlanDefault] = useState(false);
+  if (!appliedPlanDefault && planLookupDone && recipe) {
+    setAppliedPlanDefault(true);
+    if (planServings != null && recipe.servingsCount) {
+      setMultiplier(planServings / recipe.servingsCount);
+    }
+  }
 
   if (isLoading) {
     return <LoadingState label="Loading recipe…" testID="cooking-mode-loading" />;

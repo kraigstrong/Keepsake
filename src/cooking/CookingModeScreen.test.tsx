@@ -220,6 +220,103 @@ describe('CookingModeScreen', () => {
     await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
   });
 
+  describe('defaulting the scale to the This-Week plan (developer feedback: first walkthrough)', () => {
+    it('defaults to the planned servings when this recipe is on the confirmed plan at a different count', async () => {
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 8,
+            position: 0,
+          },
+        ],
+      });
+
+      await renderCookingModeScreen();
+
+      await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
+      expect(screen.getByTestId('cooking-mode-scale-preset-2').props.accessibilityState).toEqual(
+        expect.objectContaining({ selected: true }),
+      );
+    });
+
+    it('a manual scale-chip tap is never overwritten once the plan lookup resolves late', async () => {
+      let resolvePlan: (plan: unknown) => void;
+      mockedFetchCurrentWeeklyPlan.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePlan = resolve;
+        }),
+      );
+
+      await render(
+        <ToastProvider>
+          <CookingModeScreen recipeId="recipe-1" />
+        </ToastProvider>,
+      );
+      fireEvent.press(screen.getByTestId('cooking-mode-scale-preset-2'));
+      await waitFor(() => expect(screen.getByText(/2 whole chicken/)).toBeTruthy());
+
+      resolvePlan!({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 4,
+            position: 0,
+          },
+        ],
+      });
+
+      // Plan says 1x (4/4), but the user already chose 2x — stays 2x.
+      await waitFor(() => expect(mockedFetchCurrentWeeklyPlan).toHaveBeenCalled());
+      expect(screen.getByText(/2 whole chicken/)).toBeTruthy();
+    });
+
+    it('does not touch the scale when there is no matching confirmed plan entry', async () => {
+      await renderCookingModeScreen();
+      expect(screen.getByText(/1 whole chicken/)).toBeTruthy();
+    });
+
+    it('does not touch the scale when the recipe has no parsed servings count', async () => {
+      mockedUseCookingSession.mockReturnValue({
+        recipe: { ...recipe, servingsCount: null },
+        isLoading: false,
+        loadError: false,
+        checkedIngredientKeys: new Set<string>(),
+        checkedInstructionKeys: new Set<string>(),
+        toggleIngredient,
+        toggleInstruction,
+        resetChecklist,
+      });
+      mockedFetchCurrentWeeklyPlan.mockResolvedValue({
+        id: 'plan-1',
+        status: 'confirmed',
+        entries: [
+          {
+            id: 'entry-1',
+            recipeId: 'recipe-1',
+            title: '',
+            heroImagePath: null,
+            servings: 8,
+            position: 0,
+          },
+        ],
+      });
+
+      await renderCookingModeScreen();
+      expect(screen.getByText(/1 whole chicken/)).toBeTruthy();
+    });
+  });
+
   describe('Done Cooking', () => {
     it('tapping Done Cooking opens the confirmation sheet rather than completing immediately', async () => {
       await renderCookingModeScreen();
@@ -311,7 +408,7 @@ describe('CookingModeScreen', () => {
       expect(screen.queryByTestId('done-cooking-remove-from-plan-toggle')).toBeNull();
     });
 
-    it('shows the toggle and removes the plan entry when confirmed with it checked', async () => {
+    it('defaults the toggle to checked and removes the plan entry on confirm, untouched', async () => {
       mockedFetchCurrentWeeklyPlan.mockResolvedValue({
         id: 'plan-1',
         status: 'confirmed',
@@ -331,21 +428,17 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
       await waitFor(() =>
-        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
-      );
-
-      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
-      await waitFor(() =>
         expect(
           screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
         ).toEqual({ checked: true }),
       );
+
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedRemoveConfirmedEntry).toHaveBeenCalledWith('entry-1'));
     });
 
-    it('leaves the plan entry alone when the toggle is never checked, even if it was available', async () => {
+    it('leaves the plan entry alone when the default-checked toggle is unchecked before confirming', async () => {
       mockedFetchCurrentWeeklyPlan.mockResolvedValue({
         id: 'plan-1',
         status: 'confirmed',
@@ -367,6 +460,12 @@ describe('CookingModeScreen', () => {
         expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
       );
 
+      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
+        ).toEqual({ checked: false }),
+      );
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
@@ -393,15 +492,11 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
       await waitFor(() =>
-        expect(screen.getByTestId('done-cooking-remove-from-plan-toggle')).toBeTruthy(),
-      );
-
-      fireEvent.press(screen.getByTestId('done-cooking-remove-from-plan-toggle'));
-      await waitFor(() =>
         expect(
           screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
         ).toEqual({ checked: true }),
       );
+
       fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
 
       await waitFor(() => expect(mockedLogError).toHaveBeenCalled());
