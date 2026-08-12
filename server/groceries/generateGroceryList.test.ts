@@ -22,11 +22,10 @@ function line(
 
 function entry(
   recipeId: string,
-  servings: number,
-  recipeServingsCount: number | null,
+  multiplier: number,
   ingredientLines: PlanningEntryForGroceries['ingredientLines'],
 ): PlanningEntryForGroceries {
-  return { recipeId, servings, recipeServingsCount, ingredientLines };
+  return { recipeId, multiplier, ingredientLines };
 }
 
 function findItem(items: ReturnType<typeof generateGroceryList>, text: string) {
@@ -38,10 +37,8 @@ describe('generateGroceryList', () => {
   describe('must merge', () => {
     it('sums the same unitless ingredient across two recipes', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
-          line({ lineText: '2 onions', quantityMin: 2, ingredientText: 'onions' }),
-        ]),
-        entry('r2', 4, 4, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
+        entry('r1', 1, [line({ lineText: '2 onions', quantityMin: 2, ingredientText: 'onions' })]),
+        entry('r2', 1, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
       ]);
 
       const onions = findItem(items, 'onion');
@@ -52,10 +49,10 @@ describe('generateGroceryList', () => {
 
     it('sums quantities across compatible units in the same class (volume)', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({ lineText: '1 cup milk', quantityMin: 1, unit: 'cup', ingredientText: 'milk' }),
         ]),
-        entry('r2', 4, 4, [
+        entry('r2', 1, [
           line({ lineText: '1 pint milk', quantityMin: 1, unit: 'pint', ingredientText: 'milk' }),
         ]),
       ]);
@@ -69,8 +66,8 @@ describe('generateGroceryList', () => {
 
     it('merges duplicate identical unparsed lines into a single displayed line', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [line({ lineText: 'Salt and pepper to taste' })]),
-        entry('r2', 4, 4, [line({ lineText: 'Salt and pepper to taste' })]),
+        entry('r1', 1, [line({ lineText: 'Salt and pepper to taste' })]),
+        entry('r2', 1, [line({ lineText: 'Salt and pepper to taste' })]),
       ]);
 
       const item = findItem(items, 'Salt and pepper to taste');
@@ -82,10 +79,10 @@ describe('generateGroceryList', () => {
   describe('must not merge', () => {
     it('keeps a variety distinction separate ("yellow onion" vs "onion")', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({ lineText: '1 yellow onion', quantityMin: 1, ingredientText: 'yellow onion' }),
         ]),
-        entry('r2', 4, 4, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
+        entry('r2', 1, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
       ]);
 
       expect(findItem(items, 'yellow onion')).toBeDefined();
@@ -97,10 +94,10 @@ describe('generateGroceryList', () => {
 
     it('never sums across incompatible unit classes (volume vs. mass) for the same name', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({ lineText: '2 cups flour', quantityMin: 2, unit: 'cup', ingredientText: 'flour' }),
         ]),
-        entry('r2', 4, 4, [
+        entry('r2', 1, [
           line({ lineText: '1 lb flour', quantityMin: 1, unit: 'lb', ingredientText: 'flour' }),
         ]),
       ]);
@@ -115,10 +112,8 @@ describe('generateGroceryList', () => {
 
     it('never sums a parsed quantity with an unparsed line for the same ingredient', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
-          line({ lineText: '2 onions', quantityMin: 2, ingredientText: 'onion' }),
-        ]),
-        entry('r2', 4, 4, [line({ lineText: 'a few onions', ingredientText: null })]),
+        entry('r1', 1, [line({ lineText: '2 onions', quantityMin: 2, ingredientText: 'onion' })]),
+        entry('r2', 1, [line({ lineText: 'a few onions', ingredientText: null })]),
       ]);
 
       // These land in different canonical groups (the unparsed line's
@@ -132,8 +127,8 @@ describe('generateGroceryList', () => {
 
     it('keeps two different unparsed lines separate even under the same canonical group', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [line({ lineText: 'Fresh herbs for garnish', ingredientText: null })]),
-        entry('r2', 4, 4, [line({ lineText: 'Fresh herbs, chopped fine', ingredientText: null })]),
+        entry('r1', 1, [line({ lineText: 'Fresh herbs for garnish', ingredientText: null })]),
+        entry('r2', 1, [line({ lineText: 'Fresh herbs, chopped fine', ingredientText: null })]),
       ]);
 
       // Different raw text -> different canonicalKey -> different items.
@@ -146,49 +141,29 @@ describe('generateGroceryList', () => {
   });
 
   describe('scaling', () => {
-    it('scales by servings/recipeServingsCount before merging', () => {
+    it('scales by the entry multiplier before merging', () => {
       const items = generateGroceryList([
-        entry('r1', 8, 4, [
-          // Doubling: 8 target servings / 4 recipe servings = 2x.
-          line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' }),
-        ]),
+        entry('r1', 2, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
       ]);
 
       expect(findItem(items, 'onion')!.amounts).toEqual(['2 onion']);
     });
 
-    // Codex review, PR #50: this used to always return multiplier 1 for
-    // a recipe with no parsed servings count, silently discarding
-    // entry.servings — even when the client had already scaled that
-    // value by the user's chosen multiplier (RecipeDetailScreen's
-    // servingsToAdd). It now assumes the same base
-    // (ASSUMED_SERVINGS_WHEN_UNKNOWN, 4) the client assumed, recovering
-    // the intended multiplier instead of dropping it. Stopgap — ADR-0026
-    // removes the whole assumed-base round-trip.
-    it('scales a recipe with no parsed servings count against the same assumed base the client used', () => {
+    // ADR-0026: the multiplier is the stored value itself, not derived
+    // from dividing an absolute count by recipe.servingsCount — a
+    // fractional multiplier (unrepresentable under the old
+    // absolute-servings storage whenever servingsCount was null) scales
+    // exactly the same as any other, with nothing to fall back to.
+    it('scales by a fractional multiplier the same as any other', () => {
       const items = generateGroceryList([
-        entry('r1', 8, null, [
-          line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' }),
-        ]),
+        entry('r1', 0.5, [line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' })]),
       ]);
 
-      expect(findItem(items, 'onion')!.amounts).toEqual(['2 onion']);
-    });
-
-    it('does not scale a recipe with no parsed servings count when entered at the assumed base itself', () => {
-      const items = generateGroceryList([
-        entry('r1', 4, null, [
-          line({ lineText: '1 onion', quantityMin: 1, ingredientText: 'onion' }),
-        ]),
-      ]);
-
-      expect(findItem(items, 'onion')!.amounts).toEqual(['1 onion']);
+      expect(findItem(items, 'onion')!.amounts).toEqual(['1/2 onion']);
     });
 
     it("leaves an unparsed line's display untouched by scaling", () => {
-      const items = generateGroceryList([
-        entry('r1', 8, 4, [line({ lineText: 'a pinch of salt' })]),
-      ]);
+      const items = generateGroceryList([entry('r1', 2, [line({ lineText: 'a pinch of salt' })])]);
 
       expect(items.some((i) => i.amounts.includes('a pinch of salt'))).toBe(true);
     });
@@ -197,7 +172,7 @@ describe('generateGroceryList', () => {
   describe('display text', () => {
     it('drops a preparation clause after the comma from the displayed amount', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({
             lineText: '4 1/2 cups flour, divided',
             quantityMin: 4.5,
@@ -212,7 +187,7 @@ describe('generateGroceryList', () => {
 
     it('still merges across occurrences whose clauses differ only after the comma', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({
             lineText: '1 cup flour, divided',
             quantityMin: 1,
@@ -220,7 +195,7 @@ describe('generateGroceryList', () => {
             ingredientText: 'flour, divided',
           }),
         ]),
-        entry('r2', 4, 4, [
+        entry('r2', 1, [
           line({ lineText: '1 cup flour', quantityMin: 1, unit: 'cup', ingredientText: 'flour' }),
         ]),
       ]);
@@ -233,7 +208,7 @@ describe('generateGroceryList', () => {
   describe('categorization and staples', () => {
     it('tags a staple ingredient as excluded-by-default via isStaple', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({ lineText: '1 tsp salt', quantityMin: 1, unit: 'tsp', ingredientText: 'salt' }),
         ]),
       ]);
@@ -243,7 +218,7 @@ describe('generateGroceryList', () => {
 
     it('tags a non-staple ingredient as included by default', () => {
       const items = generateGroceryList([
-        entry('r1', 4, 4, [
+        entry('r1', 1, [
           line({ lineText: '1 chicken breast', quantityMin: 1, ingredientText: 'chicken breast' }),
         ]),
       ]);
@@ -253,7 +228,7 @@ describe('generateGroceryList', () => {
   });
 
   it('ignores an ingredient line that normalizes to an empty canonical key', () => {
-    const items = generateGroceryList([entry('r1', 4, 4, [line({ lineText: '   ' })])]);
+    const items = generateGroceryList([entry('r1', 1, [line({ lineText: '   ' })])]);
     expect(items).toHaveLength(0);
   });
 });
