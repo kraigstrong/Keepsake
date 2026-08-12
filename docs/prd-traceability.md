@@ -124,7 +124,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
 | FREQ-01 | Based on planned count, not cooking count | 12 | Done (tested) |
-| FREQ-02 | Archived recipes excluded | 16 | Not Started |
+| FREQ-02 | Archived recipes excluded | 16 | Done (tested)# |
 
 ## Cooking Mode (COOK)
 
@@ -168,13 +168,17 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| LIFE-01 | Archive hides a recipe from Library, Search, Planning, Frequently Selected, Recently Added | 16 | Not Started |
-| LIFE-02 | Archived Recipes reachable from the overflow menu | 16 | Not Started |
-| LIFE-03 | Unarchive | 16 | Not Started |
-| LIFE-04 | Delete requires confirmation, moves recipe to Recently Deleted | 16 | Not Started |
-| LIFE-05 | Recently Deleted is shared and does not auto-expire in MVP | 16 | Not Started |
-| LIFE-06 | Restore from Recently Deleted | 16 | Not Started |
-| LIFE-07 | Permanent delete | 16 | Not Started |
+| LIFE-01 | Archive hides a recipe from Library, Search, Planning, Frequently Selected, Recently Added | 16 | Done (tested)# |
+| LIFE-02 | Archived Recipes reachable from the overflow menu | 16 | Done (tested)#\* |
+| LIFE-03 | Unarchive | 16 | Done (tested)# |
+| LIFE-04 | Delete requires confirmation, moves recipe to Recently Deleted | 16 | Done (tested)# |
+| LIFE-05 | Recently Deleted is shared and does not auto-expire in MVP | 16 | Done (tested)#‖ |
+| LIFE-06 | Restore from Recently Deleted | 16 | Done (tested)# |
+| LIFE-07 | Permanent delete | 16 | Done (tested)# |
+
+\* Deviation, not a gap: this app has never built an overflow menu, so Archived Recipes is reached from Settings instead, and Archive/Unarchive live as plain buttons in Recipe Detail's existing action row — see ADR-0025 decision 7.
+
+\# Phase 16 (ADR-0025). pgTAP coverage (`supabase/tests/database/recipe_lifecycle_rpcs.test.sql`, `recipes_source_url_uniqueness.test.sql`) is CI-only, not run locally (no Docker in this environment). Jest coverage spans the data layer (`src/recipes/api.test.ts`), the archived/deleted exclusion filters (`src/sync/offlineRecipes.test.ts`, `src/search/buildSearchQuery.test.ts`, `src/search/searchCorrectness.test.ts`, `src/search/searchPerformance.test.ts`), Recipe Detail's archive/delete actions (`src/recipes/RecipeDetailScreen.test.tsx`), and both new screens (`src/recipes/ArchivedRecipesScreen.test.tsx`, `src/recipes/RecentlyDeletedScreen.test.tsx`).
 
 ## Offline (OFF)
 

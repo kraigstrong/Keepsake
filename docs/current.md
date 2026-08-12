@@ -6,9 +6,9 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 
 ## Current
 
-- **Phase:** 16 — Archive, Recently Deleted, and Destructive Lifecycle. Phases 12–15 have all formally exited (12: Conditional Pass, 2026-08-07; 13/14: Pass, 2026-08-10; 15: Conditional Pass, 2026-08-11 — see History table). Not yet started.
-- **Status:** No build scope started yet for Phase 16. Per ADR-0003, not on the physical-device-required list — Simulator is sufficient at exit.
-- **Next action:** Run `start-phase` for Phase 16.
+- **Phase:** 16 — Archive, Recently Deleted, and Destructive Lifecycle. Phases 12–15 have all formally exited (12: Conditional Pass, 2026-08-07; 13/14: Pass, 2026-08-10; 15: Conditional Pass, 2026-08-11 — see History table).
+- **Status:** Build scope complete: ADR-0025 + 10 commits — schema/RPCs/pgTAP, local schema v11 + sync mirror, Library/Search/This-Week-picker exclusions, import duplicate-detection exclusion, client data layer, Recipe Detail archive/delete actions, Archived Recipes screen, Recently Deleted screen. 109 suites / 957 tests passing locally; pgTAP is CI-only (no Docker locally). Not yet formally exited. Per ADR-0003, not on the physical-device-required list — Simulator is sufficient at exit.
+- **Next action:** Run `exit-phase` for Phase 16.
 - **Blocked on:** Nothing.
 
 ## History
