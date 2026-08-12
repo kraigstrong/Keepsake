@@ -44,7 +44,7 @@ No new credentials introduced this phase.
 
 - **No physical-device pass yet** — the reason for Conditional Pass; see follow-ups below.
 - **No length cap on `cooking_events.note`**, client or server. Disclosed in the security review above; not yet fixed.
-- **Cooking Mode doesn't honor the user's preferred-unit-system setting or offer an arbitrary servings count**, unlike Recipe Detail's own scaling controls — a silent scope-narrowing found during review, not written into ADR-0024 as a deliberate decision at the time.
+- **Cooking Mode doesn't honor the user's preferred-unit-system setting or offer an arbitrary (stepper) servings count**, unlike Recipe Detail's own scaling controls — a silent scope-narrowing found during review, not written into ADR-0024 as a deliberate decision at the time. Partially resolved 2026-08-12 (Phase 16 developer walkthrough feedback): the scale now *defaults* to whatever servings count This Week already committed to for a confirmed plan entry, instead of always starting at 1x regardless. The unit-system and arbitrary-count-stepper gaps remain open.
 - **Reset checklist has no confirmation or undo**, unlike this app's own precedent (This Week's remove has Undo) — a stray tap mid-cook wipes progress irreversibly.
 - **"Start Cooking" was made the primary action on Recipe Detail**, with "Add to This Week" demoted to secondary — a UI-emphasis call made without developer confirmation; the likelier real flow may be add-then-cook, not the reverse.
 - **Silent no-op if Done Cooking is tapped with no household in context** — no toast, unlike this app's general pattern for blocked actions.
