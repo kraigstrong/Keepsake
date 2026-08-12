@@ -9,13 +9,20 @@
 
 alter table public.planning_entries add column multiplier numeric;
 
--- Backfill formula per ADR-0026 consequence 4: recover the multiplier
--- implied by each existing row's absolute servings count where the
--- recipe's own servings_count is known; 1.0 otherwise (there's no
--- ratio to recover, and 1.0 is this app's existing "unscaled" default
--- everywhere else, e.g. SCALE_PRESETS).
+-- Backfill: recover the multiplier implied by each existing row's
+-- absolute servings count. Codex review, PR #51: ADR-0026's own stated
+-- formula ("else 1.0" when the recipe's servings_count is unknown) is
+-- wrong — PR #50's stopgap (merged just before this migration was
+-- written) already stored servings = round(4 * multiplier) for exactly
+-- that case (RecipeDetailScreen's servingsToAdd), and grocery
+-- generation / Cooking Mode's plan-default both divided by that same
+-- assumed base (4, ASSUMED_SERVINGS_WHEN_UNKNOWN) to recover the
+-- multiplier. Backfilling with 1.0 instead would silently reset any
+-- existing non-1x selection on a no-servings-count recipe. Using 4 as
+-- the fallback divisor here matches exactly what those two consumers
+-- already trusted for these rows before this migration.
 update public.planning_entries pe
-set multiplier = coalesce(pe.servings::numeric / nullif(r.servings_count, 0), 1.0)
+set multiplier = pe.servings::numeric / coalesce(nullif(r.servings_count, 0), 4)
 from public.recipes r
 where r.id = pe.recipe_id;
 
