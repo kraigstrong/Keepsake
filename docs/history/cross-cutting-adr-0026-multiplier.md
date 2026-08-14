@@ -1,6 +1,6 @@
 # Multiplier as the Canonical Recipe-Scaling Unit (ADR-0026)
 
-**Result:** Built, pending push/PR | **Date:** 2026-08-12 | **Branch:** `phase-adr-0026-multiplier-canonical` — cross-cutting, not a numbered phase
+**Result:** Merged | **Date:** 2026-08-12 | **PR:** [#51](https://github.com/kraigstrong/Keepsake/pull/51) — cross-cutting, not a numbered phase
 
 ADR-0026 (written during Phase 16 walkthrough-feedback work, PR #50) replaced `planning_entries.servings` (an absolute integer every downstream reader had to divide by `recipes.servings_count` to recover a scale factor — a field that's `null` by design, ADR-0018, whenever a recipe's yield isn't a servings count at all) with `planning_entries.multiplier`, stored directly. PR #50 shipped a stopgap (`ASSUMED_SERVINGS_WHEN_UNKNOWN`/`DEFAULT_SERVINGS_WHEN_UNKNOWN`, both assuming the same fallback base on both ends of a round-trip); this work implements the ADR's real fix and removes that stopgap entirely. Full rationale and alternatives considered live in the ADR — this entry is what shipped, not why.
 
@@ -17,3 +17,5 @@ Evidence: full local CI sequence green (`typecheck`, `lint`, `format:check`, 109
 **Codex review, PR #51 (P2, fixed):** the backfill's "else `1.0`" branch (as ADR-0026 itself specified) silently reset any existing non-1x selection on a recipe with no parsed servings count — PR #50's stopgap had already stored `servings = round(4 * multiplier)` for exactly that case, and grocery generation / Cooking Mode both divided by that same `4` to recover the multiplier, so `1.0` was actual data loss, not a neutral default. Fixed to divide by `4` in that branch too, matching what those two consumers already trusted for these rows. See the ADR's own amendment for the full account.
 
 No PRD traceability changes: `UNIT-05`/`WEEK-02` describe user-facing servings behavior, which is unchanged (still "choose servings" as the input UX wherever a recipe has one) — this is a storage-representation change only.
+
+Migrations pushed to staging post-merge (`supabase db push`), along with the previously-stranded `20260811204300_reopen_emptied_confirmed_plan.sql` that had never been applied — `supabase migration list` confirms local and remote now match exactly. No edge function redeploy needed: `import-recipe` (this repo's only one) doesn't import `server/groceries/*` or `server/units/scaleQuantity.ts`, since grocery generation is client-side, not a function.
