@@ -3,10 +3,15 @@
 -- server authorization, idempotency, the restore/source_url-collision
 -- amendment, permanently_delete_recipe's deleted-only gate, and that it
 -- still fires Phase 6's existing deleted_recipes tombstone trigger.
+--
+-- Also covers the audit-actor columns added in
+-- 20260813210000_recipe_lifecycle_audit_actor.sql (Codex review, PR
+-- #53): archived_by/deleted_by/restored_by on recipes, deleted_by on
+-- deleted_recipes.
 
 begin;
 
-select plan(29);
+select plan(35);
 
 insert into auth.users (id, email)
 values
@@ -45,6 +50,11 @@ select is(
   true,
   'archive_recipe: sets archived_at'
 );
+select is(
+  (select archived_by from public.recipes where id = '20000000-0000-0000-0000-000000000002'),
+  '11111111-1111-1111-1111-111111111111',
+  'archive_recipe: records the acting user as archived_by'
+);
 select lives_ok(
   $$ select public.archive_recipe('20000000-0000-0000-0000-000000000002') $$,
   'archive_recipe: archiving an already-archived recipe is idempotent, not an error'
@@ -53,6 +63,11 @@ select is(
   (select archived_at is null from public.unarchive_recipe('20000000-0000-0000-0000-000000000002')),
   true,
   'unarchive_recipe: clears archived_at'
+);
+select is(
+  (select archived_by from public.recipes where id = '20000000-0000-0000-0000-000000000002'),
+  null,
+  'unarchive_recipe: clears archived_by alongside archived_at'
 );
 select throws_ok(
   $$ select public.archive_recipe('20000000-0000-0000-0000-000000000003') $$,
@@ -65,6 +80,11 @@ select is(
   (select deleted_at is not null from public.delete_recipe('20000000-0000-0000-0000-000000000002')),
   true,
   'delete_recipe: sets deleted_at'
+);
+select is(
+  (select deleted_by from public.recipes where id = '20000000-0000-0000-0000-000000000002'),
+  '11111111-1111-1111-1111-111111111111',
+  'delete_recipe: records the acting user as deleted_by'
 );
 select lives_ok(
   $$ select public.delete_recipe('20000000-0000-0000-0000-000000000002') $$,
@@ -81,6 +101,16 @@ select is(
   (select deleted_at is null from public.restore_recipe('20000000-0000-0000-0000-000000000002')),
   true,
   'restore_recipe: clears deleted_at'
+);
+select is(
+  (select deleted_by is null from public.recipes where id = '20000000-0000-0000-0000-000000000002'),
+  true,
+  'restore_recipe: clears deleted_by alongside deleted_at'
+);
+select is(
+  (select restored_by from public.recipes where id = '20000000-0000-0000-0000-000000000002'),
+  '11111111-1111-1111-1111-111111111111',
+  'restore_recipe: records the acting user as restored_by'
 );
 select throws_ok(
   $$ select public.restore_recipe('20000000-0000-0000-0000-000000000001') $$,
@@ -158,6 +188,11 @@ select is(
   (select count(*)::int from public.deleted_recipes where id = '20000000-0000-0000-0000-000000000004'),
   1,
   'permanently_delete_recipe: fires Phase 6''s existing hard-delete tombstone trigger'
+);
+select is(
+  (select deleted_by from public.deleted_recipes where id = '20000000-0000-0000-0000-000000000004'),
+  '11111111-1111-1111-1111-111111111111',
+  'permanently_delete_recipe: the tombstone records who performed the permanent delete'
 );
 select is(
   (select count(*)::int from public.permanently_delete_recipe('20000000-0000-0000-0000-000000000004')),
