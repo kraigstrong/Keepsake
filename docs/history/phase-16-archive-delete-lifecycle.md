@@ -48,7 +48,7 @@ No new credentials introduced this phase.
 - **A permanently-deleted recipe can leave a zombie cooking-event outbox item** on another device that had an unsynced completion for it — narrow window (needs an unsynced offline event *and* a concurrent permanent delete before sync), bounded to log noise/wasted retries. Real fix needs a terminal/no-op outcome added to the outbox's retry classification (an ADR-0024 design change), tracked as a carried-forward item in `docs/current.md`, not fixed here.
 - **Archive/Delete button placement in Recipe Detail's action row "didn't feel right"** per the developer's own walkthrough — functionally correct, UX polish explicitly deferred, not scoped yet. Tracked in `docs/current.md`.
 
-Auditable actor (`archived_by`/`deleted_by`/`restored_by`) was disclosed here as a limitation immediately after the Pass decision below (Codex review, PR #53), then fixed the same day rather than left carried-forward — developer's call. See Security review above and `20260813210000_recipe_lifecycle_audit_actor.sql`. **Not yet pushed to staging as of this writing** — same "will do after review" convention every migration in this phase followed.
+Auditable actor (`archived_by`/`deleted_by`/`restored_by`) was disclosed here as a limitation immediately after the Pass decision below (Codex review, PR #53), then fixed the same day rather than left carried-forward — developer's call. See Security review above and `20260813210000_recipe_lifecycle_audit_actor.sql`, pushed to staging the same day (`supabase migration list` confirms local/remote match through `20260813210000`).
 
 ## Exit decision
 
