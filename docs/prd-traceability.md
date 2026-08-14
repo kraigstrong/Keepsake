@@ -96,10 +96,12 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| LIB-01 | Default sort: Recently Added (\<2wk) \> Frequently Selected \> remaining | 7 (Frequently Selected: 12) | In Progress |
-| LIB-02 | Additional sorts: Smart / Alphabetical / Recently Added / Frequently Selected | 7 (Frequently Selected: 12) | In Progress |
+| LIB-01 | Default sort: Recently Added (\<2wk) \> Frequently Selected \> remaining | 7 (Frequently Selected: 12) | Done (tested)¤ |
+| LIB-02 | Additional sorts: Smart / Alphabetical / Recently Added / Frequently Selected | 7 (Frequently Selected: 12) | Done (tested)¤ |
 | LIB-03 | Recipe rows show title only, no metadata clutter | 7 | Done (tested) |
 | LIB-04 | Filters with active filter count | 7 | Done (tested) |
+
+¤ Status was stale — left "In Progress" since Phase 7 despite full implementation landing by Phase 12. `src/recipes/librarySort.ts` implements all four modes (`smartSort`'s recently-added/frequently-selected/remaining tiering matches LIB-01's exact ordering; `alphabetical`/`recentlyAdded`/`frequentlySelected` cover LIB-02), wired into `LibraryScreen.tsx`'s sort control, covered by `librarySort.test.ts` (12 cases: each mode's ordering, tie-breaking, the 2-week boundary, non-mutation) and `sortPreference.test.ts` (persisted selection). Corrected 2026-08-13 during Phase 17's traceability sweep.
 
 ## This Week / Planning (WEEK)
 
@@ -187,8 +189,10 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | OFF-01 | Offline browsing | 6 | Done (tested) |
 | OFF-02 | Offline searching | 6 / 7 | Done (tested) |
 | OFF-03 | Offline cooking | 15 | Done (tested)Δ |
-| OFF-04 | Imports, editing, planning, and grocery export require connectivity | 6 (boundary), enforced per feature phase | Not Started |
+| OFF-04 | Imports, editing, planning, and grocery export require connectivity | 6 (boundary), enforced per feature phase | Done (tested)¥ |
 | OFF-05 | Cooking completion queues locally and syncs on reconnect | 15 | Done (tested)Δ |
+
+¥ Status was stale ("Not Started" despite every feature phase since 6 enforcing this). Two enforcement patterns, both real: This Week and Grocery Review proactively gate on `ConnectivityProvider` with a dedicated offline state (`ThisWeekScreen.test.tsx`/`GroceryReviewScreen.test.tsx`, "shows an offline state and never fetches while offline"); Import and Recipe Editor have no pre-check but every mutating call is wrapped in error handling that surfaces a network failure as an error state rather than hanging or silently no-opping (`ImportRecipeScreen.tsx`, `RecipeEditorScreen.tsx` — both have `catch` blocks feeding `ErrorState`/inline error text). Either way, no code path in this app can write while offline (ADR-0013: the local mirror is read-only). Corrected 2026-08-13 during Phase 17's traceability sweep.
 
 Δ See the Cooking Mode (COOK) section above for the full footnote — same evidence and same still-open physical-device gate.
 
@@ -212,11 +216,15 @@ Cross-cutting per execution-plan.md §2.6 — every phase must address these whe
 | SEC-03 | Household data is protected server-side (RLS) | 3 | Done (tested) |
 | SEC-04 | Storage is restricted by membership | 3 | Done (tested) |
 | SEC-05 | Sensitive content is excluded from telemetry | Continuous, gated at 2 | Done (tested) |
-| SEC-06 | External input is validated | 8 (primary), continuous | Not Started |
+| SEC-06 | External input is validated | 8 (primary), continuous | Done (tested)£ |
 | SEC-07 | Destructive operations are authorized and idempotent | 16 (primary), continuous | Done (tested) |
 | SEC-08 | Security scanning runs in CI | 0 | Done (tested) |
 | SEC-09 | Dependencies are reviewed and scanned | 0 | Done (tested) |
 | SEC-10 | Security is validated in every phase | Continuous | In Progress |
+
+£ Status was stale ("Not Started" despite Phase 8 having built this). SSRF-hardened fetch validates every URL and DNS resolution before and after each redirect (`server/import/secureFetch.ts`, `secureFetch.test.ts`); AI extraction output is validated against a `zod` schema before use (`server/ai/extractRecipe.ts`) rather than trusted as free-form text; invitation deep links are parsed and validated, not trusted raw (`src/deepLinks/parseInvitationLink.ts`, `.test.ts`). Corrected 2026-08-13 during Phase 17's traceability sweep.
+
+SEC-07's correction (`Not Started` → `Done (tested)`) came from the Phase 16 exit review, not this sweep — see [PR #53](https://github.com/kraigstrong/Keepsake/pull/53). SEC-10 stays "In Progress" deliberately — it's the one requirement this phase's own security journey (required journeys list, execution-plan.md) is meant to close, not something to mark done ahead of actually running that journey.
 
 ## Delivery Discipline (DEL)
 
