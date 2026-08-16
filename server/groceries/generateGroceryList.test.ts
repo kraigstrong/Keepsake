@@ -203,6 +203,52 @@ describe('generateGroceryList', () => {
       const flour = findItem(items, 'flour');
       expect(flour!.amounts).toEqual(['2 cups flour']);
     });
+
+    // Found via live testing, 2026-08-14: canonicalKey() already merged
+    // "softened butter" with "butter" (LEADING_PREP_MODIFIERS), but the
+    // merged item still displayed whichever occurrence's raw text
+    // happened to be first — "1/3 cup softened butter, less than 115
+    // degrees" instead of "1/3 cup butter". generateGroceryList.ts's own
+    // groceryDisplayText() now strips the same list, not just the merge
+    // key.
+    it('strips a leading prep-state word from the displayed amount, same list as the merge key', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '1/3 cup softened butter, less than 115 degrees',
+            quantityMin: 1 / 3,
+            unit: 'cup',
+            ingredientText: 'softened butter, less than 115 degrees',
+          }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'butter')!.amounts).toEqual(['1/3 cup butter']);
+    });
+
+    it('merges "softened butter" and "butter" into one line, not two', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '1/3 cup softened butter',
+            quantityMin: 1 / 3,
+            unit: 'cup',
+            ingredientText: 'softened butter',
+          }),
+        ]),
+        entry('r2', 1, [
+          line({
+            lineText: '2 tbsp butter',
+            quantityMin: 2,
+            unit: 'tbsp',
+            ingredientText: 'butter',
+          }),
+        ]),
+      ]);
+
+      const butter = findItem(items, 'butter');
+      expect(butter!.amounts).toHaveLength(1);
+    });
   });
 
   describe('categorization and staples', () => {

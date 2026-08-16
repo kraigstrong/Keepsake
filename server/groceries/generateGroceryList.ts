@@ -11,7 +11,7 @@ import { unitClass, convertQuantity } from '../units/quantityVocabulary.ts';
 import { scaleQuantity } from '../units/scaleQuantity.ts';
 import { formatIngredientLine } from '../units/formatIngredientLine.ts';
 import type { ParsedIngredientLine } from '../units/parseQuantity.ts';
-import { canonicalKey } from './canonicalKey.ts';
+import { canonicalKey, stripLeadingModifier } from './canonicalKey.ts';
 import { itemHash } from './itemHash.ts';
 import { categorize, type GroceryCategory } from './categoryDictionary.ts';
 import { isStaple } from './staples.ts';
@@ -43,18 +43,22 @@ interface ScaledOccurrence extends ParsedIngredientLine {
 }
 
 /**
- * Drops everything from the first comma onward, the same structural
- * step canonicalKey() already applies for identity — but here it's
- * applied to what actually renders on the grocery-review row, not just
- * the merge key. Preparation clauses ("flour, divided", "olive oil,
- * extra virgin") are real information on a recipe's own ingredient
- * list (RecipeDetailScreen keeps them, via the same shared
- * formatIngredientLine()) but read as noise on a list meant for a
- * store aisle. Case-preserving, unlike canonicalKey — this is display
- * text, not a lookup key.
+ * Drops everything from the first comma onward, then strips a leading
+ * preparation-state word (same LEADING_PREP_MODIFIERS canonicalKey()
+ * uses for merge identity — see that module's own comment for why the
+ * list stays this narrow). Both are structural steps canonicalKey()
+ * already applies for identity — applied here to what actually renders
+ * on the grocery-review row, not just the merge key. Preparation
+ * clauses ("flour, divided", "olive oil, extra virgin") and leading
+ * prep-state words ("softened butter") are real information on a
+ * recipe's own ingredient list (RecipeDetailScreen keeps them, via the
+ * same shared formatIngredientLine()) but read as noise on a list
+ * meant for a store aisle — you buy butter, softening it happens at
+ * home. Case-preserving, unlike canonicalKey — this is display text,
+ * not a lookup key.
  */
 function groceryDisplayText(ingredientText: string): string {
-  return ingredientText.split(',', 1)[0]!.trim();
+  return stripLeadingModifier(ingredientText.split(',', 1)[0]!.trim());
 }
 
 function sumSubgroup(occurrences: ScaledOccurrence[]): string {

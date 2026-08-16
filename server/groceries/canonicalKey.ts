@@ -29,9 +29,19 @@ const LEADING_PREP_MODIFIERS: readonly string[] = [
   'warmed',
 ];
 
-function stripLeadingModifier(phrase: string): string {
+// Exported (not just used internally) for generateGroceryList.ts's own
+// display text (found via live testing, 2026-08-14): a grocery item
+// that correctly merged "softened butter" and "butter" via this same
+// list still displayed as "softened butter" — merging and display were
+// never wired to share this stripping, only the merge key was. Case-
+// insensitive match, case-preserving return: canonicalKey() below
+// already lowercases before calling this, so it's a no-op change there;
+// generateGroceryList.ts calls it directly on real-cased display text,
+// where preserving casing matters.
+export function stripLeadingModifier(phrase: string): string {
+  const lower = phrase.toLowerCase();
   for (const modifier of LEADING_PREP_MODIFIERS) {
-    if (phrase.startsWith(`${modifier} `)) {
+    if (lower.startsWith(`${modifier} `)) {
       return phrase.slice(modifier.length + 1);
     }
   }
