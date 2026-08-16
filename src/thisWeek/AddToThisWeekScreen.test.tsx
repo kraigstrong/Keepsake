@@ -77,18 +77,25 @@ it('disables Next until at least one recipe is selected, then advances to the se
   expect(screen.queryByTestId('add-to-this-week-servings-r2')).toBeNull();
 });
 
-// ADR-0026 decision 3: a recipe with no parsed servings count (e.g.
-// "makes 24 cookies" — no servings concept to step through, ADR-0018)
-// gets the same preset chips RecipeDetailScreen's own scaling controls
-// offer, not a numeric stepper defaulted to a fabricated count.
-it('shows preset chips instead of a stepper when a recipe has no parsed servings count', async () => {
+// ADR-0026 amendment (developer decision, 2026-08-14): every recipe
+// gets the same scale-multiplier chips here regardless of
+// servingsCount — a servings-based stepper existed for the known-count
+// case (decision 3) but didn't fit compactly next to a long title and
+// read as inconsistent across a mixed selection. servingsCount is
+// still shown on Recipe Detail; it no longer picks the control type
+// on this screen.
+it('shows preset chips for every recipe, regardless of parsed servings count', async () => {
+  mockedRecipesApi.fetchRecipes.mockResolvedValue([
+    { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6 },
+    { id: 'r2', title: 'Tacos', servingsCount: null },
+  ]);
+
   await renderScreen();
 
-  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('Nacho Cheese Sauce')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
 
-  expect(screen.queryByTestId('add-to-this-week-servings-increment-r1')).toBeNull();
   expect(screen.getByTestId('add-to-this-week-scale-preset-r1-1').props.accessibilityState).toEqual(
     expect.objectContaining({ selected: true }),
   );
@@ -101,21 +108,6 @@ it('shows preset chips instead of a stepper when a recipe has no parsed servings
   expect(screen.getByTestId('add-to-this-week-scale-preset-r1-1').props.accessibilityState).toEqual(
     expect.objectContaining({ selected: false }),
   );
-});
-
-it("seeds the stepper from the recipe's own servingsCount when it's known", async () => {
-  mockedRecipesApi.fetchRecipes.mockResolvedValue([
-    { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6 },
-    { id: 'r2', title: 'Tacos', servingsCount: null },
-  ]);
-
-  await renderScreen();
-
-  await waitFor(() => expect(screen.getByText('Nacho Cheese Sauce')).toBeTruthy());
-  await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
-
-  expect(screen.getByText('6')).toBeTruthy();
 });
 
 it('going back from the servings step preserves the selection', async () => {
@@ -133,9 +125,9 @@ it('going back from the servings step preserves the selection', async () => {
 });
 
 it('submits the whole selection as multipliers in one batch call, then navigates back', async () => {
-  // Mixed selection — one recipe with a known servingsCount (stepper),
-  // one without (chips) — exercises both conversions to multiplier at
-  // once.
+  // A recipe with a known servingsCount and one without both submit as
+  // plain chip-selected multipliers now — servingsCount no longer
+  // changes how a recipe's multiplier is derived on this screen.
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
     { id: 'r1', title: 'Herb Roast Chicken', servingsCount: 4 },
     { id: 'r2', title: 'Tacos', servingsCount: null },
@@ -147,15 +139,14 @@ it('submits the whole selection as multipliers in one batch call, then navigates
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r1'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-r2'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-servings-increment-r1'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-scale-preset-r1-1.5'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-scale-preset-r2-2'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));
 
   await waitFor(() => expect(back).toHaveBeenCalled());
   expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledTimes(1);
   expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledWith('plan-1', [
-    // r1: servingsCount 4, incremented once to 5 -> 5/4.
-    { recipeId: 'r1', multiplier: 1.25 },
+    { recipeId: 'r1', multiplier: 1.5 },
     { recipeId: 'r2', multiplier: 2 },
   ]);
   expect(screen.getByText('Added 2 recipes to This Week')).toBeTruthy();
