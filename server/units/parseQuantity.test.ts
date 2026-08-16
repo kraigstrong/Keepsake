@@ -267,6 +267,27 @@ describe('parseQuantity — fixture corpus', () => {
       unit: 'cup',
       ingredientText: 'milk',
     },
+
+    // Same alternate-unit annotation, parenthesized instead of slash/
+    // comma-separated (found via live testing, 2026-08-14 — this exact
+    // phrasing was also why "all-purpose flour" wasn't folding into
+    // "flour": the parenthetical sat in front of "all-purpose",
+    // blocking canonicalKey's DEFAULT_VARIETY_PREFIXES check before it
+    // ever got a chance to match).
+    {
+      line: '2 1/4 cups (290 g) all-purpose flour',
+      quantityMin: 2.25,
+      quantityMax: 2.25,
+      unit: 'cup',
+      ingredientText: 'all-purpose flour',
+    },
+    {
+      line: '1 lb (450 g) butter',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'lb',
+      ingredientText: 'butter',
+    },
   ];
 
   it.each(cases)('parses "$line"', ({ line, quantityMin, quantityMax, unit, ingredientText }) => {

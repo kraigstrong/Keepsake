@@ -192,10 +192,43 @@ function unparsed(lineText: string): ParsedIngredientLine {
 const ALTERNATE_UNIT_SEPARATOR = /^\s*[/,]\s*/;
 const CONTAINER_WORDS = ['can', 'jar', 'package', 'pkg', 'bag', 'box', 'container'];
 const CONTAINER_PATTERN = new RegExp(`^\\s*(?:${CONTAINER_WORDS.join('|')})\\b\\.?\\s*`, 'i');
+const OPEN_PAREN = /^\(\s*/;
+const CLOSE_PAREN = /^\s*\)\s*/;
 
-function stripAlternateUnit(text: string): string {
+// Found via live testing, 2026-08-14: "2 1/4 cups (290 g) all-purpose
+// flour" writes the same alternate-unit annotation the slash/comma
+// forms above handle, just parenthesized. This one needs an extra
+// guard the others don't: a leading parenthetical only means "another
+// unit for this same quantity" when a primary unit was already
+// captured. "2 (15 oz) cans black beans" has no primary unit (nothing
+// before "cans" matches the vocabulary) — there the parenthetical is
+// each can's own size, composed with the count, not a redundant
+// restatement of it, and must never be stripped. hasPrimaryUnit is
+// exactly that distinction, passed in from the one call site that
+// already knows whether matchUnit succeeded.
+function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean): string {
+  if (!hasPrimaryUnit) return text;
+  const openMatch = OPEN_PAREN.exec(text);
+  if (!openMatch) return text;
+
+  const inside = text.slice(openMatch[0].length);
+  const number = matchNumber(inside);
+  if (!number) return text;
+
+  const afterNumber = inside.slice(number.matchedLength).replace(/^\s+/, '');
+  const unit = matchUnit(afterNumber);
+  if (!unit) return text;
+
+  const afterUnit = afterNumber.slice(unit.matchedLength);
+  const closeMatch = CLOSE_PAREN.exec(afterUnit);
+  if (!closeMatch) return text; // no closing paren right after the unit — not confidently this pattern
+
+  return afterUnit.slice(closeMatch[0].length);
+}
+
+function stripAlternateUnit(text: string, hasPrimaryUnit: boolean): string {
   const separatorMatch = ALTERNATE_UNIT_SEPARATOR.exec(text);
-  if (!separatorMatch) return text;
+  if (!separatorMatch) return stripParentheticalAlternateUnit(text, hasPrimaryUnit);
 
   const afterSeparator = text.slice(separatorMatch[0].length);
   const number = matchNumber(afterSeparator);
@@ -251,7 +284,7 @@ export function parseQuantity(rawLineText: string): ParsedIngredientLine {
   const unit = unitMatch ? unitMatch.unit : null;
   const afterUnit = unitMatch ? rest.slice(unitMatch.matchedLength) : rest;
 
-  const ingredientText = stripAlternateUnit(afterUnit.trim()).trim();
+  const ingredientText = stripAlternateUnit(afterUnit.trim(), unit !== null).trim();
 
   return {
     lineText,
