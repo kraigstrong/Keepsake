@@ -1,11 +1,12 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   GROCERY_CATEGORY_LABELS,
   GROCERY_CATEGORY_ORDER,
 } from '../../server/groceries/categoryDictionary.ts';
+import type { UnitSystem } from '../../server/units/quantityVocabulary.ts';
 import {
   clearGroceryItemSelection,
   fetchGroceryReview,
@@ -19,7 +20,9 @@ import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
+import { fetchProfile } from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
+import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface GroceryReviewScreenProps {
@@ -75,6 +78,7 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
   const { household } = useHousehold();
+  const { session } = useSession();
 
   const [items, setItems] = useState<GroceryReviewItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -87,10 +91,29 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   // request is still pending removes the race instead of trying to
   // fence out-of-order responses.
   const [pendingHashes, setPendingHashes] = useState<ReadonlySet<string>>(new Set());
+  // Found via live testing, 2026-08-14: a recipe whose source listed
+  // both units for the same quantity ("800g / 28oz crushed tomato")
+  // only ever kept whichever the source happened to write first, with
+  // no awareness of the household's own preference. Same
+  // fetchProfile(userId) -> preferredUnitSystem flow CookingModeScreen/
+  // RecipeDetailScreen already use.
+  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchProfile(userId).then((profile) => {
+      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const load = useCallback(async () => {
     try {
-      const review = await fetchGroceryReview(planId);
+      const review = await fetchGroceryReview(planId, preferredUnitSystem);
       setItems(review.items);
       setLoadError(false);
       setNotConfirmed(false);
@@ -101,7 +124,7 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
         setLoadError(true);
       }
     }
-  }, [planId]);
+  }, [planId, preferredUnitSystem]);
 
   // isOnline is a real dependency, not just an exhaustive-deps
   // formality — see ThisWeekScreen.tsx's identical comment: it's what

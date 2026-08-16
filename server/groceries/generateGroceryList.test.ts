@@ -169,6 +169,66 @@ describe('generateGroceryList', () => {
     });
   });
 
+  // Found via live testing, 2026-08-14: a recipe listing both units for
+  // the same quantity ("800g / 28oz crushed tomato") only ever kept
+  // whichever one parseQuantity.ts's stripAlternateUnit happened to see
+  // first — the grocery list showed that unit even when it didn't match
+  // the household's own preference. generateGroceryList() now applies
+  // the same convertToSystem() display-time conversion Cooking Mode
+  // already uses, before grouping.
+  describe('preferred unit system', () => {
+    it('converts every occurrence to the household preferred unit system before summing', () => {
+      const items = generateGroceryList(
+        [
+          entry('r1', 1, [
+            line({
+              lineText: '907.184 g tomato',
+              quantityMin: 907.184,
+              unit: 'g',
+              ingredientText: 'tomato',
+            }),
+          ]),
+        ],
+        'us_customary',
+      );
+
+      expect(findItem(items, 'tomato')!.amounts).toEqual(['2 lb tomato']);
+    });
+
+    it('leaves a quantity already in the preferred system untouched', () => {
+      const items = generateGroceryList(
+        [
+          entry('r1', 1, [
+            line({
+              lineText: '1 lb beef',
+              quantityMin: 1,
+              unit: 'lb',
+              ingredientText: 'beef',
+            }),
+          ]),
+        ],
+        'us_customary',
+      );
+
+      expect(findItem(items, 'beef')!.amounts).toEqual(['1 lb beef']);
+    });
+
+    it('defaults to no conversion when the caller passes no preference', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '907.184 g tomato',
+            quantityMin: 907.184,
+            unit: 'g',
+            ingredientText: 'tomato',
+          }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'tomato')!.amounts).toEqual(['~905 g tomato']);
+    });
+  });
+
   describe('display text', () => {
     it('drops a preparation clause after the comma from the displayed amount', () => {
       const items = generateGroceryList([

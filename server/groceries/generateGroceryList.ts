@@ -7,7 +7,8 @@
  * review-screen load.
  */
 
-import { unitClass, convertQuantity } from '../units/quantityVocabulary.ts';
+import { convertToSystem } from '../units/convertUnit.ts';
+import { unitClass, convertQuantity, type UnitSystem } from '../units/quantityVocabulary.ts';
 import { scaleQuantity } from '../units/scaleQuantity.ts';
 import { formatIngredientLine } from '../units/formatIngredientLine.ts';
 import type { ParsedIngredientLine } from '../units/parseQuantity.ts';
@@ -91,12 +92,27 @@ function sumSubgroup(occurrences: ScaledOccurrence[]): string {
   });
 }
 
-export function generateGroceryList(entries: readonly PlanningEntryForGroceries[]): GroceryItem[] {
+// preferredUnitSystem (found via live testing, 2026-08-14): a recipe
+// that originally listed both units ("800g / 28oz crushed tomato")
+// only ever kept one, chosen at parse time by whichever the source
+// happened to write first (parseQuantity.ts's stripAlternateUnit) —
+// with no awareness of any household member's own preference, since
+// that's a per-viewer setting and parsing runs once, shared. Converting
+// every occurrence to the household's preferred system here, before
+// grouping, is the same convertToSystem() display-time conversion
+// Cooking Mode and Recipe Detail already apply — it doesn't change
+// which occurrences are safely summable (unit class is preserved by
+// conversion), just which specific unit the total ends up in.
+export function generateGroceryList(
+  entries: readonly PlanningEntryForGroceries[],
+  preferredUnitSystem: UnitSystem | null = null,
+): GroceryItem[] {
   const groups = new Map<string, ScaledOccurrence[]>();
 
   for (const entry of entries) {
     for (const line of entry.ingredientLines) {
       const scaled = scaleQuantity(line, entry.multiplier);
+      const converted = preferredUnitSystem ? convertToSystem(scaled, preferredUnitSystem) : scaled;
       const identityText = line.ingredientText ?? line.lineText;
       const key = canonicalKey(identityText);
       if (key.length === 0) {
@@ -104,9 +120,9 @@ export function generateGroceryList(entries: readonly PlanningEntryForGroceries[
       }
 
       const occurrence: ScaledOccurrence = {
-        ...scaled,
+        ...converted,
         ingredientText:
-          scaled.ingredientText === null ? null : groceryDisplayText(scaled.ingredientText),
+          converted.ingredientText === null ? null : groceryDisplayText(converted.ingredientText),
         recipeId: entry.recipeId,
       };
       const existing = groups.get(key);
