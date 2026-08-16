@@ -170,6 +170,49 @@ function unparsed(lineText: string): ParsedIngredientLine {
   return { lineText, quantityMin: null, quantityMax: null, unit: null, ingredientText: null };
 }
 
+// Found via live testing, 2026-08-14: "1 lb / 500g beef" or "800g, 28oz
+// can crushed tomato" write a second, alternate-unit quantity right
+// next to the first — common recipe-blog style (US customary + metric,
+// or a can size alongside a weight). Only the leading quantity is ever
+// structured (ADR-0018 — a line has exactly one quantity/unit), so the
+// second one sits inertly inside ingredientText and doesn't scale with
+// it: "3 lb / 500g beef" after 3x is visibly wrong, not just
+// unhelpful. Developer decision, 2026-08-14: strip it rather than
+// parse and scale both — same "don't show a number this code can't
+// vouch for" posture ADR-0018 already takes elsewhere, and the user
+// already has Original/Preferred unit display (UNIT-02) for seeing a
+// converted amount that's actually kept in sync with scaling.
+//
+// Only strips when a recognized unit (matchUnit, the same fixed
+// vocabulary as the primary quantity — no fuzzy matching) immediately
+// follows a number immediately following a leading "/" or ",". A
+// genuine prep clause ("flour, divided") never matches: there's always
+// an ingredient name between the unit and that kind of comma, so
+// ingredientText never starts with the separator in the first place.
+const ALTERNATE_UNIT_SEPARATOR = /^\s*[/,]\s*/;
+const CONTAINER_WORDS = ['can', 'jar', 'package', 'pkg', 'bag', 'box', 'container'];
+const CONTAINER_PATTERN = new RegExp(`^\\s*(?:${CONTAINER_WORDS.join('|')})\\b\\.?\\s*`, 'i');
+
+function stripAlternateUnit(text: string): string {
+  const separatorMatch = ALTERNATE_UNIT_SEPARATOR.exec(text);
+  if (!separatorMatch) return text;
+
+  const afterSeparator = text.slice(separatorMatch[0].length);
+  const number = matchNumber(afterSeparator);
+  if (!number) return text; // no number right after the separator — not this pattern, e.g. "flour, divided"
+
+  const afterNumber = afterSeparator.slice(number.matchedLength).replace(/^\s+/, '');
+  const unit = matchUnit(afterNumber);
+  if (!unit) return text; // a number but no recognized unit — not confidently an alternate-unit annotation
+
+  let afterUnit = afterNumber.slice(unit.matchedLength).replace(/^\s+/, '');
+  const containerMatch = CONTAINER_PATTERN.exec(afterUnit);
+  if (containerMatch) {
+    afterUnit = afterUnit.slice(containerMatch[0].length);
+  }
+  return afterUnit;
+}
+
 export function parseQuantity(rawLineText: string): ParsedIngredientLine {
   const lineText = rawLineText.trim();
   if (lineText.length === 0) {
@@ -208,7 +251,7 @@ export function parseQuantity(rawLineText: string): ParsedIngredientLine {
   const unit = unitMatch ? unitMatch.unit : null;
   const afterUnit = unitMatch ? rest.slice(unitMatch.matchedLength) : rest;
 
-  const ingredientText = afterUnit.trim();
+  const ingredientText = stripAlternateUnit(afterUnit.trim()).trim();
 
   return {
     lineText,
