@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import { type CookingEvent, formatCookedAt, getCookingHistory } from './api';
 import { DoneCookingSheet } from './DoneCookingSheet';
 import { enqueueCookingEvent } from './outbox';
@@ -14,10 +15,12 @@ import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
+import { fetchProfile } from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useCookingModeAwake } from '../keepAwake/useCookingModeAwake';
 import { logError } from '../observability';
 import { SCALE_PRESETS, scaledIngredientSections } from '../recipes/scaling';
+import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
@@ -74,6 +77,7 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   useCookingModeAwake();
   const router = useRouter();
   const { household } = useHousehold();
+  const { session } = useSession();
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
   const {
@@ -99,6 +103,30 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   // confirmed as a real pain point by developer walkthrough feedback.
   const [planMultiplier, setPlanMultiplier] = useState<number | null>(null);
   const [planLookupDone, setPlanLookupDone] = useState(false);
+  // Found via live testing, 2026-08-14: Cooking Mode always showed a
+  // recipe's original units verbatim, so a recipe whose source mixed
+  // systems per-ingredient (beef in lb, tomato in g) displayed that
+  // same mix scaled up — "2400g tomato, 1lb beef" reads as inconsistent
+  // even though each line is individually correct. RecipeDetailScreen's
+  // own scaling controls already default to the household's preferred
+  // unit system (fetchProfile); Cooking Mode never fetched it at all, a
+  // silent scope-narrowing flagged as a known gap since Phase 15's own
+  // review. No toggle here (unlike Recipe Detail) — matches Cooking
+  // Mode's single-scrolling-screen minimalism, and the actual complaint
+  // was inconsistency, not wanting a choice.
+  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchProfile(userId).then((profile) => {
+      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
   // Found via live testing, 2026-08-14: neither the recipe's own
   // permanent notes nor its past cooking history showed anywhere in
   // Cooking Mode, despite being exactly the kind of thing worth
@@ -184,8 +212,8 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   const displayedIngredientSections = scaledIngredientSections(
     recipe.ingredientSections,
     multiplier,
-    'original',
-    null,
+    'preferred',
+    preferredUnitSystem,
   );
 
   // Marks the plan default as already "applied" (Codex review, PR #50)

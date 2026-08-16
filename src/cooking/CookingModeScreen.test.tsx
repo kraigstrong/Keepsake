@@ -9,9 +9,11 @@ import { useCookingSession } from './useCookingSession';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
+import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { logError } from '../observability';
 import type { Recipe } from '../recipes/api';
+import { useSession } from '../session/SessionProvider';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 jest.mock('./useCookingSession', () => ({ useCookingSession: jest.fn() }));
@@ -25,10 +27,12 @@ jest.mock('./api', () => ({
 jest.mock('./outbox', () => ({ enqueueCookingEvent: jest.fn() }));
 jest.mock('./outboxEngine', () => ({ submitPendingCookingEvents: jest.fn() }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
+jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
 jest.mock('../keepAwake/useCookingModeAwake', () => ({ useCookingModeAwake: jest.fn() }));
 jest.mock('../observability', () => ({ logError: jest.fn() }));
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../thisWeek/api', () => ({
   fetchCurrentWeeklyPlan: jest.fn(),
   removeConfirmedEntryFromThisWeek: jest.fn(),
@@ -44,9 +48,11 @@ const mockedUseCookingSession = useCookingSession as jest.Mock;
 const mockedEnqueueCookingEvent = enqueueCookingEvent as jest.Mock;
 const mockedSubmitPendingCookingEvents = submitPendingCookingEvents as jest.Mock;
 const mockedGetDatabase = getDatabase as jest.Mock;
+const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseSession = useSession as jest.Mock;
 const mockedGetCookingHistory = getCookingHistory as jest.Mock;
 const mockedFetchCurrentWeeklyPlan = fetchCurrentWeeklyPlan as jest.Mock;
 const mockedRemoveConfirmedEntry = removeConfirmedEntryFromThisWeek as jest.Mock;
@@ -123,6 +129,12 @@ beforeEach(() => {
   resetChecklist = jest.fn();
   mockedUseRouter.mockReturnValue({ back });
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
+  mockedHouseholdApi.fetchProfile.mockResolvedValue({
+    id: 'user-1',
+    displayName: 'Alice',
+    preferredUnitSystem: 'us_customary',
+  });
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedGetDatabase.mockResolvedValue(fakeDb);
   mockedSubmitPendingCookingEvents.mockResolvedValue(undefined);
@@ -609,6 +621,81 @@ describe('CookingModeScreen', () => {
       await waitFor(() => expect(mockedLogError).toHaveBeenCalled());
       expect(mockedEnqueueCookingEvent).toHaveBeenCalled();
       expect(back).toHaveBeenCalled();
+    });
+  });
+
+  // Found via live testing, 2026-08-14: Cooking Mode always showed a
+  // recipe's original units verbatim, so a recipe whose source mixed
+  // systems per-ingredient displayed that same mix scaled up — visibly
+  // inconsistent even though each line was individually correct.
+  describe('preferred unit system', () => {
+    it("converts a metric ingredient to the household's preferred unit system", async () => {
+      mockedUseCookingSession.mockReturnValue({
+        recipe: {
+          ...recipe,
+          ingredientSections: [
+            {
+              title: null,
+              lines: [
+                {
+                  lineText: '500 g flour',
+                  quantityMin: 500,
+                  quantityMax: 500,
+                  unit: 'g',
+                  ingredientText: 'flour',
+                },
+              ],
+            },
+          ],
+        },
+        isLoading: false,
+        loadError: false,
+        checkedIngredientKeys: new Set<string>(),
+        checkedInstructionKeys: new Set<string>(),
+        toggleIngredient,
+        toggleInstruction,
+        resetChecklist,
+      });
+
+      await renderCookingModeScreen();
+
+      await waitFor(() => expect(mockedHouseholdApi.fetchProfile).toHaveBeenCalledWith('user-1'));
+      await waitFor(() => expect(screen.getByText('~1 lb flour')).toBeTruthy());
+      expect(screen.queryByText('500 g flour')).toBeNull();
+    });
+
+    it('shows the original unit while the preferred-system lookup is still pending', async () => {
+      mockedHouseholdApi.fetchProfile.mockReturnValue(new Promise(() => {})); // never resolves
+      mockedUseCookingSession.mockReturnValue({
+        recipe: {
+          ...recipe,
+          ingredientSections: [
+            {
+              title: null,
+              lines: [
+                {
+                  lineText: '500 g flour',
+                  quantityMin: 500,
+                  quantityMax: 500,
+                  unit: 'g',
+                  ingredientText: 'flour',
+                },
+              ],
+            },
+          ],
+        },
+        isLoading: false,
+        loadError: false,
+        checkedIngredientKeys: new Set<string>(),
+        checkedInstructionKeys: new Set<string>(),
+        toggleIngredient,
+        toggleInstruction,
+        resetChecklist,
+      });
+
+      await renderCookingModeScreen();
+
+      expect(screen.getByText('500 g flour')).toBeTruthy();
     });
   });
 
