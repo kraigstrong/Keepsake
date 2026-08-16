@@ -34,6 +34,16 @@ export async function getCookingHistory(recipeId: string): Promise<CookingEvent[
   return (data ?? []).map(fromRow);
 }
 
+// Shared by RecipeDetailScreen and CookingModeScreen — both render the
+// same cooking-history rows, no reason for this to drift between them.
+export function formatCookedAt(cookedAt: string): string {
+  return new Date(cookedAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export interface RecordCookingEventInput {
   recipeId: string;
   cookedAt: string;

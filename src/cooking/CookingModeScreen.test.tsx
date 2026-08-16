@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
+import { getCookingHistory } from './api';
 import { CookingModeScreen } from './CookingModeScreen';
 import { enqueueCookingEvent } from './outbox';
 import { submitPendingCookingEvents } from './outboxEngine';
@@ -14,6 +15,13 @@ import type { Recipe } from '../recipes/api';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 jest.mock('./useCookingSession', () => ({ useCookingSession: jest.fn() }));
+// formatCookedAt stays real (jest.requireActual), same reasoning as
+// RecipeDetailScreen.test.tsx — this suite asserts on its actual
+// formatted output, only getCookingHistory itself needs mocking.
+jest.mock('./api', () => ({
+  ...jest.requireActual('./api'),
+  getCookingHistory: jest.fn(),
+}));
 jest.mock('./outbox', () => ({ enqueueCookingEvent: jest.fn() }));
 jest.mock('./outboxEngine', () => ({ submitPendingCookingEvents: jest.fn() }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
@@ -39,6 +47,7 @@ const mockedGetDatabase = getDatabase as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedGetCookingHistory = getCookingHistory as jest.Mock;
 const mockedFetchCurrentWeeklyPlan = fetchCurrentWeeklyPlan as jest.Mock;
 const mockedRemoveConfirmedEntry = removeConfirmedEntryFromThisWeek as jest.Mock;
 const mockedLogError = logError as jest.Mock;
@@ -117,6 +126,7 @@ beforeEach(() => {
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedGetDatabase.mockResolvedValue(fakeDb);
   mockedSubmitPendingCookingEvents.mockResolvedValue(undefined);
+  mockedGetCookingHistory.mockResolvedValue([]);
   // No confirmed plan by default — most tests don't care about the
   // removal toggle; the tests that do override this explicitly.
   mockedFetchCurrentWeeklyPlan.mockRejectedValue(new Error('no current plan'));
@@ -599,6 +609,61 @@ describe('CookingModeScreen', () => {
       await waitFor(() => expect(mockedLogError).toHaveBeenCalled());
       expect(mockedEnqueueCookingEvent).toHaveBeenCalled();
       expect(back).toHaveBeenCalled();
+    });
+  });
+
+  // Found via live testing, 2026-08-14: neither the recipe's own
+  // permanent notes nor its past cooking history showed anywhere in
+  // Cooking Mode.
+  describe('notes and cooking history', () => {
+    it("shows the recipe's permanent notes when present", async () => {
+      mockedUseCookingSession.mockReturnValue({
+        recipe: { ...recipe, permanentNotes: "Don't overmix the batter." },
+        isLoading: false,
+        loadError: false,
+        checkedIngredientKeys: new Set<string>(),
+        checkedInstructionKeys: new Set<string>(),
+        toggleIngredient,
+        toggleInstruction,
+        resetChecklist,
+      });
+
+      await renderCookingModeScreen();
+
+      expect(screen.getByTestId('cooking-mode-notes')).toBeTruthy();
+      expect(screen.getByText("Don't overmix the batter.")).toBeTruthy();
+    });
+
+    it('shows no notes section when the recipe has none', async () => {
+      await renderCookingModeScreen();
+
+      expect(screen.queryByTestId('cooking-mode-notes')).toBeNull();
+    });
+
+    it('shows cooking history newest-first, with notes, once loaded', async () => {
+      mockedGetCookingHistory.mockResolvedValue([
+        {
+          id: 'event-2',
+          recipeId: 'recipe-1',
+          cookedAt: '2026-08-10T18:00:00.000Z',
+          note: 'Needed another 5 minutes.',
+        },
+        { id: 'event-1', recipeId: 'recipe-1', cookedAt: '2026-08-01T18:00:00.000Z', note: null },
+      ]);
+
+      await renderCookingModeScreen();
+
+      await waitFor(() => expect(screen.getByTestId('cooking-mode-cooking-history')).toBeTruthy());
+      expect(screen.getByText('Needed another 5 minutes.')).toBeTruthy();
+      expect(screen.getByText('Aug 10, 2026')).toBeTruthy();
+      expect(screen.getByText('Aug 1, 2026')).toBeTruthy();
+    });
+
+    it('shows no cooking history section when there is none yet', async () => {
+      await renderCookingModeScreen();
+
+      await waitFor(() => expect(mockedGetCookingHistory).toHaveBeenCalledWith('recipe-1'));
+      expect(screen.queryByTestId('cooking-mode-cooking-history')).toBeNull();
     });
   });
 });

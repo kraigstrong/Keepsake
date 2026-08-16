@@ -25,7 +25,13 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 jest.mock('./api');
 jest.mock('./heroImage');
 jest.mock('../components/confirm');
-jest.mock('../cooking/api');
+// formatCookedAt stays real (jest.requireActual) — this suite asserts
+// on its actual formatted output ("Aug 10, 2026"), only getCookingHistory
+// itself needs mocking.
+jest.mock('../cooking/api', () => ({
+  ...jest.requireActual('../cooking/api'),
+  getCookingHistory: jest.fn(),
+}));
 jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { type CookingEvent, formatCookedAt, getCookingHistory } from './api';
 import { DoneCookingSheet } from './DoneCookingSheet';
 import { enqueueCookingEvent } from './outbox';
 import { submitPendingCookingEvents } from './outboxEngine';
@@ -98,6 +99,28 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   // confirmed as a real pain point by developer walkthrough feedback.
   const [planMultiplier, setPlanMultiplier] = useState<number | null>(null);
   const [planLookupDone, setPlanLookupDone] = useState(false);
+  // Found via live testing, 2026-08-14: neither the recipe's own
+  // permanent notes nor its past cooking history showed anywhere in
+  // Cooking Mode, despite being exactly the kind of thing worth
+  // glancing at mid-recipe ("last time I noted to use less salt").
+  // Same always-online, "no offline mirror" call as RecipeDetailScreen's
+  // own getCookingHistory usage — a plain useEffect here, not that
+  // screen's useFocusEffect, since Cooking Mode is freshly mounted each
+  // time it's navigated into rather than staying mounted across a
+  // round-trip.
+  const [cookingHistory, setCookingHistory] = useState<CookingEvent[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCookingHistory(recipeId)
+      .then((events) => {
+        if (!cancelled) setCookingHistory(events);
+      })
+      .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
+    return () => {
+      cancelled = true;
+    };
+  }, [recipeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,6 +261,28 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
         ))}
       </View>
 
+      {recipe.permanentNotes && (
+        <View style={styles.section} testID="cooking-mode-notes">
+          <Text style={styles.sectionHeading}>Notes</Text>
+          <Text style={styles.line}>{recipe.permanentNotes}</Text>
+        </View>
+      )}
+
+      {cookingHistory.length > 0 && (
+        <View style={styles.section} testID="cooking-mode-cooking-history">
+          <Text style={styles.sectionHeading}>Cooking History</Text>
+          {/* Already newest-first (getCookingHistory) — the most recent
+              note is just the first row, same as RecipeDetailScreen's own
+              NOTE-03 ordering, not a separate preview element. */}
+          {cookingHistory.map((event) => (
+            <View key={event.id} style={styles.cookingHistoryRow}>
+              <Text style={styles.line}>{formatCookedAt(event.cookedAt)}</Text>
+              {event.note && <Text style={styles.cookingHistoryNote}>{event.note}</Text>}
+            </View>
+          ))}
+        </View>
+      )}
+
       {displayedIngredientSections.map((section, sectionIndex) => (
         <View key={sectionIndex} style={styles.section}>
           <Text style={styles.sectionHeading}>{section.title ?? 'Ingredients'}</Text>
@@ -332,6 +377,17 @@ const styles = StyleSheet.create({
   sectionHeading: {
     ...typography.heading,
     color: colors.textPrimary,
+  },
+  line: {
+    ...typography.body,
+    color: colors.textPrimary,
+  },
+  cookingHistoryRow: {
+    marginTop: spacing.xs,
+  },
+  cookingHistoryNote: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   row: {
     flexDirection: 'row',
