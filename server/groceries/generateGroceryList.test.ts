@@ -249,6 +249,34 @@ describe('generateGroceryList', () => {
       const butter = findItem(items, 'butter');
       expect(butter!.amounts).toHaveLength(1);
     });
+
+    // Found via live testing, 2026-08-14: "4 tbsp all purpose flour" and
+    // "3 cups flour" showed as two separate line items — canonicalKey()
+    // now folds "all purpose flour" to "flour" (DEFAULT_VARIETY_PREFIXES),
+    // and since tbsp/cup share the volume unit class, they're not just
+    // the same item, they sum into one amount.
+    it('merges and sums "all purpose flour" with "flour" across compatible units', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({ lineText: '3 cups flour', quantityMin: 3, unit: 'cup', ingredientText: 'flour' }),
+        ]),
+        entry('r2', 1, [
+          line({
+            lineText: '4 tbsp all purpose flour',
+            quantityMin: 4,
+            unit: 'tbsp',
+            ingredientText: 'all purpose flour',
+          }),
+        ]),
+      ]);
+
+      const flour = findItem(items, 'flour');
+      expect(flour!.amounts).toHaveLength(1);
+      // 3 cups + 4 tbsp (1/4 cup), summed in cups (the first occurrence's
+      // unit) = 3 1/4 cups — "~" marks a cross-unit conversion, same as
+      // the existing volume-merge test above.
+      expect(flour!.amounts[0]).toBe('~3 1/4 cups flour');
+    });
   });
 
   describe('categorization and staples', () => {

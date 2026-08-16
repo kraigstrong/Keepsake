@@ -35,6 +35,17 @@ describe('canonicalKey', () => {
         expect(canonicalKey(text)).toBe(canonicalKey('butter'));
       },
     );
+
+    // Found via live testing, 2026-08-14 — ADR-0022 decision 3's own
+    // named escape hatch for exactly this: a small, explicitly reviewed
+    // synonym constant (DEFAULT_VARIETY_PREFIXES), not general synonym
+    // folding.
+    it.each(['all purpose flour', 'All-Purpose Flour', 'all purpose flours'])(
+      '"%s" merges with "flour"',
+      (text) => {
+        expect(canonicalKey(text)).toBe(canonicalKey('flour'));
+      },
+    );
   });
 
   describe('must not merge (different ingredients, or a variety distinction)', () => {
@@ -61,6 +72,15 @@ describe('canonicalKey', () => {
       // not just rice that's been beaten — the same idiom risk as
       // "ground"/"diced"/"cooked". Removed from the list entirely.
       ['beaten rice', 'rice'],
+      // Deliberately NOT on DEFAULT_VARIETY_PREFIXES: each of these is a
+      // genuinely distinct flour, not "flour" in a different physical
+      // state — folding them would be exactly the false merge this
+      // function exists to avoid.
+      ['semolina flour', 'flour'],
+      ['00 flour', 'flour'],
+      ['bread flour', 'flour'],
+      ['self-rising flour', 'flour'],
+      ['cake flour', 'flour'],
     ])('"%s" and "%s" produce different keys', (a, b) => {
       expect(canonicalKey(a)).not.toBe(canonicalKey(b));
     });
