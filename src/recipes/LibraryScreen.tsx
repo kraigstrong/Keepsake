@@ -21,6 +21,7 @@ import { Row } from '../components/Row';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
+import { useImportActivity } from '../import/ImportActivityContext';
 import type { SearchResult } from '../search/search';
 import { searchRecipes } from '../search/search';
 import {
@@ -112,6 +113,15 @@ export function LibraryScreen() {
     return () => clearTimeout(timeout);
   }, [query, household]);
 
+  // notifyImportCompleted's version bumps on any completed background
+  // import (Share Extension drain, outbox retry — app/_layout.tsx),
+  // included here so a screen already focused when that happens
+  // refreshes too, not just on the next navigation-focus event. Found
+  // via live testing, 2026-08-14: the recipe-imported toast fired while
+  // still on Library, but the new recipe stayed missing until
+  // navigating away and back.
+  const { version: importVersion } = useImportActivity();
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -155,7 +165,8 @@ export function LibraryScreen() {
       return () => {
         cancelled = true;
       };
-    }, [household]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- importVersion isn't read in the body; it's a deliberate trigger so an already-focused screen refreshes when useFocusEffect's callback identity changes, not just on the next real focus event (see the comment above).
+    }, [household, importVersion]),
   );
 
   function chooseSort(mode: SortMode) {
