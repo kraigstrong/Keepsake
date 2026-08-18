@@ -10,7 +10,7 @@
     "@sentry/react-native": "~8.23.0",
     "@supabase/supabase-js": "^2.112.3",
     "aes-js": "^3.1.2",
-    "babel-preset-expo": "~57.0.0",
+    "babel-preset-expo": "~57.0.7",
     "expo": "~57.0.10",
     "expo-asset": "~57.0.8",
     "expo-calendar": "~57.0.1",
