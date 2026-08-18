@@ -30,7 +30,6 @@ Phase 0–11.5's history entries were migrated from the old, single `phase-statu
 | [3](history/phase-03-household-auth.md) | Conditional Pass | 2026-08-02 | Authentication, Household, and Security Boundary — email OTP, household/invitation RPCs + RLS. |
 | [3.5](history/phase-03.5-design-direction.md) | Pass | 2026-08-02 | Design Direction and Visual Iteration — "Ink & Paper" visual pass. |
 | [4](history/phase-04-manual-recipe.md) | Conditional Pass | 2026-08-03 | Manual Recipe Vertical Slice — recipe schema/RLS, `save_recipe`, hero image, editor/detail screens. |
-| [4.5](history/phase-04.5-doc-maintenance.md) | Pass | 2026-08-03 | Cross-cutting doc maintenance — prd.md/execution-plan.md reconciled against what Phase 4 built. |
 | [5](history/phase-05-drafts-versions-conflicts.md) | Conditional Pass | 2026-08-04 | Drafts, Version History, and Edit Conflicts — versioning, drafts, restore, conflict UI. |
 | [5.5](history/phase-05.5-optional-password-signin.md) | — (no gate) | 2026-08-04 | Optional Password Sign-in (ADR-0012) — opt-in password alongside OTP. |
 | [6](history/phase-06-offline-sync.md) | Pass | 2026-08-03 | Offline Read Model and Synchronization — local SQLite mirror, sync engine, image cache. |
