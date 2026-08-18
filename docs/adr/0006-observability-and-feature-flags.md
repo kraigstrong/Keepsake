@@ -6,7 +6,7 @@
 
 ## Context
 
-Phase 0 build scope calls for "error and analytics abstractions" and "feature flags" without naming vendors — another explicitly delegated choice (see ADR-0005 for the delegation source). The PRD's non-negotiables (§30) require sensitive content — recipe content, cooking notes, credentials — to be excluded from logs and analytics (also SEC-05 in `docs/prd-traceability.md`), which narrows the field to tools that support redaction and an explicit event allowlist rather than free-form event capture.
+Phase 0 build scope calls for "error and analytics abstractions" and "feature flags" without naming vendors — another explicitly delegated choice. The PRD's non-negotiables (§30) require sensitive content — recipe content, cooking notes, credentials — to be excluded from logs and analytics (also SEC-05 in `docs/prd-traceability.md`), which narrows the field to tools that support redaction and an explicit event allowlist rather than free-form event capture.
 
 ## Decision
 
