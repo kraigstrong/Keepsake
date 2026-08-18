@@ -1,14 +1,14 @@
 ---
 name: "pr-ready"
-description: "Use when a coherent commit group (or a whole phase) is done locally and ready to hand to the developer for pushing and opening a GitHub PR. Produces the exact push command and a filled-out PR description; does not push or open the PR itself since this environment has no GitHub credentials."
+description: "Use when a work item's implementation, verification, and final review are done and it's ready to hand to the developer for pushing and opening a GitHub PR. Produces the exact push command and a filled-out PR description; does not push or open the PR itself since this environment has no GitHub credentials."
 ---
 
-Packaging a commit group for review. This environment cannot push to GitHub or open PRs — the output of this skill is instructions the developer runs themselves (from a laptop or the GitHub mobile app on the branch that's already pushed).
+Packaging a work item for review. This environment cannot push to GitHub or open PRs — the output of this skill is instructions the developer runs themselves (from a laptop or the GitHub mobile app on the branch that's already pushed).
 
 ## 1. Verify the branch is actually ready
 
 - `git status` — nothing uncommitted that should be part of this PR.
-- `git log <base>..HEAD --oneline` — review the commit list. Each commit should be independently understandable per execution-plan.md §2.9. If commits are muddled ("WIP", "fixes", mixed concerns), consider an interactive rebase to clean up *before* handing off — don't ship a messy history because cleanup felt optional.
+- `git log <base>..HEAD --oneline` — review the commit list. Each commit should be independently understandable. If commits are muddled ("WIP", "fixes", mixed concerns), consider an interactive rebase to clean up *before* handing off — don't ship a messy history because cleanup felt optional.
 - Re-run tests/type checks/linting one more time on the branch as a whole, not just per-commit.
 - `git diff <base>..HEAD` — scan for anything that looks like a secret, credential, token, or `.env` value. If anything is even ambiguous, stop and flag it rather than including it.
 
@@ -16,12 +16,13 @@ Packaging a commit group for review. This environment cannot push to GitHub or o
 
 Use `.github/PULL_REQUEST_TEMPLATE.md` as the structure. Populate:
 
-- Narrow objective (what this PR does, not the whole phase).
+- Narrow objective (what this work item does).
 - PRD requirement IDs touched (from `docs/prd-traceability.md`).
 - Security implications — new data, new authorization boundary, new external input, or explicitly "none."
 - Tests included.
 - Migrations included, if any, and whether they're forward-only or reversible.
-- Known limitations / explicitly deferred work.
+- Verification performed and what it found — the independent-verification pass from `ship-work-item`, and how each finding was resolved (fixed, or explicitly accepted and why).
+- Known limitations / explicitly deferred work, and any follow-up work items discovered but not addressed here.
 
 ## 3. Give the developer the exact commands
 
