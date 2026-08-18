@@ -34,7 +34,7 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-function renderScreen() {
+async function renderScreen() {
   return render(
     <ToastProvider>
       <GroceryReviewScreen planId="plan-1" />
@@ -61,7 +61,15 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
-  mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
+  // us_customary, not a per-test concern here — every existing fixture
+  // amount in this file is either unitless or already US customary
+  // (tsp), so this default never changes what any existing assertion
+  // sees; the dedicated "preferred unit system" tests below use their
+  // own fixtures to actually exercise conversion.
+  mockedUseHousehold.mockReturnValue({
+    household: { id: 'household-1' },
+    profile: { id: 'user-1', displayName: 'Alice', preferredUnitSystem: 'us_customary' },
+  });
   mockedApi.setGroceryItemSelection.mockResolvedValue(undefined);
   mockedApi.clearGroceryItemSelection.mockResolvedValue(undefined);
 });
@@ -90,7 +98,7 @@ it('shows an offline state and never fetches while offline', async () => {
 it('shows an error state with retry when the list fails to load', async () => {
   mockedApi.fetchGroceryReview.mockRejectedValue(new Error('boom'));
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-load-error')).toBeTruthy());
 
@@ -109,7 +117,7 @@ it('groups items under their category header', async () => {
     ],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByText('3 onions')).toBeTruthy());
   expect(screen.getByText('Produce')).toBeTruthy();
@@ -132,7 +140,7 @@ it('groups staples into their own section instead of their aisle category', asyn
     ],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByText('Staples (probably on hand)')).toBeTruthy());
   // "Pantry" never renders — the only pantry item is the staple, which
@@ -151,7 +159,7 @@ it('passes only included items to GroceryExportPanel, with the household id', as
     ],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(mockGroceryExportPanel).toHaveBeenCalled());
   const lastCall = mockGroceryExportPanel.mock.calls.at(-1)![0];
@@ -171,7 +179,7 @@ it('renders a staple as unchecked by default and a non-staple as checked', async
     ],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-salt')).toBeTruthy());
   expect(screen.getByTestId('grocery-review-item-salt').props.accessibilityState.checked).toBe(
@@ -188,7 +196,7 @@ it('toggles an item optimistically and calls setGroceryItemSelection', async () 
     items: [item({ itemHash: 'onion', included: true })],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-onion')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('grocery-review-item-onion'));
@@ -208,7 +216,7 @@ it('reverts the optimistic toggle if the server call fails', async () => {
   });
   mockedApi.setGroceryItemSelection.mockRejectedValue(new Error('boom'));
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-onion')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('grocery-review-item-onion'));
@@ -223,7 +231,7 @@ it('reverts the optimistic toggle if the server call fails', async () => {
 it('shows a distinct message and retries when the plan is not confirmed', async () => {
   mockedApi.fetchGroceryReview.mockRejectedValue(new Error(api.GROCERY_REVIEW_PLAN_NOT_CONFIRMED));
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-not-confirmed')).toBeTruthy());
   expect(screen.queryByTestId('grocery-review-load-error')).toBeNull();
@@ -242,7 +250,7 @@ it('calls clearGroceryItemSelection when a toggle returns an item to its compute
     items: [item({ itemHash: 'salt', isStaple: true, included: true })],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-salt')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('grocery-review-item-salt'));
@@ -261,7 +269,7 @@ it('ignores a second press on the same item while its toggle is still pending', 
     items: [item({ itemHash: 'onion', included: true })],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-onion')).toBeTruthy());
   // Not awaited: the mock's promise never resolves until `resolve()`
@@ -297,7 +305,7 @@ it("reverts only the failed item's toggle, leaving a concurrent successful toggl
     ],
   });
 
-  renderScreen();
+  await renderScreen();
 
   await waitFor(() => expect(screen.getByTestId('grocery-review-item-onion')).toBeTruthy());
   fireEvent.press(screen.getByTestId('grocery-review-item-onion')); // pending, not awaited — see the test above

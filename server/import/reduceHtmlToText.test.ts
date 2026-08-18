@@ -36,7 +36,7 @@ const FULL_RECIPE_PAGE = `
 `;
 
 describe('reduceHtmlToText', () => {
-  it('extracts the <main> content, dropping nav/header/footer/aside', () => {
+  it("extracts the <main> content, dropping nav/footer/aside (and a <header>'s nested nav)", () => {
     const text = reduceHtmlToText(FULL_RECIPE_PAGE);
 
     expect(text).toContain('Herb Roast Chicken');
@@ -44,11 +44,40 @@ describe('reduceHtmlToText', () => {
     expect(text).toContain('1 whole chicken (4 lb)');
     expect(text).toContain('Roast for 55–65 minutes.');
 
+    // "Home" lives inside <header><nav>...</nav></header> in the fixture
+    // above — gone because nav stripping still removes it, not because
+    // header itself is stripped (it isn't, see below).
     expect(text).not.toContain('Home');
     expect(text).not.toContain('Trending');
     expect(text).not.toContain('Other Recipe');
     expect(text).not.toContain('Example Site');
     expect(text).not.toContain('Print');
+  });
+
+  // Found via live testing, 2026-08-14: foodnetwork.com's "Cook's Note"
+  // label lives in a <header> used as a section's own heading, not a
+  // page banner — stripping every <header> wholesale silently deleted
+  // the label while the note's body text (a sibling element) survived,
+  // so the extraction prompt received an unlabeled orphan paragraph and
+  // correctly nulled it out per its own "no clear label, no note" rule.
+  it("keeps a <header> used as a section's own sub-heading, not just the page banner", () => {
+    const html = `
+      <html><body>
+        <main>
+          <h1>Crepes</h1>
+          <p>${'Real recipe text so this main region clears the usefulness threshold on its own, same as the other fixtures in this file. '.repeat(5)}</p>
+          <section class="notes">
+            <header>Cook's Note</header>
+            <p>Add fresh herbs for a savory variation.</p>
+          </section>
+        </main>
+      </body></html>
+    `;
+    const text = reduceHtmlToText(html);
+
+    expect(text).toContain("Cook's Note");
+    expect(text).toContain('Add fresh herbs for a savory variation.');
+    expect(text.indexOf("Cook's Note")).toBeLessThan(text.indexOf('Add fresh herbs'));
   });
 
   it('strips script and style tags and their contents entirely', () => {

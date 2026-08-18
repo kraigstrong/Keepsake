@@ -1,3 +1,4 @@
+import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import type { ParsedIngredientLine } from '../../server/units/parseQuantity';
 import {
   generateGroceryList,
@@ -66,8 +67,16 @@ function toParsedLine(line: FetchedIngredientLine): ParsedIngredientLine {
  * recomputes it from the plan's current, RLS-authorized data on every
  * call, then overlays any explicit include/exclude overrides the
  * household has already recorded for this plan.
+ *
+ * preferredUnitSystem is the caller's own responsibility to resolve
+ * (fetchProfile, same as CookingModeScreen/RecipeDetailScreen) — this
+ * function stays a thin RLS-scoped fetch-and-compute layer, not a place
+ * that reaches into the current user's profile itself.
  */
-export async function fetchGroceryReview(planId: string): Promise<GroceryReviewList> {
+export async function fetchGroceryReview(
+  planId: string,
+  preferredUnitSystem: UnitSystem | null = null,
+): Promise<GroceryReviewList> {
   const { data: plan, error: planError } = await supabase
     .from('weekly_plans')
     .select('status')
@@ -101,7 +110,7 @@ export async function fetchGroceryReview(planId: string): Promise<GroceryReviewL
     ),
   }));
 
-  const items = generateGroceryList(planningEntries);
+  const items = generateGroceryList(planningEntries, preferredUnitSystem);
 
   const { data: selections, error: selectionsError } = await supabase
     .from('grocery_item_selections')

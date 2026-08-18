@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import {
   PanGestureHandler,
   State,
@@ -134,7 +142,21 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
       onRequestClose={onDismiss}
       testID={testID}
     >
-      <View style={styles.container}>
+      {/* A transparent Modal renders as its own native window on iOS,
+          outside the app's own KeyboardAvoidingView (if any) — the sheet
+          needs its own, or a focused TextInput inside it (e.g.
+          DoneCookingSheet's note field) sits directly under the keyboard
+          with no way to shift out of the way. Found via live testing,
+          2026-08-14. behavior="padding" (iOS only — Android's default
+          windowSoftInputMode already resizes the view) adds bottom
+          padding to this flex-end container as the keyboard rises,
+          which pushes the sheet itself higher; it doesn't fight the
+          open/close transform below, since that's a visual offset on
+          top of whatever this container's own layout height is. */}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <Animated.View
           style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
           testID={testID ? `${testID}-backdrop` : undefined}
@@ -165,7 +187,7 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
           </PanGestureHandler>
           {children}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

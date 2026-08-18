@@ -21,7 +21,6 @@ const STRIPPED_BLOCK_TAGS = [
   'noscript',
   'svg',
   'nav',
-  'header',
   'footer',
   'aside',
   'form',
@@ -31,7 +30,33 @@ const STRIPPED_BLOCK_TAGS = [
 // Block-level boundaries become a newline instead of vanishing outright,
 // so "Preheat the oven.Mix the flour." doesn't run two sentences
 // together once tags are stripped.
-const NEWLINE_BOUNDARY_TAGS = ['p', 'div', 'li', 'tr', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+//
+// header is here, not in STRIPPED_BLOCK_TAGS (found via live testing,
+// 2026-08-14): plenty of sites use <header> as a page-level banner, but
+// plenty of others also use it as a section's own heading wrapper —
+// foodnetwork.com's "Cook's Note" label lives in exactly that shape
+// (<section class="o-ChefNotes"><header>Cook's Note</header>...).
+// Stripping it wholesale silently deleted the one word that told the
+// extraction prompt what kind of aside this was, while the note's body
+// text (a sibling element) survived untouched — the label vanished, not
+// the content, which is why a prompt fix alone couldn't have caught
+// this. A `<nav>` nested inside a `<header>` (the common page-banner
+// shape) is still fully removed either way, since `nav` stripping runs
+// first.
+const NEWLINE_BOUNDARY_TAGS = [
+  'p',
+  'div',
+  'li',
+  'tr',
+  'br',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+];
 
 const HTML_ENTITIES: Record<string, string> = {
   amp: '&',

@@ -15,7 +15,7 @@ import {
 import { getHeroImageUrl } from './heroImage';
 import { SCALE_PRESETS, scaledIngredientSections } from './scaling';
 import { Button } from '../components/Button';
-import { type CookingEvent, getCookingHistory } from '../cooking/api';
+import { type CookingEvent, formatCookedAt, getCookingHistory } from '../cooking/api';
 import { Chip } from '../components/Chip';
 import { confirm } from '../components/confirm';
 import { ErrorState } from '../components/ErrorState';
@@ -561,14 +561,6 @@ export function RecipeDetailScreen({
 function openExternalUrl(url: string | null) {
   if (!url || !/^https?:\/\//i.test(url)) return;
   Linking.openURL(url);
-}
-
-function formatCookedAt(cookedAt: string): string {
-  return new Date(cookedAt).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 const styles = StyleSheet.create({
