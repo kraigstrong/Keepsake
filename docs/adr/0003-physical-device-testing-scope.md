@@ -1,6 +1,6 @@
 # ADR-0003: iOS Simulator is the default exit-gate environment; physical device is required only where hardware/OS behavior actually differs
 
-- **Status:** Accepted
+- **Status:** Superseded by [`docs/architecture.md`](../architecture.md)'s "Testing strategy" section — this is a testing policy, not an architecture/vendor/security decision, so it doesn't meet the ADR bar in `docs/adr/TEMPLATE.md`. Kept here, not deleted yet, only because other files still reference it by number; those references get updated to point at `architecture.md` instead as they're touched.
 - **Date:** 2026-07-31
 - **Phase:** 0
 
