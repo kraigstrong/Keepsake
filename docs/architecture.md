@@ -19,7 +19,7 @@ Repo layout:
 
 ## Trust boundaries
 
-The client only ever holds Supabase's publishable key; every access-control decision that actually matters — household isolation above all — is enforced by RLS and Storage policy at the Supabase boundary, never by client-side filtering. The service-role key and the Anthropic API key exist only inside the Edge Function, which itself calls Supabase using the caller's own JWT (not service-role), so RLS applies there too. See [`docs/threat-model.md`](threat-model.md) §2 for the full trust-boundary diagram and the T-numbered threat catalog; this document doesn't reproduce either.
+The client only ever holds Supabase's publishable key; every access-control decision that actually matters — household isolation above all — is enforced by RLS and Storage policy at the Supabase boundary, never by client-side filtering. Only the Anthropic API key is a genuine server-only secret inside the Edge Function — it calls Supabase using the caller's own JWT, never the service-role key, so RLS applies there too, the same as everywhere else. Nothing in this app's runtime path reads the service-role key at all. See [`docs/threat-model.md`](threat-model.md) §2 for the full trust-boundary diagram and the T-numbered threat catalog; this document doesn't reproduce either.
 
 ## Data model
 
@@ -45,7 +45,7 @@ Recipes are the one entity mirrored locally for offline browsing and search (`do
 - **Categories** are small and rarely change, so they're refetched and replaced in full on every sync cycle — no cursor or tombstone machinery.
 - **Reads are plain RLS-scoped `select`s**, consistent with recipe reads elsewhere in the app — sync is a read path, so it doesn't introduce an RPC for something RLS already secures.
 - **Hero images are cached separately** via `expo-file-system`, downloaded into the app's cache directory after a successful read, with a fixed 100 MB total byte budget and LRU eviction. Recipe row data isn't counted against this budget.
-- **Sign-out wipes the entire local SQLite file.** Since MVP scopes a user to exactly one household (`docs/adr/0004-no-household-departure-in-mvp.md`), there's never a second household's cache to preserve.
+- **Sign-out clears the recipe mirror by table name, not by deleting the whole database file.** `import_outbox` (Phase 9), `grocery_exports`, and `cooking_event_outbox` (Phase 15) are deliberately excluded from the wipe — each holds locally-captured state (an unsent Share Extension submission, export bookkeeping, an offline cooking completion) that's the only copy of that data until it syncs, unlike the rebuildable recipe mirror everything else here is. This wipe is a tidiness measure, not the authorization boundary: local reads are household-scoped (`src/sync/offlineRecipes.ts`, `src/search/buildSearchQuery.ts`), so a wipe failure leaves stale, unreadable rows behind rather than exposing them to a different account signing in next.
 
 **Standing principle: not everything is mirrored offline, and that's deliberate.** Recipe browsing and search are the only offline-capable surfaces. Anything that requires a write against shared, actively-changing household state — importing, editing a recipe, weekly planning, grocery export — requires connectivity and is explicitly excluded from the offline mirror (prd-traceability.md's OFF-04). Weekly planning (`docs/adr/0021-weekly-plan-data-model.md`) is a concrete instance of this: it bypasses `src/sync/*` entirely, reading and writing directly against Postgrest and RPCs, and resyncs by refetching on screen focus rather than through the cursor/tombstone machinery recipes use. The one local *write* case in the app — Cooking Mode's offline completion queue (`docs/adr/0024-cooking-mode-and-offline-completion.md`) — is a separate outbox mechanism, not an extension of this read-only sync model.
 
@@ -58,6 +58,8 @@ The iOS Simulator is the default and sufficient environment for verifying a chan
 - **Screen-awake / real kitchen-use behavior** — Cooking Mode's keep-awake behavior and general in-kitchen usability need to be felt on a real device, not inferred from Simulator.
 
 Outside of those categories, Simulator evidence is sufficient for a build's exit verification — most of this app's surface (schema, RLS, domain logic, search, planning, grocery generation, general UI) doesn't exercise anything that behaves differently between Simulator and a real device, and requiring a physical-device pass everywhere would mean interrupting the developer far more than the risk justifies. When a change touches one of the categories above, plan for a physical-device pass as part of that work rather than treating Simulator-only verification as sufficient.
+
+Separately, before any body of work is considered ready for real users outside the development team — a release-readiness milestone, not a per-feature check — at least one full pass through the core user journeys happens on a physical device, covering flows that are otherwise Simulator-safe on their own. This is a broader, one-time confirmation that the whole product holds together on real hardware, not a substitute for the per-category passes above.
 
 ## How work happens here
 
