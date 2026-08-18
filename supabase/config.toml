@@ -236,35 +236,24 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Production-ready SMTP server (Resend). Local dev still uses Inbucket
-# regardless (this block only takes effect where the SMTP relay is
-# actually reachable), so this doesn't change local-dev testing.
-[auth.email.smtp]
-enabled = true
-host = "smtp.resend.com"
-port = 587
-user = "resend"
-pass = "env(RESEND_API_KEY)"
-admin_email = "noreply@keepsake.brightbench.app"
-sender_name = "Keepsake"
+# Use a production-ready SMTP server
+# [auth.email.smtp]
+# enabled = true
+# host = "smtp.sendgrid.net"
+# port = 587
+# user = "apikey"
+# pass = "env(SENDGRID_API_KEY)"
+# admin_email = "admin@email.com"
+# sender_name = "Admin"
 
-# Custom magic-link template: shows only the typed code, no ConfirmationURL
-# link — this app's sign-in flow (src/session/SignInScreen.tsx) exclusively
-# uses verifyOtp() with a typed code, never the link, so a link here would
-# just be a dead end (and Supabase's stock default has no {{ .Token }} at
-# all, which is why the code never showed up before this).
-[auth.email.template.magic_link]
-subject = "Your Keepsake sign-in code"
-content_path = "./supabase/templates/magic_link.html"
-
-# Custom confirmation template — this is the one Supabase actually sends
-# for a brand-new email address (signInWithOtp's default
-# shouldCreateUser: true), not magic_link above. Same code-only shape;
-# found only by testing with a genuinely new address after fixing
-# magic_link and seeing this template fire instead.
-[auth.email.template.confirmation]
-subject = "Your Keepsake sign-in code"
-content_path = "./supabase/templates/confirmation.html"
+# Staging's real SMTP/template config lives in [remotes.staging] at the
+# bottom of this file, not here — this root-level config is what `supabase
+# start` uses for local dev, and local dev is meant to keep using Inbucket
+# (see [local_smtp] above), not send through Resend. An earlier version of
+# this fix put the SMTP block here unconditionally, which would have sent
+# every local OTP through the real Resend account instead (or produced no
+# local OTP at all for a developer without RESEND_API_KEY set) — caught by
+# Codex review, PR #74.
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -435,3 +424,43 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Environment-specific overrides for `supabase config push`, applied only
+# when pushing to the matching project_id — never read by `supabase start`,
+# so local dev is unaffected by anything in this section (see the note next
+# to [auth.email.smtp] above). This exists mainly as documentation of what's
+# actually configured on staging (applied directly via the Management API
+# during the 2026-08-18 OTP email fix, docs/history/cross-cutting-otp-email-fix.md) —
+# a future `supabase config push` to staging should reflect this, not the
+# root config's local-dev defaults.
+[remotes.staging]
+project_id = "ntxkayfqdoivpbvqiqeo"
+
+[remotes.staging.auth]
+site_url = "keepsake://"
+
+[remotes.staging.auth.rate_limit]
+email_sent = 30
+
+[remotes.staging.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 587
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "noreply@keepsake.brightbench.app"
+sender_name = "Keepsake"
+
+# Code-only, no ConfirmationURL link — this app's sign-in flow
+# (src/session/SignInScreen.tsx) exclusively uses verifyOtp() with a typed
+# code, never the link, so a link here would just be a dead end.
+[remotes.staging.auth.email.template.magic_link]
+subject = "Your Keepsake sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+# The template Supabase actually sends for a brand-new email address
+# (signInWithOtp's default shouldCreateUser: true), not magic_link above —
+# same code-only shape.
+[remotes.staging.auth.email.template.confirmation]
+subject = "Your Keepsake sign-in code"
+content_path = "./supabase/templates/confirmation.html"

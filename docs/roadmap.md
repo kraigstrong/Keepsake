@@ -12,11 +12,11 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 **What done looks like:** the six required product journeys (website success, manual/offline, shared household, lifecycle, security, credential validation) are confirmed working against current reality, including at least one physical-device pass, with no known data-loss or household-isolation defect remaining. **Exception, stated explicitly so this milestone doesn't quietly depend on milestone 4:** credential validation's compiled-artifact and build-log scan (source-level and generated-native-project scans are separate and already in scope here) is intentionally deferred to Friends & Family Preview's real device build — see that milestone's backlog for why. This milestone's own bar for credential validation is the source/native-project-level scanning already achievable without one.
 
-**Status:** `docs/current.md`'s existing Phase 17 write-up describes a state from before a recent round of testing and fixes — treat it as out of date until refreshed, not as this milestone's real backlog.
+**Status:** ~~`docs/current.md`'s existing Phase 17 write-up describes a state from before a recent round of testing and fixes — treat it as out of date until refreshed, not as this milestone's real backlog.~~ Refresh done, 2026-08-18 — see `docs/current.md`'s Current section for the full per-journey detail. Four of six journeys (2/4/5/6) re-confirmed against current code/CI; two (1, 3) remain genuinely open pending a live joint session, below.
 
 **Backlog:**
-- **Refresh the six-journey status against what's actually true now.** First item, deliberately — everything else in this milestone depends on knowing what's really still open versus already resolved by recent work.
-- *(Remaining items intentionally left blank pending that refresh, rather than carrying forward a stale list.)*
+- ~~Refresh the six-journey status against what's actually true now.~~ **Done, 2026-08-18.**
+- **Live joint session to close Journeys 1 and 3.** Journey 1 (website success) needs the URL-import leg (real Anthropic call, developer watching) plus a fresh walkthrough of grocery generation, Cooking Mode, export, and note-adding — not just because they were never walked live, but because `phase-17-walkthrough-feedback` (PR #63) landed real changes across exactly that ground on 2026-08-17 that have only been test-covered since, never live-confirmed (found during the refresh, via Codex review). Journey 3 (shared household) needs an actual two-actor walkthrough, which pgTAP's single-transaction model can't substitute for.
 
 ---
 
