@@ -1,5 +1,7 @@
 # ADR-NNNN: Title
 
+<!-- Before writing further: does this decision actually meet the ADR bar — a major vendor/technology choice, auth architecture, persistence/data architecture, a security boundary, infrastructure, or a major sync/offline strategy decision — something that would take a real migration, an architectural rewrite, a security redesign, or a substantial product change to reverse six months from now? If not, a commit message or code comment is enough — don't write the ADR. -->
+
 - **Status:** Proposed | Accepted | Superseded by ADR-NNNN | Deprecated
 - **Date:** YYYY-MM-DD
 - **Phase:** N

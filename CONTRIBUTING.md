@@ -14,7 +14,7 @@ This is effectively a household of one developer plus Claude sessions doing the 
 
 ## Decisions
 
-Non-trivial technical or product decisions not already settled by the PRD get a short ADR in `docs/adr/` (see `docs/adr/TEMPLATE.md`). If you're mid-session and something needs the developer's input, use `AskUserQuestion` (Cowork) or pause and state it clearly (CLI) — see `CLAUDE.md` for exactly which categories warrant an interruption vs. proceeding with a reasonable default.
+An ADR in `docs/adr/` (see `docs/adr/TEMPLATE.md`) is warranted only if reversing the decision six months from now would take a real migration, an architectural rewrite, a security redesign, or a substantial product change — major vendor/technology choices, auth architecture, persistence/data architecture, security boundaries, infrastructure, or major sync/offline strategy. Routine, easily-reversible choices (library internals, component structure, endpoint design, minor schema evolution, ordinary tooling picks) just need a clear commit message or a short code comment. If you're mid-session and something needs the developer's input, use `AskUserQuestion` (Cowork) or pause and state it clearly (CLI) — see `CLAUDE.md` for exactly which categories warrant an interruption vs. proceeding with a reasonable default.
 
 ## Skills
 
