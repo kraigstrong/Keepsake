@@ -4,9 +4,26 @@ The single source of truth for "what's actively selected right now." Update this
 
 ## Current
 
-No work item is actively selected as of 2026-08-18 (after shipping T23 below). **Just shipped:** T23 — photo-upload MIME validation (`docs/roadmap.md`'s Security & Privacy Readiness milestone). `server/import/sniffImageType.ts` now checks the real magic-byte signature of a downloaded photo-import object before `import-recipe/index.ts` calls Anthropic, closing the MIME-trust gap Codex found on PR #54 (`docs/threat-model.md`'s T23, `docs/prd-traceability.md`'s SEC-06). Ready for developer review/push — see the PR packet from this session.
+**Actively selected (branch `security/otp-email-template`):** `docs/roadmap.md`'s Friends & Family Preview milestone's "Fix the staging magic-link email" item. Blocked on the developer as of 2026-08-18 — see below.
 
-Next up: `docs/roadmap.md`'s **MVP Validation** milestone — its first backlog item is refreshing the status below against what's actually true now, since a recent round of testing and fixes (per the developer, 2026-08-19) hasn't been folded back into this doc yet. Don't trust the per-journey detail below as current without re-checking it; it's preserved as the refresh work item's starting reference, not as present-tense fact.
+**How this started:** while scoping the MVP Validation refresh (separate branch `docs/mvp-validation-refresh`), the developer mentioned they'd had to manually create a Supabase user because sign-in wasn't working. A live `signInWithOtp` test against staging confirmed the email arrives but is link-only (no typed code), and the link redirects to `http://localhost:3000` — dead on a phone.
+
+**What investigation found (broader than `docs/roadmap.md`'s original framing — see that file's entry, corrected in place):**
+- Neither local `supabase/config.toml` nor staging has ever had a code-based (`{{ .Token }}`) email template — this needed writing from scratch, not syncing an existing fix.
+- Staging's `site_url` is still Supabase's `http://localhost:3000` project-creation default; `mailer_otp_length` is 8 against the UI's assumed 6 (`src/session/SignInScreen.tsx`'s "6-digit code" placeholder, and local config's `otp_length = 6`).
+- **Root blocker:** Supabase rejects *any* email-template customization on the free tier unless a custom SMTP provider is configured. This project has never had one — `ADR-0008` flagged this exact gap back in Phase 3 as "a deferred, credentialed decision to raise with the developer... whenever staging auth is first exercised." That's now.
+
+**Work done this session (uncommitted-to-staging, safe — no writes landed):**
+- Wrote `supabase/templates/magic_link.html` (code-only, no dead link — confirmed via grep that this app's entire sign-in flow uses `verifyOtp` with a typed code, never a clicked link) and wired it into `config.toml`'s `[auth.email.template.magic_link]`.
+- Built the exact scoped Auth-config PATCH (subject, template content, `otp_length: 6`, `site_url: "keepsake://"`) — developer approved, attempt rejected by Supabase with the free-tier/no-SMTP error above. Re-checked staging afterward: confirmed nothing partially applied.
+
+**Blocked on developer, next session:**
+1. Create a Resend account (developer's choice among providers).
+2. Verify `keepsake.brightbench.app` (or similar) as a sending domain — add Resend's DNS records via Vercel (developer controls DNS for `brightbench.app`).
+3. Generate a Resend API key, store via 1Password per this project's usual pattern.
+4. Come back and I'll wire the SMTP config into both `config.toml` and staging, retry the template PATCH, and re-verify with a live OTP send (same test used to diagnose this).
+
+Separately: `docs/roadmap.md`'s **MVP Validation** milestone (branch `docs/mvp-validation-refresh`) has its own refresh in progress — its first backlog item is refreshing the six-journey status against what's actually true now. Don't trust that file's per-journey detail as current without re-checking it on that branch.
 
 **Last known status (as of 2026-08-16, before that testing round):**
 

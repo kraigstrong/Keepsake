@@ -246,6 +246,15 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Custom magic-link template: shows only the typed code, no ConfirmationURL
+# link — this app's sign-in flow (src/session/SignInScreen.tsx) exclusively
+# uses verifyOtp() with a typed code, never the link, so a link here would
+# just be a dead end (and Supabase's stock default has no {{ .Token }} at
+# all, which is why the code never showed up before this).
+[auth.email.template.magic_link]
+subject = "Your Keepsake sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
