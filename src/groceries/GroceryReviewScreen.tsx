@@ -1,12 +1,11 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   GROCERY_CATEGORY_LABELS,
   GROCERY_CATEGORY_ORDER,
 } from '../../server/groceries/categoryDictionary.ts';
-import type { UnitSystem } from '../../server/units/quantityVocabulary.ts';
 import {
   clearGroceryItemSelection,
   fetchGroceryReview,
@@ -20,9 +19,7 @@ import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
-import { fetchProfile } from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
-import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface GroceryReviewScreenProps {
@@ -77,8 +74,17 @@ function GroceryRow({
 export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
-  const { household } = useHousehold();
-  const { session } = useSession();
+  const { household, profile } = useHousehold();
+  // Found via live testing, 2026-08-14: a recipe whose source listed
+  // both units for the same quantity ("800g / 28oz crushed tomato")
+  // only ever kept whichever the source happened to write first, with
+  // no awareness of the household's own preference. Reads straight off
+  // the already-loaded HouseholdProvider profile (Codex review, PR #63)
+  // rather than a second fetchProfile call — that duplicate call raced
+  // this screen's own initial load, so a slow/failed second fetch could
+  // leave the list stuck on source units, or resolve after `load()` and
+  // get clobbered by whichever grocery-review response landed last.
+  const preferredUnitSystem = profile?.preferredUnitSystem ?? null;
 
   const [items, setItems] = useState<GroceryReviewItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -91,25 +97,6 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   // request is still pending removes the race instead of trying to
   // fence out-of-order responses.
   const [pendingHashes, setPendingHashes] = useState<ReadonlySet<string>>(new Set());
-  // Found via live testing, 2026-08-14: a recipe whose source listed
-  // both units for the same quantity ("800g / 28oz crushed tomato")
-  // only ever kept whichever the source happened to write first, with
-  // no awareness of the household's own preference. Same
-  // fetchProfile(userId) -> preferredUnitSystem flow CookingModeScreen/
-  // RecipeDetailScreen already use.
-  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
-
-  useEffect(() => {
-    const userId = session?.user.id;
-    if (!userId) return;
-    let cancelled = false;
-    fetchProfile(userId).then((profile) => {
-      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
 
   const load = useCallback(async () => {
     try {

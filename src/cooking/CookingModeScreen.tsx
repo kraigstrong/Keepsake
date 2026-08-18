@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import { type CookingEvent, formatCookedAt, getCookingHistory } from './api';
 import { DoneCookingSheet } from './DoneCookingSheet';
 import { enqueueCookingEvent } from './outbox';
@@ -15,12 +14,10 @@ import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
-import { fetchProfile } from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useCookingModeAwake } from '../keepAwake/useCookingModeAwake';
 import { logError } from '../observability';
 import { SCALE_PRESETS, scaledIngredientSections } from '../recipes/scaling';
-import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
@@ -76,8 +73,7 @@ function CheckableRow({
 export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   useCookingModeAwake();
   const router = useRouter();
-  const { household } = useHousehold();
-  const { session } = useSession();
+  const { household, profile } = useHousehold();
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
   const {
@@ -109,24 +105,15 @@ export function CookingModeScreen({ recipeId }: CookingModeScreenProps) {
   // same mix scaled up — "2400g tomato, 1lb beef" reads as inconsistent
   // even though each line is individually correct. RecipeDetailScreen's
   // own scaling controls already default to the household's preferred
-  // unit system (fetchProfile); Cooking Mode never fetched it at all, a
-  // silent scope-narrowing flagged as a known gap since Phase 15's own
-  // review. No toggle here (unlike Recipe Detail) — matches Cooking
-  // Mode's single-scrolling-screen minimalism, and the actual complaint
-  // was inconsistency, not wanting a choice.
-  const [preferredUnitSystem, setPreferredUnitSystem] = useState<UnitSystem | null>(null);
-
-  useEffect(() => {
-    const userId = session?.user.id;
-    if (!userId) return;
-    let cancelled = false;
-    fetchProfile(userId).then((profile) => {
-      if (!cancelled && profile) setPreferredUnitSystem(profile.preferredUnitSystem);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
+  // unit system; Cooking Mode never read it at all, a silent scope-
+  // narrowing flagged as a known gap since Phase 15's own review. No
+  // toggle here (unlike Recipe Detail) — matches Cooking Mode's single-
+  // scrolling-screen minimalism, and the actual complaint was
+  // inconsistency, not wanting a choice. Reads straight off the
+  // already-loaded HouseholdProvider profile (Codex review, PR #63)
+  // rather than a second fetchProfile call, which raced this screen's
+  // own recipe load and could leave the display stuck on source units.
+  const preferredUnitSystem = profile?.preferredUnitSystem ?? null;
   // Found via live testing, 2026-08-14: neither the recipe's own
   // permanent notes nor its past cooking history showed anywhere in
   // Cooking Mode, despite being exactly the kind of thing worth

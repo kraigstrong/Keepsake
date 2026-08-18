@@ -9,11 +9,9 @@ import { useCookingSession } from './useCookingSession';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getDatabase } from '../db/database';
-import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
 import { logError } from '../observability';
 import type { Recipe } from '../recipes/api';
-import { useSession } from '../session/SessionProvider';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 jest.mock('./useCookingSession', () => ({ useCookingSession: jest.fn() }));
@@ -27,12 +25,10 @@ jest.mock('./api', () => ({
 jest.mock('./outbox', () => ({ enqueueCookingEvent: jest.fn() }));
 jest.mock('./outboxEngine', () => ({ submitPendingCookingEvents: jest.fn() }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
-jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
 jest.mock('../keepAwake/useCookingModeAwake', () => ({ useCookingModeAwake: jest.fn() }));
 jest.mock('../observability', () => ({ logError: jest.fn() }));
-jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../thisWeek/api', () => ({
   fetchCurrentWeeklyPlan: jest.fn(),
   removeConfirmedEntryFromThisWeek: jest.fn(),
@@ -48,11 +44,9 @@ const mockedUseCookingSession = useCookingSession as jest.Mock;
 const mockedEnqueueCookingEvent = enqueueCookingEvent as jest.Mock;
 const mockedSubmitPendingCookingEvents = submitPendingCookingEvents as jest.Mock;
 const mockedGetDatabase = getDatabase as jest.Mock;
-const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
-const mockedUseSession = useSession as jest.Mock;
 const mockedGetCookingHistory = getCookingHistory as jest.Mock;
 const mockedFetchCurrentWeeklyPlan = fetchCurrentWeeklyPlan as jest.Mock;
 const mockedRemoveConfirmedEntry = removeConfirmedEntryFromThisWeek as jest.Mock;
@@ -128,12 +122,9 @@ beforeEach(() => {
   toggleInstruction = jest.fn();
   resetChecklist = jest.fn();
   mockedUseRouter.mockReturnValue({ back });
-  mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
-  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
-  mockedHouseholdApi.fetchProfile.mockResolvedValue({
-    id: 'user-1',
-    displayName: 'Alice',
-    preferredUnitSystem: 'us_customary',
+  mockedUseHousehold.mockReturnValue({
+    household: { id: 'h1' },
+    profile: { id: 'user-1', displayName: 'Alice', preferredUnitSystem: 'us_customary' },
   });
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedGetDatabase.mockResolvedValue(fakeDb);
@@ -659,13 +650,12 @@ describe('CookingModeScreen', () => {
 
       await renderCookingModeScreen();
 
-      await waitFor(() => expect(mockedHouseholdApi.fetchProfile).toHaveBeenCalledWith('user-1'));
       await waitFor(() => expect(screen.getByText('~1 lb flour')).toBeTruthy());
       expect(screen.queryByText('500 g flour')).toBeNull();
     });
 
-    it('shows the original unit while the preferred-system lookup is still pending', async () => {
-      mockedHouseholdApi.fetchProfile.mockReturnValue(new Promise(() => {})); // never resolves
+    it("shows the original unit when the household's profile isn't loaded yet", async () => {
+      mockedUseHousehold.mockReturnValue({ household: { id: 'h1' }, profile: null });
       mockedUseCookingSession.mockReturnValue({
         recipe: {
           ...recipe,

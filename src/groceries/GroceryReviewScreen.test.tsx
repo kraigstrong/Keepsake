@@ -5,15 +5,11 @@ import type { GroceryReviewItem } from './api';
 import { GroceryReviewScreen } from './GroceryReviewScreen';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
-import * as householdApi from '../household/api';
 import { useHousehold } from '../household/HouseholdProvider';
-import { useSession } from '../session/SessionProvider';
 
 jest.mock('./api');
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
-jest.mock('../household/api');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
-jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 // GroceryExportPanel has its own dedicated test file — stubbed here so
@@ -38,26 +34,17 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-// Awaits the preferred-unit-system profile fetch settling before
-// returning, same reasoning as CookingModeScreen.test.tsx's own render
-// helper — otherwise that effect's state update lands after a test has
-// already finished asserting, leaking "not wrapped in act" noise (and
-// worse, overlapping act() calls) into whichever test runs next.
 async function renderScreen() {
-  const result = await render(
+  return render(
     <ToastProvider>
       <GroceryReviewScreen planId="plan-1" />
     </ToastProvider>,
   );
-  await waitFor(() => expect(mockedHouseholdApi.fetchProfile).toHaveBeenCalled());
-  return result;
 }
 
 const mockedApi = api as jest.Mocked<typeof api>;
-const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
-const mockedUseSession = useSession as jest.Mock;
 
 function item(overrides: Partial<GroceryReviewItem> = {}): GroceryReviewItem {
   return {
@@ -74,17 +61,14 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
-  mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
-  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   // us_customary, not a per-test concern here — every existing fixture
   // amount in this file is either unitless or already US customary
   // (tsp), so this default never changes what any existing assertion
   // sees; the dedicated "preferred unit system" tests below use their
   // own fixtures to actually exercise conversion.
-  mockedHouseholdApi.fetchProfile.mockResolvedValue({
-    id: 'user-1',
-    displayName: 'Alice',
-    preferredUnitSystem: 'us_customary',
+  mockedUseHousehold.mockReturnValue({
+    household: { id: 'household-1' },
+    profile: { id: 'user-1', displayName: 'Alice', preferredUnitSystem: 'us_customary' },
   });
   mockedApi.setGroceryItemSelection.mockResolvedValue(undefined);
   mockedApi.clearGroceryItemSelection.mockResolvedValue(undefined);
