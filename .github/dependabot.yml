@@ -13,6 +13,18 @@ updates:
           - "@expo/*"
           - "react"
           - "react-dom"
+      other-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "expo*"
+          - "react-native*"
+          - "@expo/*"
+          - "react"
+          - "react-dom"
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       # eslint-config-expo and jest-expo pin their own compatible versions
       # of these — bumping major versions independently breaks things (see
