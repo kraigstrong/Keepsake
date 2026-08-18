@@ -1,10 +1,10 @@
 ## Objective
 
-<!-- One or two sentences. What does this PR do, not the whole phase it belongs to. -->
+<!-- One or two sentences. What does this PR do. -->
 
-## Phase
+## Work item
 
-<!-- e.g. Phase 4 — Manual Recipe Vertical Slice -->
+<!-- Link or reference to the docs/roadmap.md entry this addresses, if any. -->
 
 ## PRD requirements touched
 
@@ -26,10 +26,14 @@
 
 <!-- None, or: what changed, forward-only vs. reversible, applied against staging? -->
 
+## Verification
+
+<!-- What independent verification ran (ship-work-item step 2) and what it found, including how each finding was resolved. -->
+
 ## Known limitations / deferred work
 
-<!-- Explicit, not implied. -->
+<!-- Explicit, not implied. Include any follow-up work items discovered. -->
 
-## Exit gate / decision needed
+## Decision needed
 
-<!-- If this PR includes a phase exit-gate sign-off request, or any other decision that needs your answer (not just a rubber-stamp), say so here explicitly so it isn't missed on a quick mobile review. -->
+<!-- If this PR includes a decision that needs your answer (not just a rubber-stamp) — per AGENTS.md's critical decision policy — say so here explicitly so it isn't missed on a quick mobile review. -->
