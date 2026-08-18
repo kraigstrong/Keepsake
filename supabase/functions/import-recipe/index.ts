@@ -51,6 +51,7 @@ import { extractJsonLdHint } from '../../../server/import/extractJsonLdHint.ts';
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
 import { secureFetch, SecureFetchError } from '../../../server/import/secureFetch.ts';
+import { sniffImageType } from '../../../server/import/sniffImageType.ts';
 import { parseQuantity } from '../../../server/units/parseQuantity.ts';
 import { parseServings } from '../../../server/units/parseServings.ts';
 
@@ -396,14 +397,17 @@ Deno.serve(async (req: Request) => {
         );
       }
       const photoBytes = new Uint8Array(await photoBlob.arrayBuffer());
+
+      // Real signature, not the upload's declared contentType (T23,
+      // threat-model.md) — a mismatch fails the job before the Anthropic call.
+      const sniffedMediaType = sniffImageType(photoBytes);
+      if (!sniffedMediaType) {
+        return await fail(422, 'Uploaded file is not a recognized image (jpeg, png, or webp)');
+      }
       const photoBase64 = uint8ArrayToBase64(photoBytes);
 
       try {
-        // uploadOriginalPhoto (src/photoImport/photoImport.ts) always
-        // saves as JPEG — this path is only ever reached via that
-        // client-side upload step, so the media type is known, not
-        // sniffed.
-        extraction = await extractRecipeFromImage(anthropic, photoBase64, 'image/jpeg', {
+        extraction = await extractRecipeFromImage(anthropic, photoBase64, sniffedMediaType, {
           useProductionModels,
         });
       } catch (error) {
