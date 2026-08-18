@@ -6,7 +6,9 @@ The single source of truth for "what's actively selected right now." Update this
 
 **Just shipped:** the staging magic-link/OTP email fix (branch `security/otp-email-template`) — fixed and verified working end-to-end, five compounding bugs found and closed. Full account, including a real operational gotcha worth remembering for any future staging Auth-config change, moved to [`history/cross-cutting-otp-email-fix.md`](history/cross-cutting-otp-email-fix.md) (this file is a pointer, not a log — Codex review on PR #74 caught the previous version growing a multi-paragraph retrospective here instead).
 
-**Actively selected:** `docs/roadmap.md`'s **MVP Validation** milestone, its first backlog item — refreshing the six-journey status against what's actually true now (branch `docs/mvp-validation-refresh`). In progress as of 2026-08-18.
+**Also just shipped:** closed T15, the orphaned original-photo Storage object gap (branch `reliability/orphaned-photo-cleanup`, `docs/roadmap.md`'s Reliability milestone) — picked up as parallel, code-only work while the MVP Validation item below sat blocked on a live session neither Journey 1 nor 3 can substitute for. A client-driven sweep (`src/photoImport/orphanedPhotoSweep.ts`), no new server infrastructure, no service-role key — see `docs/threat-model.md`'s T15 entry for the mechanism. Full local CI clean. Awaiting PR review.
+
+**Actively selected:** `docs/roadmap.md`'s **MVP Validation** milestone, its first backlog item — refreshing the six-journey status against what's actually true now (branch `docs/mvp-validation-refresh`). In progress as of 2026-08-18, blocked on the live session below.
 
 **This session's refresh (autonomous portion — no live device/API involvement, developer explicitly deferred that to a separate joint session):**
 - Full local CI sequence (typecheck, lint, format:check, `npm test`, `check:client-secrets`) run clean: 110/110 suites, 1007 passed / 1 skipped (the live-API-gated test), 0 lint/type/format errors.
@@ -20,7 +22,7 @@ The single source of truth for "what's actively selected right now." Update this
 - **Journey 1 (Website success):** the URL-import leg (real Anthropic call — this project's convention is never to run that unwatched) plus the rest of the flow past "Add to This Week" — grocery generation, export, Cooking Mode, note-adding.
 - **Journey 3 (Shared household):** the two-actor manual walkthrough (A creates → B joins → A imports → B plans → A edits → B hits a conflict) — needs two real sessions/accounts, which pgTAP's single-transaction model can't substitute for.
 
-Next action: schedule that joint live session to close Journeys 1 and 3, then finish this work item by updating this doc's per-journey list and `docs/prd-traceability.md` with the results.
+Next action: push `reliability/orphaned-photo-cleanup` and open its PR (packet below). Separately, schedule the joint live session to close Journeys 1 and 3, then finish the MVP Validation work item by updating this doc's per-journey list and `docs/prd-traceability.md` with the results.
 
 **Per-journey detail (updated 2026-08-18; items 2/4/5/6 re-confirmed this session, items 1/3 partially updated, full closure pending the live session above):**
 
@@ -73,7 +75,7 @@ Older phases (4, 5, 7, 11) also exited Conditional Pass on a generic "no live Si
 
 ## Carried-forward items (tracked so they aren't lost)
 
-Several items previously tracked here now have real backlog entries in `docs/roadmap.md` with fuller scope (1Password CLI in CI, the local SQLite backup verification, Sentry/PostHog telemetry, orphaned photo Storage objects, two-connection concurrency verification) — removed from this list to avoid a second, drifting copy. See that file's Reliability, Security & Privacy Readiness, and Friends & Family Preview milestones. (The staging magic-link email bug, also tracked this way, is now fixed — see the History table's OTP email fix entry.)
+Several items previously tracked here now have real backlog entries in `docs/roadmap.md` with fuller scope (1Password CLI in CI, the local SQLite backup verification, Sentry/PostHog telemetry, orphaned photo Storage objects, two-connection concurrency verification) — removed from this list to avoid a second, drifting copy. See that file's Reliability, Security & Privacy Readiness, and Friends & Family Preview milestones. (The staging magic-link email bug, also tracked this way, is now fixed — see the History table's OTP email fix entry. The orphaned photo Storage gap is now fixed too — see `docs/threat-model.md`'s T15 entry.)
 
 - **`captureFromCamera()` physical-device confirmation** — deliberately deferred by the developer (not forgotten). Low risk: shares its permission/cancel pattern with the already-confirmed `pickExistingPhoto()`.
 - **1Password SSH agent guidance** — not addressed. Low priority for a single-developer project.

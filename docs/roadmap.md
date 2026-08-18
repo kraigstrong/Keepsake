@@ -29,7 +29,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 - Add structured server error logging.
 - Define retry behavior for recipe import failures.
 - Add recovery handling for interrupted image uploads.
-- Close the orphaned original-photo Storage object gap (T15, Phase 10/ADR-0017) — no cleanup mechanism exists yet; Phase 9's 30-day outbox-expiry pattern is a plausible fit. See `docs/current.md` carried-forward items.
+- ~~Close the orphaned original-photo Storage object gap (T15, Phase 10/ADR-0017).~~ **Done, 2026-08-18** (branch `reliability/orphaned-photo-cleanup`) — see `docs/threat-model.md`'s T15 entry.
 - Verify true two-connection concurrency for the invitation-redemption race and import-claim fencing (ADR-0020) — provable by pgTAP for logic, not yet verified under genuine concurrency. See `docs/current.md` carried-forward items.
 
 ---

@@ -49,6 +49,13 @@ export function findOrphanedOriginalPhotos(
  * Storage deletes. Housekeeping only — failures are logged, never
  * surfaced to the user, matching how outbox drain failures are handled.
  */
+// Deliberately checks recipes.original_photo_path only, not
+// import_jobs.photo_path — a photo import is synchronous (ADR-0017
+// decision 4), so a job still sitting in 'processing' 30+ days after
+// upload is already dead in practice (nothing polls it that long); the
+// same "abandoned, not just slow" read the outbox's own expiry already
+// applies. Treating it as still-needed would make the sweep never able
+// to close the exact stuck-job case T15 exists for.
 export async function sweepOrphanedOriginalPhotos(householdId: string): Promise<void> {
   const { data: objects, error: listError } = await supabase.storage
     .from('recipe-images')
