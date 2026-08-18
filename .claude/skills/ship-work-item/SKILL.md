@@ -1,6 +1,6 @@
 ---
 name: "ship-work-item"
-description: "Use once a work item's implementation is done and it's time to verify, review, and package it for the developer — steps 5-8 of the work-item lifecycle (CLAUDE.md): implementation through the human review packet. Do not use mid-implementation; use once the approved scope is actually built."
+description: "Use once a work item's plan has cleared the decision gate and is approved to build — steps 5-8 of the work-item lifecycle (CLAUDE.md): implementation through the human review packet. This skill performs the implementation itself as its first step; don't wait until the code already exists to invoke it."
 ---
 
 Verifying and shipping a Keepsake work item. This produces evidence, not a vibe check — don't call a work item done without checking each step.
@@ -19,10 +19,10 @@ Read the actual diff, the actual tests, and the verification findings yourself �
 
 Confirm `docs/prd-traceability.md` is updated for any requirement ID this work item provides evidence for.
 
-## 4. Human review packet
+## 4. Update current.md
+
+Update `docs/current.md` to reflect the work item's new state (shipped, awaiting review, blocked on X) and the next concrete action — for this work item or the next one selected from `docs/roadmap.md`. If this closes out real ground on a milestone, note it there too, but keep it to what shipped and what's still open — link to the PR and any ADR for the reasoning, don't re-narrate it. Commit this before packaging (step 5) — it needs to be part of the branch `pr-ready` verifies and pushes, not a stray uncommitted change left behind after the packet is already generated.
+
+## 5. Human review packet
 
 Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves.
-
-## 5. Update current.md
-
-Before ending the session: update `docs/current.md` to reflect the work item's new state (shipped, awaiting review, blocked on X) and the next concrete action — for this work item or the next one selected from `docs/roadmap.md`. If this closes out real ground on a milestone, note it there too, but keep it to what shipped and what's still open — link to the PR and any ADR for the reasoning, don't re-narrate it.
