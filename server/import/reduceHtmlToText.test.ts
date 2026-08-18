@@ -36,7 +36,7 @@ const FULL_RECIPE_PAGE = `
 `;
 
 describe('reduceHtmlToText', () => {
-  it('extracts the <main> content, dropping nav/footer/aside (and a <header>\'s nested nav)', () => {
+  it("extracts the <main> content, dropping nav/footer/aside (and a <header>'s nested nav)", () => {
     const text = reduceHtmlToText(FULL_RECIPE_PAGE);
 
     expect(text).toContain('Herb Roast Chicken');
