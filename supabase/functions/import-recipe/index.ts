@@ -398,14 +398,8 @@ Deno.serve(async (req: Request) => {
       }
       const photoBytes = new Uint8Array(await photoBlob.arrayBuffer());
 
-      // T23 (threat-model.md, found by Codex review on PR #54): the
-      // bucket's MIME allowlist only checked the upload's *declared*
-      // contentType, not the actual bytes — a direct Storage API call
-      // could label arbitrary bytes "image/jpeg" and force a wasted
-      // vision-API call on them. Sniffing the real signature here, right
-      // before the Anthropic call, closes that regardless of how the
-      // object got into Storage; a mismatch fails the job cleanly
-      // without spending a vision call on non-image bytes.
+      // Real signature, not the upload's declared contentType (T23,
+      // threat-model.md) — a mismatch fails the job before the Anthropic call.
       const sniffedMediaType = sniffImageType(photoBytes);
       if (!sniffedMediaType) {
         return await fail(422, 'Uploaded file is not a recognized image (jpeg, png, or webp)');

@@ -1,20 +1,9 @@
 /**
- * Photo-import MIME trust gap (threat-model.md T23, found by Codex
- * review on PR #54): `uploadOriginalPhoto` (src/photoImport/photoImport.ts)
- * declares its own `contentType` to Supabase Storage, and the
- * `recipe-images` bucket's MIME allowlist checks that caller-declared
- * header, not the actual bytes — a Supabase Storage platform limitation,
- * not something this app's policy can override. This function closes the
- * gap on the read side instead: `import-recipe/index.ts`'s photo path
- * sniffs the downloaded bytes' real magic-byte signature before handing
- * anything to the vision API, rather than trusting the upload's declared
- * type.
- *
- * Only the three formats the `recipe-images` bucket actually allows
- * (`allowed_mime_types`, recipe_images_storage.sql) are recognized —
- * anything else, including a well-formed image of a different format,
- * returns null and the caller fails the job before spending an Anthropic
- * call on it.
+ * Detects a real image/jpeg|png|webp signature from raw bytes — see
+ * threat-model.md's T23 for why (a caller-declared Content-Type can't be
+ * trusted). Only the three formats the `recipe-images` bucket allows are
+ * recognized; anything else, including a well-formed image of a
+ * different format, returns null.
  */
 export type SniffedImageType = 'image/jpeg' | 'image/png' | 'image/webp';
 
