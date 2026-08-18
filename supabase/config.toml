@@ -236,15 +236,17 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Production-ready SMTP server (Resend). Local dev still uses Inbucket
+# regardless (this block only takes effect where the SMTP relay is
+# actually reachable), so this doesn't change local-dev testing.
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 587
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "noreply@keepsake.brightbench.app"
+sender_name = "Keepsake"
 
 # Custom magic-link template: shows only the typed code, no ConfirmationURL
 # link — this app's sign-in flow (src/session/SignInScreen.tsx) exclusively
@@ -254,6 +256,15 @@ otp_expiry = 3600
 [auth.email.template.magic_link]
 subject = "Your Keepsake sign-in code"
 content_path = "./supabase/templates/magic_link.html"
+
+# Custom confirmation template — this is the one Supabase actually sends
+# for a brand-new email address (signInWithOtp's default
+# shouldCreateUser: true), not magic_link above. Same code-only shape;
+# found only by testing with a genuinely new address after fixing
+# magic_link and seeing this template fire instead.
+[auth.email.template.confirmation]
+subject = "Your Keepsake sign-in code"
+content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

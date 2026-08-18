@@ -4,24 +4,20 @@ The single source of truth for "what's actively selected right now." Update this
 
 ## Current
 
-**Actively selected (branch `security/otp-email-template`):** `docs/roadmap.md`'s Friends & Family Preview milestone's "Fix the staging magic-link email" item. Blocked on the developer as of 2026-08-18 — see below.
+**Just shipped (branch `security/otp-email-template`, 2026-08-18):** `docs/roadmap.md`'s Friends & Family Preview milestone's "Fix the staging magic-link email" item — **fixed and verified working end-to-end.** Ready for developer review/push.
 
-**How this started:** while scoping the MVP Validation refresh (separate branch `docs/mvp-validation-refresh`), the developer mentioned they'd had to manually create a Supabase user because sign-in wasn't working. A live `signInWithOtp` test against staging confirmed the email arrives but is link-only (no typed code), and the link redirects to `http://localhost:3000` — dead on a phone.
+**How this started:** while scoping the MVP Validation refresh (separate branch `docs/mvp-validation-refresh`), the developer mentioned they'd had to manually create a Supabase user because sign-in wasn't working. A live `signInWithOtp` test against staging confirmed the email arrived but was link-only (no typed code), and the link redirected to `http://localhost:3000` — dead on a phone.
 
-**What investigation found (broader than `docs/roadmap.md`'s original framing — see that file's entry, corrected in place):**
-- Neither local `supabase/config.toml` nor staging has ever had a code-based (`{{ .Token }}`) email template — this needed writing from scratch, not syncing an existing fix.
-- Staging's `site_url` is still Supabase's `http://localhost:3000` project-creation default; `mailer_otp_length` is 8 against the UI's assumed 6 (`src/session/SignInScreen.tsx`'s "6-digit code" placeholder, and local config's `otp_length = 6`).
-- **Root blocker:** Supabase rejects *any* email-template customization on the free tier unless a custom SMTP provider is configured. This project has never had one — `ADR-0008` flagged this exact gap back in Phase 3 as "a deferred, credentialed decision to raise with the developer... whenever staging auth is first exercised." That's now.
+**What investigation found (broader than `docs/roadmap.md`'s original framing — see that file's entry, corrected in place). Five distinct, compounding bugs, all now fixed:**
+1. Neither local `supabase/config.toml` nor staging had ever had a code-based (`{{ .Token }}`) **magic-link** email template — needed writing from scratch. Fixed: `supabase/templates/magic_link.html`.
+2. `signInWithOtp` against a genuinely new email address actually sends Supabase's **confirmation** template, not magic-link (magic-link is only for an existing, already-confirmed user's later sign-ins) — found by testing with a truly fresh address after "fixing" magic-link and seeing the old template again. Fixed: `supabase/templates/confirmation.html`, same code-only shape.
+3. Staging's `site_url` was still Supabase's `http://localhost:3000` project-creation default. Fixed → `keepsake://` (this app's own deep-link scheme; nothing in the codebase actually depends on `site_url` since the whole flow is typed-code via `verifyOtp`, confirmed via grep).
+4. `mailer_otp_length` was 8 against the UI's assumed 6 (`src/session/SignInScreen.tsx`'s "6-digit code" placeholder, and local config's `otp_length = 6`). Fixed → 6.
+5. **Root blocker underneath all of the above:** Supabase rejects *any* email-template customization on the free tier unless a custom SMTP provider is configured. This project never had one — `ADR-0008` flagged this exact gap back in Phase 3 as "a deferred, credentialed decision to raise with the developer... whenever staging auth is first exercised." Resolved: developer set up Resend, verified `keepsake.brightbench.app` as a sending domain (Vercel DNS, auto-configured by Resend's Vercel integration), API key in 1Password (`devtools.env`'s `RESEND_API_KEY`). Wired into both `config.toml`'s `[auth.email.smtp]` and staging.
 
-**Work done this session (uncommitted-to-staging, safe — no writes landed):**
-- Wrote `supabase/templates/magic_link.html` (code-only, no dead link — confirmed via grep that this app's entire sign-in flow uses `verifyOtp` with a typed code, never a clicked link) and wired it into `config.toml`'s `[auth.email.template.magic_link]`.
-- Built the exact scoped Auth-config PATCH (subject, template content, `otp_length: 6`, `site_url: "keepsake://"`) — developer approved, attempt rejected by Supabase with the free-tier/no-SMTP error above. Re-checked staging afterward: confirmed nothing partially applied.
+**Operational gotcha worth remembering for any future staging Auth-config change:** after all of the above was correctly saved (confirmed via the Management API's own `GET .../config/auth` — config store had the right values every time), live email sends kept rendering the *old* default templates anyway. Turned out the running Auth (GoTrue) service caches config independently of the config store and doesn't hot-reload — `POST /v1/projects/{ref}/restart` (brief full-project restart, ~1 minute) was required before changes actually took effect. If a future Auth-config PATCH looks like it silently didn't apply despite the API confirming success, try a project restart before assuming the payload was wrong.
 
-**Blocked on developer, next session:**
-1. Create a Resend account (developer's choice among providers).
-2. Verify `keepsake.brightbench.app` (or similar) as a sending domain — add Resend's DNS records via Vercel (developer controls DNS for `brightbench.app`).
-3. Generate a Resend API key, store via 1Password per this project's usual pattern.
-4. Come back and I'll wire the SMTP config into both `config.toml` and staging, retry the template PATCH, and re-verify with a live OTP send (same test used to diagnose this).
+Also raised `rate_limit_email_sent` from Supabase's default 2/hour to 30/hour — the old value would have throttled real onboarding, not just our testing.
 
 Separately: `docs/roadmap.md`'s **MVP Validation** milestone (branch `docs/mvp-validation-refresh`) has its own refresh in progress — its first backlog item is refreshing the six-journey status against what's actually true now. Don't trust that file's per-journey detail as current without re-checking it on that branch.
 
