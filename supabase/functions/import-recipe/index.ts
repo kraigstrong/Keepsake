@@ -51,6 +51,7 @@ import { extractJsonLdHint } from '../../../server/import/extractJsonLdHint.ts';
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
 import { secureFetch, SecureFetchError } from '../../../server/import/secureFetch.ts';
+import { sniffImageType } from '../../../server/import/sniffImageType.ts';
 import { parseQuantity } from '../../../server/units/parseQuantity.ts';
 import { parseServings } from '../../../server/units/parseServings.ts';
 
@@ -396,14 +397,23 @@ Deno.serve(async (req: Request) => {
         );
       }
       const photoBytes = new Uint8Array(await photoBlob.arrayBuffer());
+
+      // T23 (threat-model.md, found by Codex review on PR #54): the
+      // bucket's MIME allowlist only checked the upload's *declared*
+      // contentType, not the actual bytes — a direct Storage API call
+      // could label arbitrary bytes "image/jpeg" and force a wasted
+      // vision-API call on them. Sniffing the real signature here, right
+      // before the Anthropic call, closes that regardless of how the
+      // object got into Storage; a mismatch fails the job cleanly
+      // without spending a vision call on non-image bytes.
+      const sniffedMediaType = sniffImageType(photoBytes);
+      if (!sniffedMediaType) {
+        return await fail(422, 'Uploaded file is not a recognized image (jpeg, png, or webp)');
+      }
       const photoBase64 = uint8ArrayToBase64(photoBytes);
 
       try {
-        // uploadOriginalPhoto (src/photoImport/photoImport.ts) always
-        // saves as JPEG — this path is only ever reached via that
-        // client-side upload step, so the media type is known, not
-        // sniffed.
-        extraction = await extractRecipeFromImage(anthropic, photoBase64, 'image/jpeg', {
+        extraction = await extractRecipeFromImage(anthropic, photoBase64, sniffedMediaType, {
           useProductionModels,
         });
       } catch (error) {
