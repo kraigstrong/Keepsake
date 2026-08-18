@@ -10,7 +10,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ## 1. MVP Validation
 
-**What done looks like:** the six required product journeys (website success, manual/offline, shared household, lifecycle, security, credential validation) are confirmed working against current reality, including at least one physical-device pass, with no known data-loss or household-isolation defect remaining.
+**What done looks like:** the six required product journeys (website success, manual/offline, shared household, lifecycle, security, credential validation) are confirmed working against current reality, including at least one physical-device pass, with no known data-loss or household-isolation defect remaining. **Exception, stated explicitly so this milestone doesn't quietly depend on milestone 4:** credential validation's compiled-artifact and build-log scan (source-level and generated-native-project scans are separate and already in scope here) is intentionally deferred to Friends & Family Preview's real device build — see that milestone's backlog for why. This milestone's own bar for credential validation is the source/native-project-level scanning already achievable without one.
 
 **Status:** `docs/current.md`'s existing Phase 17 write-up describes a state from before a recent round of testing and fixes — treat it as out of date until refreshed, not as this milestone's real backlog.
 
@@ -56,7 +56,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 **Backlog:**
 - **Telemetry push — gate, not a normal item.** This has to land before any invite goes out, not sometime during the preview. PostHog's event-allowlist abstraction (ADR-0006) already exists in code but is a no-op today — no real `EXPO_PUBLIC_POSTHOG_KEY` has ever been wired in. Scope: wire the real key, decide and expand the actual event set (what features get used, how often — not just the existing minimal allowlist), and confirm Sentry crash reporting (this milestone's dependency on Reliability's crash-reporting item) is live against a real DSN, not just scaffolded.
 - **Fix the staging magic-link email template.** Real blocker for an actual new user signing up, not a dev-convenience gap — `signInWithOtp` currently sends Supabase's default template, which only renders a clickable link, not the `{{ .Token }}` code `verifyOtp` expects the user to type. See `docs/current.md` carried-forward items.
-- Real EAS/Xcode build plus a scan of the compiled artifact and build logs — the credential-validation journey's remaining half, currently blocked on a build this environment can't produce.
+- Real EAS/Xcode build plus a scan of the compiled artifact and build logs — closes the credential-validation journey's remaining half, deliberately scoped here rather than MVP Validation (see that milestone's exception note) since a beta build has to happen for this milestone anyway; scanning it here means one build serving both purposes instead of producing a throwaway one just to close milestone 1 early.
 - Beta progression: internal household → trusted households → wider invite-only.
 
 ---
