@@ -241,6 +241,53 @@ describe('parseQuantity — fixture corpus', () => {
       unit: null,
       ingredientText: '(15 oz) cans black beans',
     },
+
+    // Alternate-unit annotation (found via live testing, 2026-08-14):
+    // stripped rather than parsed, so it can't go stale after scaling
+    // ("3 lb / 500g beef" after 3x would be visibly wrong — see
+    // stripAlternateUnit's own comment for the developer decision).
+    {
+      line: '1 lb / 500g beef',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'lb',
+      ingredientText: 'beef',
+    },
+    {
+      line: '800g, 28oz can crushed tomato',
+      quantityMin: 800,
+      quantityMax: 800,
+      unit: 'g',
+      ingredientText: 'crushed tomato',
+    },
+    {
+      line: '2 cups / 475ml milk',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: 'cup',
+      ingredientText: 'milk',
+    },
+
+    // Same alternate-unit annotation, parenthesized instead of slash/
+    // comma-separated (found via live testing, 2026-08-14 — this exact
+    // phrasing was also why "all-purpose flour" wasn't folding into
+    // "flour": the parenthetical sat in front of "all-purpose",
+    // blocking canonicalKey's DEFAULT_VARIETY_PREFIXES check before it
+    // ever got a chance to match).
+    {
+      line: '2 1/4 cups (290 g) all-purpose flour',
+      quantityMin: 2.25,
+      quantityMax: 2.25,
+      unit: 'cup',
+      ingredientText: 'all-purpose flour',
+    },
+    {
+      line: '1 lb (450 g) butter',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'lb',
+      ingredientText: 'butter',
+    },
   ];
 
   it.each(cases)('parses "$line"', ({ line, quantityMin, quantityMax, unit, ingredientText }) => {
@@ -280,5 +327,28 @@ describe('parseQuantity — fixture corpus', () => {
     expect(result.quantityMin).toBe(350);
     expect(result.unit).toBeNull();
     expect(result.ingredientText).toBe('F oven-safe dish');
+  });
+
+  describe('alternate-unit stripping never touches a real prep clause', () => {
+    // The strip only fires when ingredientText itself starts with the
+    // separator (no ingredient name in between) — a genuine comma
+    // clause always has a name first, so these are structurally
+    // never at risk, but asserted explicitly since it's the one thing
+    // this addition must never do.
+    it.each([
+      ['2 lb baby potatoes, halved', 'baby potatoes, halved'],
+      ['2 cups flour, divided', 'flour, divided'],
+      ['1 cup olive oil, extra virgin', 'olive oil, extra virgin'],
+      ['3 large eggs, at room temperature', 'large eggs, at room temperature'],
+    ])('"%s" keeps its full ingredient text', (line, expected) => {
+      expect(parseQuantity(line).ingredientText).toBe(expected);
+    });
+
+    it('a comma immediately after the unit with no following number is left alone', () => {
+      // Unusual phrasing, but exercises the exact boundary the strip
+      // checks: separator present, no number after it.
+      const result = parseQuantity('2 cups, well chilled flour');
+      expect(result.ingredientText).toBe(', well chilled flour');
+    });
   });
 });

@@ -74,7 +74,17 @@ function GroceryRow({
 export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
-  const { household } = useHousehold();
+  const { household, profile } = useHousehold();
+  // Found via live testing, 2026-08-14: a recipe whose source listed
+  // both units for the same quantity ("800g / 28oz crushed tomato")
+  // only ever kept whichever the source happened to write first, with
+  // no awareness of the household's own preference. Reads straight off
+  // the already-loaded HouseholdProvider profile (Codex review, PR #63)
+  // rather than a second fetchProfile call — that duplicate call raced
+  // this screen's own initial load, so a slow/failed second fetch could
+  // leave the list stuck on source units, or resolve after `load()` and
+  // get clobbered by whichever grocery-review response landed last.
+  const preferredUnitSystem = profile?.preferredUnitSystem ?? null;
 
   const [items, setItems] = useState<GroceryReviewItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -90,7 +100,7 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      const review = await fetchGroceryReview(planId);
+      const review = await fetchGroceryReview(planId, preferredUnitSystem);
       setItems(review.items);
       setLoadError(false);
       setNotConfirmed(false);
@@ -101,7 +111,7 @@ export function GroceryReviewScreen({ planId }: GroceryReviewScreenProps) {
         setLoadError(true);
       }
     }
-  }, [planId]);
+  }, [planId, preferredUnitSystem]);
 
   // isOnline is a real dependency, not just an exhaustive-deps
   // formality — see ThisWeekScreen.tsx's identical comment: it's what

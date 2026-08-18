@@ -169,6 +169,66 @@ describe('generateGroceryList', () => {
     });
   });
 
+  // Found via live testing, 2026-08-14: a recipe listing both units for
+  // the same quantity ("800g / 28oz crushed tomato") only ever kept
+  // whichever one parseQuantity.ts's stripAlternateUnit happened to see
+  // first — the grocery list showed that unit even when it didn't match
+  // the household's own preference. generateGroceryList() now applies
+  // the same convertToSystem() display-time conversion Cooking Mode
+  // already uses, before grouping.
+  describe('preferred unit system', () => {
+    it('converts every occurrence to the household preferred unit system before summing', () => {
+      const items = generateGroceryList(
+        [
+          entry('r1', 1, [
+            line({
+              lineText: '907.184 g tomato',
+              quantityMin: 907.184,
+              unit: 'g',
+              ingredientText: 'tomato',
+            }),
+          ]),
+        ],
+        'us_customary',
+      );
+
+      expect(findItem(items, 'tomato')!.amounts).toEqual(['2 lb tomato']);
+    });
+
+    it('leaves a quantity already in the preferred system untouched', () => {
+      const items = generateGroceryList(
+        [
+          entry('r1', 1, [
+            line({
+              lineText: '1 lb beef',
+              quantityMin: 1,
+              unit: 'lb',
+              ingredientText: 'beef',
+            }),
+          ]),
+        ],
+        'us_customary',
+      );
+
+      expect(findItem(items, 'beef')!.amounts).toEqual(['1 lb beef']);
+    });
+
+    it('defaults to no conversion when the caller passes no preference', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '907.184 g tomato',
+            quantityMin: 907.184,
+            unit: 'g',
+            ingredientText: 'tomato',
+          }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'tomato')!.amounts).toEqual(['~905 g tomato']);
+    });
+  });
+
   describe('display text', () => {
     it('drops a preparation clause after the comma from the displayed amount', () => {
       const items = generateGroceryList([
@@ -202,6 +262,80 @@ describe('generateGroceryList', () => {
 
       const flour = findItem(items, 'flour');
       expect(flour!.amounts).toEqual(['2 cups flour']);
+    });
+
+    // Found via live testing, 2026-08-14: canonicalKey() already merged
+    // "softened butter" with "butter" (LEADING_PREP_MODIFIERS), but the
+    // merged item still displayed whichever occurrence's raw text
+    // happened to be first — "1/3 cup softened butter, less than 115
+    // degrees" instead of "1/3 cup butter". generateGroceryList.ts's own
+    // groceryDisplayText() now strips the same list, not just the merge
+    // key.
+    it('strips a leading prep-state word from the displayed amount, same list as the merge key', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '1/3 cup softened butter, less than 115 degrees',
+            quantityMin: 1 / 3,
+            unit: 'cup',
+            ingredientText: 'softened butter, less than 115 degrees',
+          }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'butter')!.amounts).toEqual(['1/3 cup butter']);
+    });
+
+    it('merges "softened butter" and "butter" into one line, not two', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '1/3 cup softened butter',
+            quantityMin: 1 / 3,
+            unit: 'cup',
+            ingredientText: 'softened butter',
+          }),
+        ]),
+        entry('r2', 1, [
+          line({
+            lineText: '2 tbsp butter',
+            quantityMin: 2,
+            unit: 'tbsp',
+            ingredientText: 'butter',
+          }),
+        ]),
+      ]);
+
+      const butter = findItem(items, 'butter');
+      expect(butter!.amounts).toHaveLength(1);
+    });
+
+    // Found via live testing, 2026-08-14: "4 tbsp all purpose flour" and
+    // "3 cups flour" showed as two separate line items — canonicalKey()
+    // now folds "all purpose flour" to "flour" (DEFAULT_VARIETY_PREFIXES),
+    // and since tbsp/cup share the volume unit class, they're not just
+    // the same item, they sum into one amount.
+    it('merges and sums "all purpose flour" with "flour" across compatible units', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({ lineText: '3 cups flour', quantityMin: 3, unit: 'cup', ingredientText: 'flour' }),
+        ]),
+        entry('r2', 1, [
+          line({
+            lineText: '4 tbsp all purpose flour',
+            quantityMin: 4,
+            unit: 'tbsp',
+            ingredientText: 'all purpose flour',
+          }),
+        ]),
+      ]);
+
+      const flour = findItem(items, 'flour');
+      expect(flour!.amounts).toHaveLength(1);
+      // 3 cups + 4 tbsp (1/4 cup), summed in cups (the first occurrence's
+      // unit) = 3 1/4 cups — "~" marks a cross-unit conversion, same as
+      // the existing volume-merge test above.
+      expect(flour!.amounts[0]).toBe('~3 1/4 cups flour');
     });
   });
 

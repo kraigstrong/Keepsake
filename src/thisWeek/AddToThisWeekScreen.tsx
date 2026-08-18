@@ -13,7 +13,6 @@ import { useToast } from '../components/Toast';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipesToThisWeek } from './api';
 
-const MIN_SERVINGS = 1;
 // ADR-0018: presets are screen-local and reset every visit, same as
 // RecipeDetailScreen's own scaling controls.
 const DEFAULT_MULTIPLIER = 1;
@@ -34,12 +33,14 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // ADR-0026 decision 3: a recipe with a known servingsCount keeps the
-  // servings-based stepper (servingsById, converted to a multiplier at
-  // submit); a recipe with none (e.g. "makes 24 cookies" — no servings
-  // concept to step through, ADR-0018) uses the same preset chips
-  // RecipeDetailScreen's own scaling controls already offer instead.
-  const [servingsById, setServingsById] = useState<Record<string, number>>({});
+  // ADR-0026 amendment (developer decision, 2026-08-14): every recipe
+  // gets the same scale-multiplier chips here, regardless of whether
+  // recipe.servingsCount is known — a servings-based stepper existed
+  // for that case (decision 3) but its per-recipe row didn't fit
+  // compactly next to a long title, and the two different control
+  // types read as inconsistent across a mixed selection. servingsCount
+  // is still shown on Recipe Detail; it just no longer picks the
+  // control type on this screen.
   const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -64,38 +65,16 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   }
 
   function goToServingsStep() {
-    setServingsById((prev) => {
-      const next = { ...prev };
-      for (const id of selectedIds) {
-        if (next[id] === undefined) {
-          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
-          if (recipe?.servingsCount != null) {
-            next[id] = recipe.servingsCount;
-          }
-        }
-      }
-      return next;
-    });
     setMultiplierById((prev) => {
       const next = { ...prev };
       for (const id of selectedIds) {
         if (next[id] === undefined) {
-          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
-          if (recipe?.servingsCount == null) {
-            next[id] = DEFAULT_MULTIPLIER;
-          }
+          next[id] = DEFAULT_MULTIPLIER;
         }
       }
       return next;
     });
     setStep('servings');
-  }
-
-  function adjustServings(id: string, servingsCount: number, delta: number) {
-    setServingsById((prev) => ({
-      ...prev,
-      [id]: Math.max(MIN_SERVINGS, (prev[id] ?? servingsCount) + delta),
-    }));
   }
 
   // One batch RPC call, not a client-side loop (Codex review, PR #36):
@@ -109,14 +88,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     try {
       await addRecipesToThisWeek(
         planId,
-        selectedIds.map((id) => {
-          const recipe = (recipes ?? []).find((candidate) => candidate.id === id);
-          if (recipe?.servingsCount != null) {
-            const servings = servingsById[id] ?? recipe.servingsCount;
-            return { recipeId: id, multiplier: servings / recipe.servingsCount };
-          }
-          return { recipeId: id, multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER };
-        }),
+        selectedIds.map((id) => ({
+          recipeId: id,
+          multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER,
+        })),
       );
       showToast(
         selectedIds.length === 1
@@ -213,67 +188,32 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
       ) : (
         <>
           <ScrollView style={styles.list}>
-            {selectedRecipes.map((recipe) =>
-              recipe.servingsCount != null ? (
-                <View
-                  key={recipe.id}
-                  style={styles.row}
-                  testID={`add-to-this-week-servings-${recipe.id}`}
-                >
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {recipe.title}
-                  </Text>
-                  <View style={styles.servingsStepper}>
-                    <Pressable
-                      onPress={() => adjustServings(recipe.id, recipe.servingsCount!, -1)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Fewer servings for ${recipe.title}`}
-                      hitSlop={8}
-                      testID={`add-to-this-week-servings-decrement-${recipe.id}`}
-                    >
-                      <Text style={styles.servingsButton}>{'−'}</Text>
-                    </Pressable>
-                    <Text style={styles.servingsLabel}>
-                      {servingsById[recipe.id] ?? recipe.servingsCount}
-                    </Text>
-                    <Pressable
-                      onPress={() => adjustServings(recipe.id, recipe.servingsCount!, 1)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`More servings for ${recipe.title}`}
-                      hitSlop={8}
-                      testID={`add-to-this-week-servings-increment-${recipe.id}`}
-                    >
-                      <Text style={styles.servingsButton}>{'+'}</Text>
-                    </Pressable>
-                  </View>
+            {selectedRecipes.map((recipe) => (
+              <View
+                key={recipe.id}
+                style={styles.chipsRow}
+                testID={`add-to-this-week-servings-${recipe.id}`}
+              >
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {recipe.title}
+                </Text>
+                <View style={styles.chipGroup}>
+                  {SCALE_PRESETS.map((preset) => (
+                    <Chip
+                      key={preset.label}
+                      label={preset.label}
+                      selected={
+                        (multiplierById[recipe.id] ?? DEFAULT_MULTIPLIER) === preset.multiplier
+                      }
+                      onPress={() =>
+                        setMultiplierById((prev) => ({ ...prev, [recipe.id]: preset.multiplier }))
+                      }
+                      testID={`add-to-this-week-scale-preset-${recipe.id}-${preset.multiplier}`}
+                    />
+                  ))}
                 </View>
-              ) : (
-                <View
-                  key={recipe.id}
-                  style={[styles.row, styles.chipsRow]}
-                  testID={`add-to-this-week-servings-${recipe.id}`}
-                >
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {recipe.title}
-                  </Text>
-                  <View style={styles.chipGroup}>
-                    {SCALE_PRESETS.map((preset) => (
-                      <Chip
-                        key={preset.label}
-                        label={preset.label}
-                        selected={
-                          (multiplierById[recipe.id] ?? DEFAULT_MULTIPLIER) === preset.multiplier
-                        }
-                        onPress={() =>
-                          setMultiplierById((prev) => ({ ...prev, [recipe.id]: preset.multiplier }))
-                        }
-                        testID={`add-to-this-week-scale-preset-${recipe.id}-${preset.multiplier}`}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ),
-            )}
+              </View>
+            ))}
           </ScrollView>
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
@@ -364,29 +304,17 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     flex: 1,
   },
-  servingsStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   chipsRow: {
-    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   chipGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
-  },
-  servingsButton: {
-    ...typography.heading,
-    color: colors.accent,
-    paddingHorizontal: spacing.xs,
-  },
-  servingsLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    minWidth: 18,
-    textAlign: 'center',
   },
   footer: {
     padding: spacing.lg,

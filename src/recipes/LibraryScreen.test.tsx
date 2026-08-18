@@ -10,6 +10,7 @@ import { LibraryScreen } from './LibraryScreen';
 import type { LibraryRecipe } from '../sync/offlineRecipes';
 import { useAddSheet } from '../components/AddSheetContext';
 import { useHousehold } from '../household/HouseholdProvider';
+import { useImportActivity } from '../import/ImportActivityContext';
 import { searchRecipes } from '../search/search';
 import { readLocalCategories, readLocalLibraryRecipes } from '../sync/offlineRecipes';
 import { syncHousehold } from '../sync/syncEngine';
@@ -19,6 +20,7 @@ jest.mock('../sync/syncEngine');
 jest.mock('../search/search');
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../components/AddSheetContext', () => ({ useAddSheet: jest.fn() }));
+jest.mock('../import/ImportActivityContext', () => ({ useImportActivity: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
   // useFocusEffect normally only re-runs on navigation focus events —
@@ -57,6 +59,7 @@ const mockedUseHousehold = useHousehold as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
 const mockedUseFocusEffect = useFocusEffect as jest.Mock;
 const mockedUseAddSheet = useAddSheet as jest.Mock;
+const mockedUseImportActivity = useImportActivity as jest.Mock;
 
 const push = jest.fn();
 const openAddSheet = jest.fn();
@@ -68,6 +71,7 @@ beforeEach(() => {
   mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
   mockedSyncHousehold.mockResolvedValue(undefined);
   mockedUseAddSheet.mockReturnValue({ open: openAddSheet, close: jest.fn(), isVisible: false });
+  mockedUseImportActivity.mockReturnValue({ version: 0, notifyImportCompleted: jest.fn() });
   mockedReadLocalCategories.mockResolvedValue([]);
   mockedSearchRecipes.mockResolvedValue([]);
 });

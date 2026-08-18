@@ -12,6 +12,7 @@ import { ToastProvider, useToast } from '../src/components/Toast';
 import { submitPendingCookingEvents } from '../src/cooking/outboxEngine';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
 import { HouseholdProvider, useHousehold } from '../src/household/HouseholdProvider';
+import { ImportActivityProvider, useImportActivity } from '../src/import/ImportActivityContext';
 import {
   drainAppGroupQueueIntoOutbox,
   submitPendingOutboxItems,
@@ -36,15 +37,17 @@ export default function RootLayout() {
           needs to flip this per-screen. */}
       <StatusBar style="dark" />
       <ToastProvider>
-        <SafeAreaProvider>
-          <DeepLinkProvider>
-            <SessionProvider>
-              <HouseholdProvider>
-                <ConnectivityAwareApp />
-              </HouseholdProvider>
-            </SessionProvider>
-          </DeepLinkProvider>
-        </SafeAreaProvider>
+        <ImportActivityProvider>
+          <SafeAreaProvider>
+            <DeepLinkProvider>
+              <SessionProvider>
+                <HouseholdProvider>
+                  <ConnectivityAwareApp />
+                </HouseholdProvider>
+              </SessionProvider>
+            </DeepLinkProvider>
+          </SafeAreaProvider>
+        </ImportActivityProvider>
       </ToastProvider>
     </GestureHandlerRootView>
   );
@@ -59,6 +62,7 @@ function ConnectivityAwareApp() {
   const { household } = useHousehold();
   const householdId = household?.id ?? null;
   const { showToast } = useToast();
+  const { notifyImportCompleted } = useImportActivity();
 
   // ADR-0020 (Codex review, PR #33): always-fresh ref, not state — an
   // in-flight outbox drain reads this mid-loop to notice an account
@@ -77,7 +81,12 @@ function ConnectivityAwareApp() {
     <ConnectivityProvider
       onReconnect={() => {
         triggerHouseholdSync(householdId);
-        triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
+        triggerImportOutboxWork(
+          householdId,
+          getCurrentHouseholdId,
+          showToast,
+          notifyImportCompleted,
+        );
         triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
       }}
     >
@@ -86,6 +95,7 @@ function ConnectivityAwareApp() {
         householdId={householdId}
         getCurrentHouseholdId={getCurrentHouseholdId}
         showToast={showToast}
+        notifyImportCompleted={notifyImportCompleted}
       />
       <CookingEventOutboxLifecycle
         householdId={householdId}
@@ -166,16 +176,29 @@ function HouseholdSyncOnMount({ householdId }: { householdId: string | null }) {
 // toast is the only signal the user gets that "the thing I shared"
 // resolved to anything at all; without it, a successful import is
 // indistinguishable from one that silently vanished.
+//
+// notifyImportCompleted (found via live testing, 2026-08-14): the same
+// "runs in the background, no screen of its own" problem means a
+// screen already sitting focused (e.g. Library) when this resolves has
+// no navigation event to trigger its own refresh either — the toast
+// fires, but the new recipe stays missing until navigating away and
+// back. Bumping this on any non-empty outcome gives an already-focused
+// screen something to react to instead of relying on a future focus
+// event that may never come.
 function triggerImportOutboxWork(
   householdId: string | null,
   getCurrentHouseholdId: () => string | null,
   showToast: (message: string) => void,
+  notifyImportCompleted: () => void,
 ): void {
   drainAppGroupQueueIntoOutbox(householdId)
     .then(() => (householdId ? submitPendingOutboxItems(householdId, getCurrentHouseholdId) : []))
     .then((outcomes) => {
       const message = summarizeOutboxOutcomes(outcomes);
-      if (message) showToast(message);
+      if (message) {
+        showToast(message);
+        notifyImportCompleted();
+      }
     })
     .catch((error) => logError(error, { context: 'importOutbox' }));
 }
@@ -192,22 +215,29 @@ function ImportOutboxLifecycle({
   householdId,
   getCurrentHouseholdId,
   showToast,
+  notifyImportCompleted,
 }: {
   householdId: string | null;
   getCurrentHouseholdId: () => string | null;
   showToast: (message: string) => void;
+  notifyImportCompleted: () => void;
 }) {
   useEffect(() => {
-    triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
+    triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast, notifyImportCompleted);
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        triggerImportOutboxWork(householdId, getCurrentHouseholdId, showToast);
+        triggerImportOutboxWork(
+          householdId,
+          getCurrentHouseholdId,
+          showToast,
+          notifyImportCompleted,
+        );
       }
     });
 
     return () => subscription.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast/getCurrentHouseholdId are stable identities across renders; only householdId should re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast/getCurrentHouseholdId/notifyImportCompleted are stable identities across renders; only householdId should re-trigger this.
   }, [householdId]);
   return null;
 }
