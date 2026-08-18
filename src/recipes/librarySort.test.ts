@@ -165,10 +165,33 @@ describe('sortRecipes: smart', () => {
     ]);
   });
 
-  it('treats a recipe created exactly 2 weeks ago as still within the window', () => {
-    const recipes = [recipe({ id: 'edge', createdAt: '2026-08-01T00:00:00.000Z' })];
-    // Should not throw or misclassify at the boundary — inclusive.
-    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['edge']);
+  it('excludes a recipe created exactly 2 weeks ago from Recently Added (LIB-01 is <2wk, exclusive)', () => {
+    const recipes = [
+      recipe({ id: 'edge', title: 'Edge', createdAt: '2026-08-01T00:00:00.000Z' }),
+      recipe({
+        id: 'planned',
+        title: 'Planned',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 1,
+      }),
+    ];
+    // Exactly 2 weeks old is not "<2wk" — falls to a later tier, so a
+    // planned-but-older recipe now outranks it (same tiering smartSort
+    // already does for anything else past the cutoff).
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['planned', 'edge']);
+  });
+
+  it('includes a recipe created one millisecond within the 2-week window', () => {
+    const recipes = [
+      recipe({ id: 'just-in', title: 'Just In', createdAt: '2026-08-01T00:00:00.001Z' }),
+      recipe({
+        id: 'planned',
+        title: 'Planned',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        plannedCount: 1,
+      }),
+    ];
+    expect(sortRecipes(recipes, 'smart', NOW).map((r) => r.id)).toEqual(['just-in', 'planned']);
   });
 
   it('does not mutate the input array', () => {

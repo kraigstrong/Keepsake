@@ -53,7 +53,7 @@ function smartSort(recipes: LibraryRecipe[], now: Date): LibraryRecipe[] {
   const remaining: LibraryRecipe[] = [];
 
   for (const recipe of recipes) {
-    if (new Date(recipe.createdAt).getTime() >= cutoff) {
+    if (new Date(recipe.createdAt).getTime() > cutoff) {
       recentlyAdded.push(recipe);
     } else if (recipe.plannedCount > 0) {
       frequentlySelected.push(recipe);
