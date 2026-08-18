@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+  <body
+    style="
+      margin: 0;
+      padding: 32px 16px;
+      background-color: #f7f3ee;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      color: #2b2724;
+    "
+  >
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table
+            role="presentation"
+            width="100%"
+            style="max-width: 420px"
+            cellpadding="0"
+            cellspacing="0"
+          >
+            <tr>
+              <td style="padding-bottom: 24px; font-size: 20px; font-weight: 600">Keepsake</td>
+            </tr>
+            <tr>
+              <td style="padding-bottom: 16px; font-size: 16px; line-height: 1.5">
+                Enter this code in Keepsake to finish signing up:
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding: 24px 0">
+                <span
+                  style="
+                    display: inline-block;
+                    font-size: 32px;
+                    font-weight: 700;
+                    letter-spacing: 8px;
+                    color: #b5502e;
+                  "
+                >
+                  {{ .Token }}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top: 16px; font-size: 14px; line-height: 1.5; color: #6b645c">
+                This code expires in 1 hour. If you didn't request it, you can ignore this email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
