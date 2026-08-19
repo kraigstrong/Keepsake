@@ -6,7 +6,7 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 
 - [ ] CI is green on the commit being released: typecheck, lint, format, unit tests, migration apply/reset, RLS/pgTAP tests, secret scan, dependency scan (all jobs in `.github/workflows/ci.yml`).
 - [ ] No `Not Started` PRD requirement is claimed as shipped — check `docs/prd-traceability.md` for the requirements this release is supposed to include.
-- [ ] `docs/current.md` reflects reality — no phase marked done that isn't.
+- [ ] `docs/current.md` reflects reality — the active work item's state matches what's actually shipped.
 - [ ] Dependency scan has no unresolved high/critical findings in runtime dependencies (`npm audit --omit=dev --audit-level=high`); any accepted moderate findings, and any high/critical findings scoped out via `--omit=dev` (build-tooling-only), are documented in `.github/workflows/ci.yml`, not silently ignored.
 - [ ] No secret, credential, or production config value appears anywhere in the diff being released (belt-and-suspenders on top of the CI gitleaks job).
 
@@ -37,5 +37,5 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 ## Post-release
 
 - [ ] Tag the release in Git.
-- [ ] Update `docs/current.md`'s History table and the phase's `docs/history/*.md` entry.
+- [ ] Update the phase's `docs/history/*.md` entry (and `docs/current.md` if this release changes the active work item's state).
 - [ ] Smoke-check production immediately after rollout (execution-plan.md §3.5-adjacent operational validation) — don't assume a green CI run before deploy means the deployed build is healthy.

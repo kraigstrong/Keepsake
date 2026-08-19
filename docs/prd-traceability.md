@@ -148,7 +148,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | NOTE-03 | Newest note preview near top | 15 | Done (tested)Δ |
 | NOTE-04 | Permanent recipe notes remain a separate concept | 4 / 15 | Done (tested)Δ |
 
-Δ Jest coverage only (`src/cooking/*.test.ts(x)`, `src/recipes/RecipeDetailScreen.test.tsx`'s cooking-history cases) — no pgTAP for `cooking_events`' RPCs run locally (no Docker in this environment; `supabase/tests/database/cooking_event_rpcs.test.sql` is CI-only, same convention as every phase since 12). ADR-0003 requires a **physical device** for this phase's own exit gate (screen-awake/real-kitchen-use class, same reasoning as Phase 15's keep-awake risk spike) — not yet performed; see `docs/current.md`.
+Δ Jest coverage only (`src/cooking/*.test.ts(x)`, `src/recipes/RecipeDetailScreen.test.tsx`'s cooking-history cases) — no pgTAP for `cooking_events`' RPCs run locally (no Docker in this environment; `supabase/tests/database/cooking_event_rpcs.test.sql` is CI-only, same convention as every phase since 12). ADR-0003 requires a **physical device** for this phase's own exit gate (screen-awake/real-kitchen-use class, same reasoning as Phase 15's keep-awake risk spike) — not yet performed; see `docs/history/phase-15-cooking-mode.md`'s Conditional Pass follow-ups.
 
 ## Grocery Export (GRO)
 

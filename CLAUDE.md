@@ -4,7 +4,7 @@ See [`AGENTS.md`](AGENTS.md) for the cross-agent baseline (repo map, durable sec
 
 Pantry is a calm, opinionated recipe app (Expo/React Native + TypeScript, Supabase, Anthropic Claude API server-side). Full product spec: [`docs/prd.md`](docs/prd.md). System architecture: [`docs/architecture.md`](docs/architecture.md). What's next: [`docs/roadmap.md`](docs/roadmap.md). Read all three before doing product or cross-cutting work if you haven't already loaded them this session.
 
-Every session, before doing anything else: read [`docs/current.md`](docs/current.md). It says what work item is actively selected, its state, and the next concrete action — kept deliberately short (a pointer, not a log). Update it before ending a session, or before handing off a decision to the developer.
+Every session, before doing anything else: read [`docs/current.md`](docs/current.md). It says what work item is actively selected, its state, and the next concrete action — kept deliberately short (a pointer, not a log). Update it when the active work item's state, blocker, or next action materially changes — not just because a session started or ended — or before handing off a decision to the developer.
 
 ## The work-item lifecycle
 

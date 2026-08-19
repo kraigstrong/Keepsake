@@ -45,8 +45,8 @@ No new credentials introduced this phase.
 
 - **Storage cleanup is client-side best-effort** — a network drop between RPC success and the client's cleanup call leaves an orphaned Storage object. Accepted, same class as ADR-0017/T15.
 - **No offline mirror for Archived Recipes/Recently Deleted** — deliberate (ADR-0025 decision 6), matching ADR-0021/ADR-0024's precedent for This Week and cooking history.
-- **A permanently-deleted recipe can leave a zombie cooking-event outbox item** on another device that had an unsynced completion for it — narrow window (needs an unsynced offline event *and* a concurrent permanent delete before sync), bounded to log noise/wasted retries. Real fix needs a terminal/no-op outcome added to the outbox's retry classification (an ADR-0024 design change), tracked as a carried-forward item in `docs/current.md`, not fixed here.
-- **Archive/Delete button placement in Recipe Detail's action row "didn't feel right"** per the developer's own walkthrough — functionally correct, UX polish explicitly deferred, not scoped yet. Tracked in `docs/current.md`.
+- **A permanently-deleted recipe can leave a zombie cooking-event outbox item** on another device that had an unsynced completion for it — narrow window (needs an unsynced offline event *and* a concurrent permanent delete before sync), bounded to log noise/wasted retries. Real fix needs a terminal/no-op outcome added to the outbox's retry classification (an ADR-0024 design change), tracked in `docs/roadmap.md`'s Not-yet-triaged list, not fixed here.
+- **Archive/Delete button placement in Recipe Detail's action row "didn't feel right"** per the developer's own walkthrough — functionally correct, UX polish explicitly deferred, not scoped yet.
 
 Auditable actor (`archived_by`/`deleted_by`/`restored_by`) was disclosed here as a limitation immediately after the Pass decision below (Codex review, PR #53), then fixed the same day rather than left carried-forward — developer's call. See Security review above and `20260813210000_recipe_lifecycle_audit_actor.sql`, pushed to staging the same day (`supabase migration list` confirms local/remote match through `20260813210000`).
 
