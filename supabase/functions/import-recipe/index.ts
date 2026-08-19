@@ -48,6 +48,10 @@ import {
 } from '../../../server/ai/extractRecipe.ts';
 import { extractHeroImageUrl } from '../../../server/import/extractHeroImageUrl.ts';
 import { extractJsonLdHint } from '../../../server/import/extractJsonLdHint.ts';
+import {
+  mapCategoryNamesToIds,
+  type CategoryRow,
+} from '../../../server/import/mapCategoryNames.ts';
 import { normalizeUrl } from '../../../server/import/normalizeUrl.ts';
 import { reduceHtmlToText } from '../../../server/import/reduceHtmlToText.ts';
 import { secureFetch, SecureFetchError } from '../../../server/import/secureFetch.ts';
@@ -74,11 +78,6 @@ interface ImportJobRow {
   duplicate_of_recipe_id: string | null;
   error_message: string | null;
   claim_token: string | null;
-}
-
-interface CategoryRow {
-  id: string;
-  value: string;
 }
 
 // Matches the recipe-images bucket's allowed_mime_types — anything
@@ -371,6 +370,24 @@ Deno.serve(async (req: Request) => {
     const useProductionModels = Deno.env.get('APP_ENV') === 'production';
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
 
+    // Fetched once, up front: both the extraction prompt (so Claude picks
+    // suggestedCategories from the real vocabulary instead of guessing
+    // one — ORG-04/AI-06) and the post-extraction id mapping below reuse
+    // this same result. A read failure here degrades rather than fails
+    // the import (categoryRows falls back to []) — losing suggested
+    // categories isn't worth failing an otherwise-good import over — but
+    // it's now logged, since an empty list also means the AI prompt's
+    // own category instruction goes out empty for this request, not just
+    // the id mapping.
+    const { data: categories, error: categoriesError } = await supabase
+      .from('categories')
+      .select('id, value');
+    if (categoriesError) {
+      console.error('Could not fetch categories for import:', categoriesError.message);
+    }
+    const categoryRows = (categories ?? []) as CategoryRow[];
+    const categoryValues = categoryRows.map((c) => c.value);
+
     let extraction: RecipeExtraction;
     // Populated on the URL path only, used for hero-image extraction and
     // source attribution below.
@@ -407,9 +424,13 @@ Deno.serve(async (req: Request) => {
       const photoBase64 = uint8ArrayToBase64(photoBytes);
 
       try {
-        extraction = await extractRecipeFromImage(anthropic, photoBase64, sniffedMediaType, {
-          useProductionModels,
-        });
+        extraction = await extractRecipeFromImage(
+          anthropic,
+          photoBase64,
+          sniffedMediaType,
+          categoryValues,
+          { useProductionModels },
+        );
       } catch (error) {
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
@@ -450,7 +471,9 @@ Deno.serve(async (req: Request) => {
       const pageText = jsonLdHint ? `${jsonLdHint}\n\n${reducedText}` : reducedText;
 
       try {
-        extraction = await extractRecipe(anthropic, pageText, { useProductionModels });
+        extraction = await extractRecipe(anthropic, pageText, categoryValues, {
+          useProductionModels,
+        });
       } catch (error) {
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
@@ -489,17 +512,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Map AI-suggested category names onto real category ids — an
-    // unmapped name is dropped, not passed through, since save_recipe
-    // requires every categoryId to reference a real row (Phase 4's
-    // atomicity test covers exactly this failure mode).
-    const { data: categories } = await supabase.from('categories').select('id, value');
-    const categoryByLowerValue = new Map(
-      ((categories ?? []) as CategoryRow[]).map((c) => [c.value.toLowerCase(), c.id]),
-    );
-    const categoryIds = extraction.suggestedCategories
-      .map((name) => categoryByLowerValue.get(name.toLowerCase()))
-      .filter((id): id is string => id !== undefined);
+    const categoryIds = mapCategoryNamesToIds(extraction.suggestedCategories, categoryRows);
 
     const sourceAttribution = finalUrl ? new URL(finalUrl).hostname : null;
 
