@@ -1,3 +1,5 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
+
 import { preserveOriginalPhoto, uploadOriginalPhoto } from '../photoImport/photoImport';
 import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
@@ -11,14 +13,13 @@ export interface ImportRecipeResult {
 
 /**
  * Thrown when submitImportJob fails without a confirmed response from
- * the Edge Function itself — the request never reached it, or a
- * response never came back (Supabase's FunctionsFetchError/
- * FunctionsRelayError shape: `error.context` isn't Response-like). This
- * is the one failure class that's both safe and meaningful to retry
- * automatically with the same clientImportId: ADR-0016's idempotent-
- * replay handles "never arrived" (creates the job for real) and
- * "arrived, response lost" (safely replays whatever already happened)
- * identically well either way.
+ * the Edge Function itself — a genuine FunctionsFetchError (the request
+ * never reached it) or FunctionsRelayError (Supabase's relay couldn't
+ * reach it). This is the one failure class that's both safe and
+ * meaningful to retry automatically with the same clientImportId:
+ * ADR-0016's idempotent-replay handles "never arrived" (creates the job
+ * for real) and "arrived, response lost" (safely replays whatever
+ * already happened) identically well either way.
  *
  * A *confirmed* response (FunctionsHttpError — the function ran and
  * returned a non-2xx) is deliberately NOT this error type: the outcome
@@ -27,6 +28,13 @@ export interface ImportRecipeResult {
  * never re-running the pipeline. Making that case genuinely retryable
  * needs a fresh id (or a server-side reset) — out of scope here, see
  * docs/roadmap.md's Reliability backlog.
+ *
+ * Classified via `instanceof FunctionsHttpError` specifically, not by
+ * whether `.context` looks Response-shaped — FunctionsRelayError's
+ * context is ALSO a real Response (it has a genuine x-relay-error
+ * header), so duck-typing on `.context.clone` can't tell it apart from
+ * a confirmed FunctionsHttpError (caught in review before this
+ * shipped).
  */
 export class ImportTransportError extends Error {}
 
@@ -70,26 +78,23 @@ export async function submitImportJob(request: ImportJobRequest): Promise<Import
     const { data, error } = await supabase.functions.invoke('import-recipe', { body: request });
 
     if (error) {
-      // Supabase's FunctionsHttpError carries the actual response body
-      // (our own { error: string } shape) on .context, Response-shaped
-      // — surface that message when present rather than a generic
-      // transport error. FunctionsFetchError's context is the raw fetch
-      // failure itself, not Response-shaped (no .clone) — that's also
-      // this call's signal for "no confirmed response", see
-      // ImportTransportError above.
-      const context = (error as { context?: Response }).context;
-      const hasConfirmedResponse = typeof context?.clone === 'function';
+      // FunctionsHttpError is the one case where the function actually
+      // ran — its .context carries the real response, our own
+      // { error: string } shape included, so surface that message
+      // rather than a generic one. See ImportTransportError above for
+      // why this is checked by class, not by duck-typing .context.
+      const isConfirmedResponse = error instanceof FunctionsHttpError;
       let specificMessage: string | undefined;
-      if (hasConfirmedResponse) {
+      if (isConfirmedResponse) {
         try {
-          const body = (await context!.clone().json()) as { error?: string };
+          const body = (await error.context.clone().json()) as { error?: string };
           specificMessage = body.error;
         } catch {
           // response body wasn't JSON — fall through to the generic message
         }
       }
       const message = specificMessage ?? error.message;
-      throw hasConfirmedResponse ? new Error(message) : new ImportTransportError(message);
+      throw isConfirmedResponse ? new Error(message) : new ImportTransportError(message);
     }
 
     const result = data as ImportRecipeResult & { error?: string };
