@@ -297,6 +297,15 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Not every fail()/error branch below also calls console.error: bad user
+  // input (malformed URL, thin page content, an unreadable photo upload)
+  // and expected races (a losing claim_import_job call) already surface
+  // through the stored job row and response — logging those as errors
+  // would just be noise. console.error is reserved for branches where
+  // something in Keepsake's own pipeline broke unexpectedly (AI
+  // extraction, Storage/DB reads and writes past the point ADR-0017
+  // expects them to succeed) — the failures worth finding in Supabase's
+  // function logs without first knowing which job to query for.
   async function fail(status: number, message: string): Promise<Response> {
     // ADR-0020: claim_token proves this call still holds the claim it
     // was given — a worker whose claim has since been superseded by a
@@ -348,6 +357,10 @@ Deno.serve(async (req: Request) => {
             })
             .single();
           if (error || !completed) {
+            console.error(
+              `Could not complete duplicate-import job ${job.id}:`,
+              error?.message ?? 'no data returned',
+            );
             return jsonResponse(
               { jobId: job.id, error: error?.message ?? 'Could not complete import job' },
               500,
@@ -408,6 +421,10 @@ Deno.serve(async (req: Request) => {
         .from('recipe-images')
         .download(originalPhotoPath);
       if (downloadError || !photoBlob) {
+        console.error(
+          `Could not download uploaded photo for job ${job.id} at ${originalPhotoPath}:`,
+          downloadError?.message ?? 'not found',
+        );
         return await fail(
           502,
           `Could not read the uploaded photo: ${downloadError?.message ?? 'not found'}`,
@@ -432,6 +449,7 @@ Deno.serve(async (req: Request) => {
           { useProductionModels },
         );
       } catch (error) {
+        console.error(`Photo recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
 
@@ -475,6 +493,7 @@ Deno.serve(async (req: Request) => {
           useProductionModels,
         });
       } catch (error) {
+        console.error(`URL recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
 
@@ -563,6 +582,10 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (finalizeError || !finalizedJob) {
+      console.error(
+        `Could not finalize job ${job.id} after successful extraction:`,
+        finalizeError?.message ?? 'no data returned',
+      );
       return await fail(502, finalizeError?.message ?? 'Could not save the imported recipe');
     }
 
@@ -578,6 +601,7 @@ Deno.serve(async (req: Request) => {
       200,
     );
   } catch (error) {
+    console.error(`Unexpected import failure for job ${job.id}:`, errorMessage(error));
     return await fail(500, `Unexpected import failure: ${errorMessage(error)}`);
   }
 });
