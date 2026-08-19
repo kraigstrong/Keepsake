@@ -6,7 +6,7 @@ import {
 import { deleteQueuedShare, readQueuedShares } from '../appGroup/appGroupHandoff';
 import { getDatabase } from '../db/database';
 import { logError, trackEvent } from '../observability';
-import { submitImportJob } from './api';
+import { ImportTransportError, submitImportJob } from './api';
 import {
   insertOutboxItemIfNew,
   listSubmittableOutboxItems,
@@ -22,7 +22,10 @@ jest.mock('../appGroup/appGroupHandoff', () => ({
 }));
 jest.mock('../db/database', () => ({ getDatabase: jest.fn() }));
 jest.mock('../observability', () => ({ logError: jest.fn(), trackEvent: jest.fn() }));
-jest.mock('./api', () => ({ submitImportJob: jest.fn() }));
+jest.mock('./api', () => ({
+  submitImportJob: jest.fn(),
+  ImportTransportError: class ImportTransportError extends Error {},
+}));
 jest.mock('./outbox', () => ({
   insertOutboxItemIfNew: jest.fn(),
   listSubmittableOutboxItems: jest.fn(),
@@ -193,6 +196,22 @@ describe('submitPendingOutboxItems', () => {
       expect(mockedSubmitImportJob).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('treats ImportTransportError (no confirmed response reached the Edge Function) as retry-later, not a failure, and stops the run', async () => {
+    mockedListSubmittableOutboxItems.mockResolvedValue([
+      { id: 'o1', url: 'https://example.com/soup', status: 'pending' },
+      { id: 'o2', url: 'https://example.com/stew', status: 'pending' },
+    ]);
+    mockedSubmitImportJob.mockRejectedValue(new ImportTransportError('Network request failed'));
+
+    await submitPendingOutboxItems(HOUSEHOLD_ID);
+
+    expect(mockedMarkPending).toHaveBeenCalledWith(fakeDb, 'o1');
+    expect(mockedMarkFailed).not.toHaveBeenCalled();
+    // the second item is never even attempted — a real network blip
+    // reaching the Edge Function at all would hit the same failure
+    expect(mockedSubmitImportJob).toHaveBeenCalledTimes(1);
+  });
 
   it('processes multiple items in order when each succeeds', async () => {
     mockedListSubmittableOutboxItems.mockResolvedValue([

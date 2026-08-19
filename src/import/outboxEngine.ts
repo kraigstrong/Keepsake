@@ -1,7 +1,7 @@
 import { deleteQueuedShare, readQueuedShares } from '../appGroup/appGroupHandoff';
 import { getDatabase } from '../db/database';
 import { logError, trackEvent } from '../observability';
-import { submitImportJob } from './api';
+import { ImportTransportError, submitImportJob } from './api';
 import {
   insertOutboxItemIfNew,
   listSubmittableOutboxItems,
@@ -62,7 +62,11 @@ export async function drainAppGroupQueueIntoOutbox(householdId: string | null): 
 // backlog means every remaining item in this run would hit it too, so
 // there's no point continuing; the item that tripped it goes back to
 // 'pending' for the next foreground/reconnect attempt rather than being
-// surfaced to the user as failed.
+// surfaced to the user as failed. ImportTransportError (a real network
+// blip reaching the Edge Function at all, api.ts) gets the same
+// treatment for the same reason — see its own doc comment for why it's
+// safe to retry with the same clientImportId, unlike a confirmed
+// server-side failure.
 const RETRY_LATER_MESSAGES = new Set([
   'please wait before importing another recipe',
   'too many imports for this household in the last hour',
@@ -153,7 +157,7 @@ export async function submitPendingOutboxItems(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      if (RETRY_LATER_MESSAGES.has(message)) {
+      if (RETRY_LATER_MESSAGES.has(message) || error instanceof ImportTransportError) {
         await markOutboxItemPending(db, item.id);
         return outcomes;
       }
