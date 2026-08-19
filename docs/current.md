@@ -4,13 +4,13 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **MVP Validation** milestone, its first backlog item: refreshing the six-journey status against current reality (branch `docs/mvp-validation-refresh`). In progress since 2026-08-18.
+`docs/roadmap.md`'s **MVP Validation** milestone. The six-journey refresh is done (2026-08-18); the remaining backlog item is the live joint session to close Journeys 1 and 3 (see Blocked, below).
 
 ## Current state
 
 - Four of six journeys (offline, lifecycle, security, credential validation) are re-confirmed against current code/CI — see `docs/roadmap.md`'s MVP Validation status for the per-journey summary.
 - `phase-17-walkthrough-feedback` (PR #63, merged 2026-08-17) landed real changes across Journey 1's ground (unit system, notes/history, grocery display) that are test-covered but not yet live-walked — see `docs/history/phase-17-walkthrough-feedback.md`.
-- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), open, pending merge) — see `docs/roadmap.md`'s Reliability milestone.
+- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone.
 
 ## Blocked
 
@@ -18,7 +18,7 @@ Journeys 1 (website success — the URL-import leg needs the developer watching 
 
 ## Next action
 
-Merge PR #77. Schedule the joint live session to close Journeys 1 and 3, then finish MVP Validation by updating `docs/roadmap.md` and `docs/prd-traceability.md` with the results. Until that session happens, pick another code-only item from `docs/roadmap.md`'s Reliability or Security & Privacy Readiness backlogs — the same way T15 and the retry-behavior work were picked up.
+Schedule the joint live session to close Journeys 1 and 3, then finish MVP Validation by updating `docs/roadmap.md` and `docs/prd-traceability.md` with the results. Until that session happens, pick another code-only item from `docs/roadmap.md`'s Reliability, Security & Privacy Readiness, or Not-yet-triaged backlogs — the same way T15 and the retry-behavior work were picked up.
 
 ## Recently shipped
 
