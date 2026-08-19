@@ -19,6 +19,7 @@ import {
   summarizeOutboxOutcomes,
 } from '../src/import/outboxEngine';
 import { initObservability, logError } from '../src/observability';
+import { sweepOrphanedOriginalPhotos } from '../src/photoImport/orphanedPhotoSweep';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
 import { syncHousehold } from '../src/sync/syncEngine';
@@ -101,6 +102,7 @@ function ConnectivityAwareApp() {
         householdId={householdId}
         getCurrentHouseholdId={getCurrentHouseholdId}
       />
+      <OrphanedPhotoSweepLifecycle householdId={householdId} />
       <View style={{ flex: 1 }}>
         <OfflineBanner />
         <AuthenticatedRouteBoundary />
@@ -146,6 +148,37 @@ function CookingEventOutboxLifecycle({
 
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- getCurrentHouseholdId is a stable identity across renders; only householdId should re-trigger this.
+  }, [householdId]);
+  return null;
+}
+
+// T15 (docs/threat-model.md): housekeeping only, no toast/state of its
+// own — same mount + foreground trigger shape as the outbox lifecycles
+// above, but no account-switch guard is needed here. Unlike the outbox
+// loops (many individual submissions over an extended time), this is one
+// household-scoped Storage list/query/remove sequence per call; if the
+// signed-in household changes mid-flight, RLS itself (keyed off the
+// caller's *current* session, not the householdId this closure captured)
+// just stops matching the in-flight household's path prefix — the call
+// degrades to a safe no-op, never a cross-household delete.
+function triggerOrphanedPhotoSweep(householdId: string | null): void {
+  if (!householdId) return;
+  sweepOrphanedOriginalPhotos(householdId).catch((error) =>
+    logError(error, { context: 'orphanedPhotoSweep' }),
+  );
+}
+
+function OrphanedPhotoSweepLifecycle({ householdId }: { householdId: string | null }) {
+  useEffect(() => {
+    triggerOrphanedPhotoSweep(householdId);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        triggerOrphanedPhotoSweep(householdId);
+      }
+    });
+
+    return () => subscription.remove();
   }, [householdId]);
   return null;
 }
