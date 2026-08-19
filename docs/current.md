@@ -10,7 +10,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 - Four of six journeys (offline, lifecycle, security, credential validation) are re-confirmed against current code/CI — see `docs/roadmap.md`'s MVP Validation status for the per-journey summary.
 - `phase-17-walkthrough-feedback` (PR #63, merged 2026-08-17) landed real changes across Journey 1's ground (unit system, notes/history, grocery display) that are test-covered but not yet live-walked — see `docs/history/phase-17-walkthrough-feedback.md`.
-- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone. Category-mapping robustness (ORG-04/AI-06) is also done (branch `reliability/category-mapping-prompt`, not yet merged) — see `docs/history/phase-08-url-import.md`.
+- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone. Category-mapping robustness (ORG-04/AI-06) also shipped ([PR #79](https://github.com/kraigstrong/Keepsake/pull/79), merged 2026-08-19) — see `docs/history/phase-08-url-import.md`. That review also surfaced a follow-on item (enforce the category vocabulary at the schema/decoding level, not just the prompt) — see `docs/roadmap.md`'s Reliability backlog.
 
 ## Blocked
 
@@ -22,5 +22,6 @@ Schedule the joint live session to close Journeys 1 and 3, then finish MVP Valid
 
 ## Recently shipped
 
+- Category-mapping robustness (ORG-04/AI-06) — [PR #79](https://github.com/kraigstrong/Keepsake/pull/79). See `docs/history/phase-08-url-import.md`.
 - Orphaned-photo Storage cleanup (T15) — [PR #76](https://github.com/kraigstrong/Keepsake/pull/76). See `docs/threat-model.md`'s T15 entry.
 - Staging magic-link/OTP email fix — [PR #74](https://github.com/kraigstrong/Keepsake/pull/74). See `docs/history/cross-cutting-otp-email-fix.md`.
