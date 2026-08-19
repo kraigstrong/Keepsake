@@ -25,4 +25,4 @@ Update `docs/current.md` to reflect the work item's new state (shipped, awaiting
 
 ## 5. Human review packet
 
-Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves.
+Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves, unless they've explicitly asked you to do it directly.

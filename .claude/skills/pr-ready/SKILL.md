@@ -1,9 +1,9 @@
 ---
 name: "pr-ready"
-description: "Use when a work item's implementation, verification, and final review are done and it's ready to hand to the developer for pushing and opening a GitHub PR. Produces the exact push command and a filled-out PR description; does not push or open the PR itself since this environment has no GitHub credentials."
+description: "Use when a work item's implementation, verification, and final review are done and it's ready to hand to the developer for pushing and opening a GitHub PR. Produces the exact push command and a filled-out PR description; pushes and opens the PR directly only if the developer explicitly asks for that instead."
 ---
 
-Packaging a work item for review. This environment cannot push to GitHub or open PRs — the output of this skill is instructions the developer runs themselves (from a laptop or the GitHub mobile app on the branch that's already pushed).
+Packaging a work item for review. Default output is instructions the developer runs themselves (push command + PR description), for them to run from a laptop or the GitHub mobile app — push/PR credentials via `gh` are often available in this environment too, but don't push or open the PR yourself unless the developer explicitly asks for that.
 
 ## 1. Verify the branch is actually ready
 
