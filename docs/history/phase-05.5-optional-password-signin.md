@@ -6,6 +6,6 @@ Developer request, mid-Phase-6-handoff: an opt-in password as an alternative to 
 
 45 suites, 235 passed, 1 skipped; typecheck/lint/format clean. No PRD IDs owned (auth mechanism was never itself a distinct PRD requirement, just an ADR-0008 engineering decision this amends). No Simulator/device verification at exit time — same sandbox constraint as every phase since 3.
 
-**Since resolved:** a real physical-device pass on the developer's own machine (PR #21) exercised the actual sign-in flow against staging for the first time and found two real bugs — a stale `EXPO_PUBLIC_SUPABASE_ANON_KEY` reference left over from the publishable-key rename, and confusing sign-in copy that didn't indicate the email step also creates an account — both fixed. Also surfaced (not fixed, tracked in `docs/current.md`): staging's magic-link email is unusable as shipped.
+**Since resolved:** a real physical-device pass on the developer's own machine (PR #21) exercised the actual sign-in flow against staging for the first time and found two real bugs — a stale `EXPO_PUBLIC_SUPABASE_ANON_KEY` reference left over from the publishable-key rename, and confusing sign-in copy that didn't indicate the email step also creates an account — both fixed. Also surfaced (not fixed at the time): staging's magic-link email was unusable as shipped — fixed 2026-08-18, see `docs/history/cross-cutting-otp-email-fix.md`.
 
 No exit decision — this isn't a phase with a gate.
