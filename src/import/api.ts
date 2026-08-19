@@ -12,29 +12,14 @@ export interface ImportRecipeResult {
 }
 
 /**
- * Thrown when submitImportJob fails without a confirmed response from
- * the Edge Function itself — a genuine FunctionsFetchError (the request
- * never reached it) or FunctionsRelayError (Supabase's relay couldn't
- * reach it). This is the one failure class that's both safe and
- * meaningful to retry automatically with the same clientImportId:
- * ADR-0016's idempotent-replay handles "never arrived" (creates the job
- * for real) and "arrived, response lost" (safely replays whatever
- * already happened) identically well either way.
- *
- * A *confirmed* response (FunctionsHttpError — the function ran and
- * returned a non-2xx) is deliberately NOT this error type: the outcome
- * is already durably stored against that clientImportId, so retrying
- * with the same id would only ever replay the same cached failure,
- * never re-running the pipeline. Making that case genuinely retryable
- * needs a fresh id (or a server-side reset) — out of scope here, see
- * docs/roadmap.md's Reliability backlog.
- *
- * Classified via `instanceof FunctionsHttpError` specifically, not by
- * whether `.context` looks Response-shaped — FunctionsRelayError's
- * context is ALSO a real Response (it has a genuine x-relay-error
- * header), so duck-typing on `.context.clone` can't tell it apart from
- * a confirmed FunctionsHttpError (caught in review before this
- * shipped).
+ * Thrown when submitImportJob gets no confirmed response from the Edge
+ * Function (FunctionsFetchError/FunctionsRelayError) rather than a
+ * confirmed non-2xx (FunctionsHttpError) — the one failure class safe
+ * to retry with the same clientImportId, per ADR-0016's idempotent
+ * replay; a confirmed failure's outcome is already durably stored
+ * against that id, so retrying it would just replay the same result.
+ * Classified via `instanceof FunctionsHttpError`, not `.context` shape —
+ * FunctionsRelayError's context is also a real Response.
  */
 export class ImportTransportError extends Error {}
 
