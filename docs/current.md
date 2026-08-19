@@ -10,7 +10,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 - Four of six journeys (offline, lifecycle, security, credential validation) are re-confirmed against current code/CI — see `docs/roadmap.md`'s MVP Validation status for the per-journey summary.
 - `phase-17-walkthrough-feedback` (PR #63, merged 2026-08-17) landed real changes across Journey 1's ground (unit system, notes/history, grocery display) that are test-covered but not yet live-walked — see `docs/history/phase-17-walkthrough-feedback.md`.
-- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone.
+- Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone. Category-mapping robustness (ORG-04/AI-06) is also done (branch `reliability/category-mapping-prompt`, not yet merged) — see `docs/history/phase-08-url-import.md`.
 
 ## Blocked
 
