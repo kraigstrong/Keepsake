@@ -9,6 +9,27 @@ export interface ImportRecipeResult {
   uncertainFields?: string[];
 }
 
+/**
+ * Thrown when submitImportJob fails without a confirmed response from
+ * the Edge Function itself — the request never reached it, or a
+ * response never came back (Supabase's FunctionsFetchError/
+ * FunctionsRelayError shape: `error.context` isn't Response-like). This
+ * is the one failure class that's both safe and meaningful to retry
+ * automatically with the same clientImportId: ADR-0016's idempotent-
+ * replay handles "never arrived" (creates the job for real) and
+ * "arrived, response lost" (safely replays whatever already happened)
+ * identically well either way.
+ *
+ * A *confirmed* response (FunctionsHttpError — the function ran and
+ * returned a non-2xx) is deliberately NOT this error type: the outcome
+ * is already durably stored against that clientImportId, so retrying
+ * with the same id would only ever replay the same cached failure,
+ * never re-running the pipeline. Making that case genuinely retryable
+ * needs a fresh id (or a server-side reset) — out of scope here, see
+ * docs/roadmap.md's Reliability backlog.
+ */
+export class ImportTransportError extends Error {}
+
 export interface ImportJobRequest {
   // Exactly one of url (Phase 8's original shape), photoPath (Phase 10,
   // ADR-0017 — a Storage object path already uploaded), or jobId (a job
@@ -50,19 +71,25 @@ export async function submitImportJob(request: ImportJobRequest): Promise<Import
 
     if (error) {
       // Supabase's FunctionsHttpError carries the actual response body
-      // (our own { error: string } shape) on .context — surface that
-      // message when present rather than a generic transport error.
+      // (our own { error: string } shape) on .context, Response-shaped
+      // — surface that message when present rather than a generic
+      // transport error. FunctionsFetchError's context is the raw fetch
+      // failure itself, not Response-shaped (no .clone) — that's also
+      // this call's signal for "no confirmed response", see
+      // ImportTransportError above.
       const context = (error as { context?: Response }).context;
+      const hasConfirmedResponse = typeof context?.clone === 'function';
       let specificMessage: string | undefined;
-      if (context) {
+      if (hasConfirmedResponse) {
         try {
-          const body = (await context.clone().json()) as { error?: string };
+          const body = (await context!.clone().json()) as { error?: string };
           specificMessage = body.error;
         } catch {
           // response body wasn't JSON — fall through to the generic message
         }
       }
-      throw new Error(specificMessage ?? error.message);
+      const message = specificMessage ?? error.message;
+      throw hasConfirmedResponse ? new Error(message) : new ImportTransportError(message);
     }
 
     const result = data as ImportRecipeResult & { error?: string };

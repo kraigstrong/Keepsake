@@ -3,6 +3,7 @@ import {
   fetchBatchJobs,
   importRecipeFromPhoto,
   importRecipeFromUrl,
+  ImportTransportError,
   submitImportJob,
 } from './api';
 import { trackEvent } from '../observability';
@@ -102,6 +103,41 @@ describe('importRecipeFromUrl', () => {
     await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
       'Network request failed',
     );
+  });
+
+  it('throws ImportTransportError when no confirmed response was received (no context)', async () => {
+    mockedInvoke.mockResolvedValue({ data: null, error: new Error('Network request failed') });
+
+    await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
+      ImportTransportError,
+    );
+  });
+
+  it('throws ImportTransportError when context is present but not Response-shaped (FunctionsFetchError)', async () => {
+    // FunctionsFetchError's context is the raw fetch failure itself, not
+    // a Response — no .clone/.json, unlike FunctionsHttpError's context.
+    mockedInvoke.mockResolvedValue({
+      data: null,
+      error: Object.assign(new Error('Failed to send a request to the Edge Function'), {
+        context: { requestId: 'abc123' },
+      }),
+    });
+
+    await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
+      ImportTransportError,
+    );
+  });
+
+  it('does NOT throw ImportTransportError when a confirmed response was received (context is Response-shaped)', async () => {
+    const context = new Response(JSON.stringify({ error: 'Could not fetch the page' }));
+    mockedInvoke.mockResolvedValue({
+      data: null,
+      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), { context }),
+    });
+
+    const rejection = importRecipeFromUrl('https://example.com/recipe');
+    await expect(rejection).rejects.toThrow('Could not fetch the page');
+    await expect(rejection).rejects.not.toBeInstanceOf(ImportTransportError);
   });
 
   it('never includes the imported URL in telemetry, success or failure', async () => {
