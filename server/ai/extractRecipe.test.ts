@@ -1,7 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-import { extractRecipe, extractRecipeFromImage, RecipeExtractionSchema } from './extractRecipe';
+import {
+  buildExtractionSystemPrompt,
+  buildImageExtractionSystemPrompt,
+  extractRecipe,
+  extractRecipeFromImage,
+  RecipeExtractionSchema,
+} from './extractRecipe';
 import { MESSY_RECIPE_PAGE_TEXT } from './fixtures/messyRecipePage';
+
+// Matches supabase/migrations/20260803100000_recipe_schema.sql's seeded
+// values closely enough for these tests — the real list is fetched from
+// the DB by the caller (the Edge Function), this file only exercises how
+// extractRecipe/extractRecipeFromImage thread it through.
+const TEST_CATEGORY_VALUES = ['Chicken', 'Beef', 'Vegetarian', 'Soup', 'Dessert'];
 
 describe('RecipeExtractionSchema', () => {
   const validExtraction = {
@@ -78,7 +90,7 @@ describe('extractRecipe — model selection', () => {
       const uncertainResult = { ...confidentExtraction, uncertainFields: ['title'] };
       const client = clientReturning(uncertainResult);
 
-      const result = await extractRecipe(client, 'page text');
+      const result = await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES);
 
       expect(result).toEqual(uncertainResult);
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
@@ -90,7 +102,9 @@ describe('extractRecipe — model selection', () => {
     it('is also the behavior when useProductionModels is explicitly false', async () => {
       const client = clientReturning(confidentExtraction);
 
-      await extractRecipe(client, 'page text', { useProductionModels: false });
+      await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, {
+        useProductionModels: false,
+      });
 
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
       expect(client.messages.parse).toHaveBeenCalledWith(
@@ -105,7 +119,7 @@ describe('extractRecipe — model selection', () => {
     it('does not escalate when the primary (Sonnet) result looks confident', async () => {
       const client = clientReturning(confidentExtraction);
 
-      const result = await extractRecipe(client, 'page text', prodOptions);
+      const result = await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, prodOptions);
 
       expect(result).toEqual(confidentExtraction);
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
@@ -121,7 +135,7 @@ describe('extractRecipe — model selection', () => {
         const uncertainPrimary = { ...confidentExtraction, uncertainFields: [criticalField] };
         const client = clientReturning(uncertainPrimary, escalated);
 
-        const result = await extractRecipe(client, 'page text', prodOptions);
+        const result = await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, prodOptions);
 
         expect(result).toEqual(escalated);
         expect(client.messages.parse).toHaveBeenCalledTimes(2);
@@ -139,7 +153,7 @@ describe('extractRecipe — model selection', () => {
       };
       const client = clientReturning(noIngredients, confidentExtraction);
 
-      await extractRecipe(client, 'page text', prodOptions);
+      await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, prodOptions);
 
       expect(client.messages.parse).toHaveBeenCalledTimes(2);
     });
@@ -151,7 +165,7 @@ describe('extractRecipe — model selection', () => {
       };
       const client = clientReturning(noInstructions, confidentExtraction);
 
-      await extractRecipe(client, 'page text', prodOptions);
+      await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, prodOptions);
 
       expect(client.messages.parse).toHaveBeenCalledTimes(2);
     });
@@ -169,7 +183,7 @@ describe('extractRecipe — model selection', () => {
       };
       const client = clientReturning(nonCriticalUncertainty);
 
-      const result = await extractRecipe(client, 'page text', prodOptions);
+      const result = await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES, prodOptions);
 
       expect(result).toEqual(nonCriticalUncertainty);
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
@@ -181,7 +195,12 @@ describe('extractRecipe — model selection', () => {
       const uncertainResult = { ...confidentExtraction, uncertainFields: ['title'] };
       const client = clientReturning(uncertainResult);
 
-      const result = await extractRecipeFromImage(client, 'base64data', 'image/jpeg');
+      const result = await extractRecipeFromImage(
+        client,
+        'base64data',
+        'image/jpeg',
+        TEST_CATEGORY_VALUES,
+      );
 
       expect(result).toEqual(uncertainResult);
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
@@ -193,7 +212,7 @@ describe('extractRecipe — model selection', () => {
     it('sends the image as a base64 content block alongside a text instruction', async () => {
       const client = clientReturning(confidentExtraction);
 
-      await extractRecipeFromImage(client, 'base64data', 'image/png');
+      await extractRecipeFromImage(client, 'base64data', 'image/png', TEST_CATEGORY_VALUES);
 
       expect(client.messages.parse).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -218,9 +237,15 @@ describe('extractRecipe — model selection', () => {
       const uncertainPrimary = { ...confidentExtraction, uncertainFields: ['ingredientSections'] };
       const client = clientReturning(uncertainPrimary, escalated);
 
-      const result = await extractRecipeFromImage(client, 'base64data', 'image/jpeg', {
-        useProductionModels: true,
-      });
+      const result = await extractRecipeFromImage(
+        client,
+        'base64data',
+        'image/jpeg',
+        TEST_CATEGORY_VALUES,
+        {
+          useProductionModels: true,
+        },
+      );
 
       expect(result).toEqual(escalated);
       expect(client.messages.parse).toHaveBeenCalledTimes(2);
@@ -233,12 +258,53 @@ describe('extractRecipe — model selection', () => {
     it('does not escalate in production mode when the primary result looks confident', async () => {
       const client = clientReturning(confidentExtraction);
 
-      await extractRecipeFromImage(client, 'base64data', 'image/jpeg', {
+      await extractRecipeFromImage(client, 'base64data', 'image/jpeg', TEST_CATEGORY_VALUES, {
         useProductionModels: true,
       });
 
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('category prompt building (ORG-04/AI-06)', () => {
+  it('renders each category value, quoted, into the extraction system prompt', () => {
+    const prompt = buildExtractionSystemPrompt(TEST_CATEGORY_VALUES);
+    for (const value of TEST_CATEGORY_VALUES) {
+      expect(prompt).toContain(`"${value}"`);
+    }
+  });
+
+  it('renders each category value into the image extraction system prompt', () => {
+    const prompt = buildImageExtractionSystemPrompt(TEST_CATEGORY_VALUES);
+    for (const value of TEST_CATEGORY_VALUES) {
+      expect(prompt).toContain(`"${value}"`);
+    }
+  });
+
+  it('extractRecipe sends a system prompt carrying the given categories', async () => {
+    const confidentExtraction = {
+      title: 'Roast Chicken',
+      activeTimeMinutes: 20,
+      totalTimeMinutes: 70,
+      yield: '4 servings',
+      ingredientSections: [{ heading: null, items: ['1 whole chicken'] }],
+      instructionSections: [{ heading: null, steps: ['Roast it.'] }],
+      suggestedCategories: ['Chicken'],
+      suggestedTags: ['weeknight'],
+      notes: null,
+      uncertainFields: [],
+    };
+    const parse = jest
+      .fn()
+      .mockResolvedValueOnce({ parsed_output: confidentExtraction, stop_reason: 'end_turn' });
+    const client = { messages: { parse } } as unknown as Anthropic;
+
+    await extractRecipe(client, 'page text', TEST_CATEGORY_VALUES);
+
+    expect(parse).toHaveBeenCalledWith(
+      expect.objectContaining({ system: expect.stringContaining('"Chicken"') }),
+    );
   });
 });
 
@@ -253,7 +319,7 @@ const describeIfApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.ski
 describeIfApiKey('extractRecipe (live API)', () => {
   it('extracts a clean, schema-valid recipe from a messy blog page', async () => {
     const client = new Anthropic();
-    const result = await extractRecipe(client, MESSY_RECIPE_PAGE_TEXT);
+    const result = await extractRecipe(client, MESSY_RECIPE_PAGE_TEXT, TEST_CATEGORY_VALUES);
 
     // Schema conformance is guaranteed by messages.parse() — the
     // interesting assertions are about extraction *quality*.
