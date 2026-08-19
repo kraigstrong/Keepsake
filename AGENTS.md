@@ -54,7 +54,7 @@ Give a subagent the work item's objective, scope, non-goals, and acceptance crit
 
 ## Git / PR flow
 
-Feature branches off `main`, named `<area>/<short-name>`. This environment (and most agent sessions here) has no push credentials — expect to see a branch and an open PR, not direct commits to `main`. PR descriptions follow `.github/PULL_REQUEST_TEMPLATE.md`.
+Feature branches off `main`, named `<area>/<short-name>`. Push/PR credentials via `gh` are often available in this environment (confirmed 2026-08-19), but default to handing the developer a `git push` command and PR description rather than pushing yourself — only push or open the PR directly when explicitly asked. Either way, expect a branch and an open PR, not direct commits to `main`. PR descriptions follow `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Critical decision policy
 
