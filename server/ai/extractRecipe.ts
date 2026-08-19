@@ -79,14 +79,9 @@ export const RecipeExtractionSchema = z
 export type RecipeExtraction = z.infer<typeof RecipeExtractionSchema>;
 
 // Rendered into both system prompts below as a quoted, comma-separated
-// list, so the model picks from the actual seeded vocabulary
-// (supabase/migrations/20260803100000_recipe_schema.sql) instead of
+// list, so the model picks from the actual seeded vocabulary instead of
 // free-associating a category name that then has to coincidentally
-// string-match it (ORG-04/AI-06, flagged at Phase 8 exit review — see
-// docs/history/phase-08-url-import.md). The category rows themselves
-// come from the caller (the Edge Function has the DB access this file
-// deliberately doesn't) rather than being hardcoded here, so a future
-// migration adding a category needs no prompt change.
+// string-match it (ORG-04/AI-06 — see docs/history/phase-08-url-import.md).
 function formatCategoryList(categoryValues: string[]): string {
   return categoryValues.map((value) => `"${value}"`).join(', ');
 }

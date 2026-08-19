@@ -373,8 +373,18 @@ Deno.serve(async (req: Request) => {
     // Fetched once, up front: both the extraction prompt (so Claude picks
     // suggestedCategories from the real vocabulary instead of guessing
     // one — ORG-04/AI-06) and the post-extraction id mapping below reuse
-    // this same result.
-    const { data: categories } = await supabase.from('categories').select('id, value');
+    // this same result. A read failure here degrades rather than fails
+    // the import (categoryRows falls back to []) — losing suggested
+    // categories isn't worth failing an otherwise-good import over — but
+    // it's now logged, since an empty list also means the AI prompt's
+    // own category instruction goes out empty for this request, not just
+    // the id mapping.
+    const { data: categories, error: categoriesError } = await supabase
+      .from('categories')
+      .select('id, value');
+    if (categoriesError) {
+      console.error('Could not fetch categories for import:', categoriesError.message);
+    }
     const categoryRows = (categories ?? []) as CategoryRow[];
     const categoryValues = categoryRows.map((c) => c.value);
 
