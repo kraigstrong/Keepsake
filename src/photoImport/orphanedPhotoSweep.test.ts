@@ -77,6 +77,20 @@ describe('findOrphanedOriginalPhotos', () => {
   });
 });
 
+// recipesQuery mocks the chained .from('recipes').select(...).not(...).order(...).range(...)
+// call — `handler` receives each call's (offset, limitInclusiveEnd) range and returns that
+// page's { data, error }.
+function mockRecipesQuery(
+  handler: (offset: number, to: number) => { data: unknown; error: unknown },
+) {
+  const range = jest.fn((from: number, to: number) => Promise.resolve(handler(from, to)));
+  const order = jest.fn().mockReturnValue({ range });
+  const not = jest.fn().mockReturnValue({ order });
+  const select = jest.fn().mockReturnValue({ not });
+  mockedFrom.mockReturnValue({ select });
+  return { select, not, order, range };
+}
+
 describe('sweepOrphanedOriginalPhotos', () => {
   afterEach(() => jest.clearAllMocks());
 
@@ -87,7 +101,11 @@ describe('sweepOrphanedOriginalPhotos', () => {
     await sweepOrphanedOriginalPhotos('household-1');
 
     expect(mockedStorageFrom).toHaveBeenCalledWith('recipe-images');
-    expect(list).toHaveBeenCalledWith('household-1/originals', { limit: 1000 });
+    expect(list).toHaveBeenCalledWith('household-1/originals', {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: 'name', order: 'asc' },
+    });
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
@@ -113,8 +131,7 @@ describe('sweepOrphanedOriginalPhotos', () => {
     const remove = jest.fn();
     mockedStorageFrom.mockReturnValue({ list, remove });
     const queryError = new Error('query failed');
-    const notFn = jest.fn().mockResolvedValue({ data: null, error: queryError });
-    mockedFrom.mockReturnValue({ select: jest.fn().mockReturnValue({ not: notFn }) });
+    mockRecipesQuery(() => ({ data: null, error: queryError }));
 
     await sweepOrphanedOriginalPhotos('household-1');
 
@@ -134,11 +151,10 @@ describe('sweepOrphanedOriginalPhotos', () => {
     });
     const remove = jest.fn().mockResolvedValue({ error: null });
     mockedStorageFrom.mockReturnValue({ list, remove });
-    const notFn = jest.fn().mockResolvedValue({
+    mockRecipesQuery(() => ({
       data: [{ original_photo_path: 'household-1/originals/referenced.jpg' }],
       error: null,
-    });
-    mockedFrom.mockReturnValue({ select: jest.fn().mockReturnValue({ not: notFn }) });
+    }));
 
     await sweepOrphanedOriginalPhotos('household-1');
 
@@ -152,11 +168,10 @@ describe('sweepOrphanedOriginalPhotos', () => {
     });
     const remove = jest.fn();
     mockedStorageFrom.mockReturnValue({ list, remove });
-    const notFn = jest.fn().mockResolvedValue({
+    mockRecipesQuery(() => ({
       data: [{ original_photo_path: 'household-1/originals/referenced.jpg' }],
       error: null,
-    });
-    mockedFrom.mockReturnValue({ select: jest.fn().mockReturnValue({ not: notFn }) });
+    }));
 
     await sweepOrphanedOriginalPhotos('household-1');
 
@@ -171,13 +186,72 @@ describe('sweepOrphanedOriginalPhotos', () => {
     const removeError = new Error('remove failed');
     const remove = jest.fn().mockResolvedValue({ error: removeError });
     mockedStorageFrom.mockReturnValue({ list, remove });
-    const notFn = jest.fn().mockResolvedValue({ data: [], error: null });
-    mockedFrom.mockReturnValue({ select: jest.fn().mockReturnValue({ not: notFn }) });
+    mockRecipesQuery(() => ({ data: [], error: null }));
 
     await sweepOrphanedOriginalPhotos('household-1');
 
     expect(mockedLogError).toHaveBeenCalledWith(removeError, {
       context: 'sweepOrphanedOriginalPhotos.remove',
     });
+  });
+
+  // Codex review, PR #76: a single unpaginated query silently truncates at
+  // supabase/config.toml's api.max_rows (1000) instead of erroring — a
+  // household with >1000 recipes carrying an original_photo_path could
+  // have a genuinely-referenced path fall past the cap and read as
+  // orphaned. These prove both the Storage listing and the recipes query
+  // page through everything before any deletion decision is made.
+  it('pages through more than one page of the originals/ listing before deciding anything', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({
+      name: `page1-${i}.jpg`,
+      created_at: RECENT,
+    }));
+    const secondPage = [{ name: 'orphan.jpg', created_at: OLD }];
+    const list = jest
+      .fn()
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: secondPage, error: null });
+    const remove = jest.fn().mockResolvedValue({ error: null });
+    mockedStorageFrom.mockReturnValue({ list, remove });
+    mockRecipesQuery(() => ({ data: [], error: null }));
+
+    await sweepOrphanedOriginalPhotos('household-1');
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenNthCalledWith(1, 'household-1/originals', {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: 'name', order: 'asc' },
+    });
+    expect(list).toHaveBeenNthCalledWith(2, 'household-1/originals', {
+      limit: 1000,
+      offset: 1000,
+      sortBy: { column: 'name', order: 'asc' },
+    });
+    expect(remove).toHaveBeenCalledWith(['household-1/originals/orphan.jpg']);
+  });
+
+  it('pages through more than one page of referenced recipes, protecting a reference on the second page', async () => {
+    const list = jest.fn().mockResolvedValue({
+      data: [{ name: 'referenced.jpg', created_at: OLD }],
+      error: null,
+    });
+    const remove = jest.fn();
+    mockedStorageFrom.mockReturnValue({ list, remove });
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({
+      original_photo_path: `household-1/originals/other-${i}.jpg`,
+    }));
+    const secondPage = [{ original_photo_path: 'household-1/originals/referenced.jpg' }];
+    const { range } = mockRecipesQuery(() => ({ data: [], error: null }));
+    range
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: secondPage, error: null });
+
+    await sweepOrphanedOriginalPhotos('household-1');
+
+    expect(range).toHaveBeenCalledTimes(2);
+    expect(range).toHaveBeenNthCalledWith(1, 0, 999);
+    expect(range).toHaveBeenNthCalledWith(2, 1000, 1999);
+    expect(remove).not.toHaveBeenCalled();
   });
 });

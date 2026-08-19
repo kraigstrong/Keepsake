@@ -15,6 +15,34 @@ export interface StorageOriginalPhotoListing {
   created_at: string | null;
 }
 
+// supabase/config.toml's [api] max_rows — the Data API silently caps any
+// single response at this many rows rather than erroring, so a single
+// unpaginated select/list can silently omit rows past the cap instead of
+// signaling truncation. For a query that decides what's safe to
+// permanently delete, an incomplete "referenced paths" result must never
+// be mistaken for a complete one — a genuinely-referenced original past
+// the cap would otherwise read as orphaned (Codex review, PR #76).
+// Paginate both the Storage listing and the recipes query until a page
+// comes back short, with an explicit stable sort so two calls can't skip
+// or duplicate a row purely from unordered-scan nondeterminism.
+const PAGE_SIZE = 1000;
+
+async function fetchAllPages<T>(
+  fetchPage: (offset: number) => Promise<{ data: T[] | null; error: unknown }>,
+): Promise<{ data: T[] } | { error: unknown }> {
+  const all: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await fetchPage(offset);
+    if (error) return { error };
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return { data: all };
+}
+
 /**
  * Pure diff: which of this household's originals/ objects are both
  * unreferenced by any recipe row and old enough to be a real orphan
@@ -57,27 +85,36 @@ export function findOrphanedOriginalPhotos(
 // applies. Treating it as still-needed would make the sweep never able
 // to close the exact stuck-job case T15 exists for.
 export async function sweepOrphanedOriginalPhotos(householdId: string): Promise<void> {
-  const { data: objects, error: listError } = await supabase.storage
-    .from('recipe-images')
-    .list(`${householdId}/originals`, { limit: 1000 });
+  const objectsResult = await fetchAllPages<StorageOriginalPhotoListing>((offset) =>
+    supabase.storage.from('recipe-images').list(`${householdId}/originals`, {
+      limit: PAGE_SIZE,
+      offset,
+      sortBy: { column: 'name', order: 'asc' },
+    }),
+  );
 
-  if (listError) {
-    logError(listError, { context: 'sweepOrphanedOriginalPhotos.list' });
+  if ('error' in objectsResult) {
+    logError(objectsResult.error, { context: 'sweepOrphanedOriginalPhotos.list' });
     return;
   }
-  if (!objects || objects.length === 0) return;
+  const objects = objectsResult.data;
+  if (objects.length === 0) return;
 
-  const { data: recipes, error: queryError } = await supabase
-    .from('recipes')
-    .select('original_photo_path')
-    .not('original_photo_path', 'is', null);
+  const recipesResult = await fetchAllPages<{ original_photo_path: string }>(async (offset) => {
+    return await supabase
+      .from('recipes')
+      .select('original_photo_path')
+      .not('original_photo_path', 'is', null)
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+  });
 
-  if (queryError) {
-    logError(queryError, { context: 'sweepOrphanedOriginalPhotos.query' });
+  if ('error' in recipesResult) {
+    logError(recipesResult.error, { context: 'sweepOrphanedOriginalPhotos.query' });
     return;
   }
 
-  const referencedPaths = new Set((recipes ?? []).map((row) => row.original_photo_path as string));
+  const referencedPaths = new Set(recipesResult.data.map((row) => row.original_photo_path));
 
   const orphaned = findOrphanedOriginalPhotos(householdId, objects, referencedPaths, new Date());
   if (orphaned.length === 0) return;
