@@ -1,8 +1,15 @@
 import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from '@supabase/supabase-js';
+
+import {
   createImportBatch,
   fetchBatchJobs,
   importRecipeFromPhoto,
   importRecipeFromUrl,
+  ImportTransportError,
   submitImportJob,
 } from './api';
 import { trackEvent } from '../observability';
@@ -70,10 +77,7 @@ describe('importRecipeFromUrl', () => {
     const context = new Response(
       JSON.stringify({ error: 'Could not find enough recipe content on this page' }),
     );
-    mockedInvoke.mockResolvedValue({
-      data: null,
-      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), { context }),
-    });
+    mockedInvoke.mockResolvedValue({ data: null, error: new FunctionsHttpError(context) });
 
     await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
       'Could not find enough recipe content on this page',
@@ -86,10 +90,7 @@ describe('importRecipeFromUrl', () => {
 
   it('falls back to the transport error message when the response body is not JSON', async () => {
     const context = new Response('not json');
-    mockedInvoke.mockResolvedValue({
-      data: null,
-      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), { context }),
-    });
+    mockedInvoke.mockResolvedValue({ data: null, error: new FunctionsHttpError(context) });
 
     await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
       'Edge Function returned a non-2xx status code',
@@ -102,6 +103,47 @@ describe('importRecipeFromUrl', () => {
     await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
       'Network request failed',
     );
+  });
+
+  it('throws ImportTransportError when no confirmed response was received (no context)', async () => {
+    mockedInvoke.mockResolvedValue({ data: null, error: new Error('Network request failed') });
+
+    await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
+      ImportTransportError,
+    );
+  });
+
+  it('throws ImportTransportError for a real FunctionsFetchError (request never reached the function)', async () => {
+    mockedInvoke.mockResolvedValue({
+      data: null,
+      error: new FunctionsFetchError(new TypeError('Network request failed')),
+    });
+
+    await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
+      ImportTransportError,
+    );
+  });
+
+  it("throws ImportTransportError for a real FunctionsRelayError, even though its context IS Response-shaped (Supabase's relay couldn't reach the function)", async () => {
+    // FunctionsRelayError's own context is a real Response (it has a
+    // genuine x-relay-error header) — classification must go by error
+    // class, not by whether .context looks Response-shaped, or this
+    // regresses to treating it as a confirmed failure.
+    const context = new Response(null, { headers: { 'x-relay-error': 'true' } });
+    mockedInvoke.mockResolvedValue({ data: null, error: new FunctionsRelayError(context) });
+
+    await expect(importRecipeFromUrl('https://example.com/recipe')).rejects.toThrow(
+      ImportTransportError,
+    );
+  });
+
+  it('does NOT throw ImportTransportError for a real FunctionsHttpError (a confirmed response)', async () => {
+    const context = new Response(JSON.stringify({ error: 'Could not fetch the page' }));
+    mockedInvoke.mockResolvedValue({ data: null, error: new FunctionsHttpError(context) });
+
+    const rejection = importRecipeFromUrl('https://example.com/recipe');
+    await expect(rejection).rejects.toThrow('Could not fetch the page');
+    await expect(rejection).rejects.not.toBeInstanceOf(ImportTransportError);
   });
 
   it('never includes the imported URL in telemetry, success or failure', async () => {
