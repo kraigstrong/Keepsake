@@ -26,6 +26,24 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
+  it('calls onPressIn on touch-down when provided', async () => {
+    const onPressIn = jest.fn();
+    await render(<Button title="Save" onPress={() => {}} onPressIn={onPressIn} />);
+
+    await fireEvent(screen.getByRole('button', { name: 'Save' }), 'pressIn');
+
+    expect(onPressIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onPressIn when disabled', async () => {
+    const onPressIn = jest.fn();
+    await render(<Button title="Save" onPress={() => {}} onPressIn={onPressIn} disabled />);
+
+    await fireEvent(screen.getByRole('button', { name: 'Save' }), 'pressIn');
+
+    expect(onPressIn).not.toHaveBeenCalled();
+  });
+
   it('does not disable Dynamic Type font scaling on its label', async () => {
     await render(<Button title="Save" onPress={() => {}} />);
     expect(screen.getByText('Save').props.allowFontScaling).not.toBe(false);

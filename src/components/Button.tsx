@@ -4,16 +4,29 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface ButtonProps {
   title: string;
-  onPress: () => void;
+  onPress?: () => void;
+  /** Fires on touch-down instead of the (default) touch-up-in-bounds
+   * onPress. Only needed by callers working around Pressability's bounds
+   * check being unreliable when the view relocates mid-touch — see
+   * DoneCookingSheet's confirm button. */
+  onPressIn?: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   testID?: string;
 }
 
-export function Button({ title, onPress, variant = 'primary', disabled, testID }: ButtonProps) {
+export function Button({
+  title,
+  onPress,
+  onPressIn,
+  variant = 'primary',
+  disabled,
+  testID,
+}: ButtonProps) {
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={onPressIn}
       disabled={disabled}
       accessibilityRole="button"
       testID={testID}

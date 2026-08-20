@@ -359,7 +359,7 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
 
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() =>
         expect(mockedEnqueueCookingEvent).toHaveBeenCalledWith(
@@ -375,6 +375,28 @@ describe('CookingModeScreen', () => {
       expect(mockedSubmitPendingCookingEvents).toHaveBeenCalledWith('h1');
     });
 
+    it('confirming via onPress alone still completes (VoiceOver/TalkBack activation path)', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not double-enqueue when both onPressIn and onPress fire for one activation', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      const confirmButton = screen.getByTestId('done-cooking-confirm-button');
+      await fireEvent(confirmButton, 'pressIn');
+      await fireEvent.press(confirmButton);
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
     it('confirming with a note trims it and passes it through', async () => {
       mockedEnqueueCookingEvent.mockResolvedValue(undefined);
       await renderCookingModeScreen();
@@ -386,7 +408,7 @@ describe('CookingModeScreen', () => {
           '  Needed more salt.  ',
         ),
       );
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() =>
         expect(mockedEnqueueCookingEvent).toHaveBeenCalledWith(
@@ -404,7 +426,7 @@ describe('CookingModeScreen', () => {
       await renderCookingModeScreen();
       await openDoneCookingSheet();
 
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await Promise.resolve();
       expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
@@ -462,7 +484,7 @@ describe('CookingModeScreen', () => {
         ).toEqual({ checked: true }),
       );
 
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() => expect(mockedRemoveConfirmedEntry).toHaveBeenCalledWith('entry-1'));
     });
@@ -542,7 +564,7 @@ describe('CookingModeScreen', () => {
         ).toEqual({ checked: false }),
       );
 
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
       expect(mockedRemoveConfirmedEntry).not.toHaveBeenCalled();
@@ -576,7 +598,7 @@ describe('CookingModeScreen', () => {
           screen.getByTestId('done-cooking-remove-from-plan-toggle').props.accessibilityState,
         ).toEqual({ checked: false }),
       );
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalled());
       expect(mockedRemoveConfirmedEntry).not.toHaveBeenCalled();
@@ -607,7 +629,7 @@ describe('CookingModeScreen', () => {
         ).toEqual({ checked: true }),
       );
 
-      fireEvent.press(screen.getByTestId('done-cooking-confirm-button'));
+      fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'pressIn');
 
       await waitFor(() => expect(mockedLogError).toHaveBeenCalled());
       expect(mockedEnqueueCookingEvent).toHaveBeenCalled();
