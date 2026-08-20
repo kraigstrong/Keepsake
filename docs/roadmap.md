@@ -73,7 +73,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ## Unplaced
 
-- **Swipe-style meal planning.** A major feature you want to build, not yet scoped. Deliberately left with no milestone assignment and no PRD — a separate agent session is writing that PRD. Do not sequence or start implementation work against this until that PRD exists and this entry gets placed for real.
+- **Swipe-style meal planning ("Help Me Choose" / "Smart Meal Selection").** A major feature you want to build, not yet scoped. A codebase-grounded architecture proposal now exists — [`docs/proposals/smart-meal-selection-architecture.md`](proposals/smart-meal-selection-architecture.md) (2026-08-19) — covering domain model, lifecycle, server operations, a deterministic non-LLM ranking heuristic, concurrency/security, and a dependency-ordered milestone sequence. It's reconciled against the Claude Design Studio wireframe handoff (same date) and has no remaining open decisions — the two that came up (vote history never feeding future scoring; no push notifications in v1) were confirmed directly with the developer and are recorded as settled in the proposal's own "Decisions made in this pass" section. It is explicitly not implementation. Do not sequence or start implementation work against this until it's placed for real as a milestone.
 
 ---
 
