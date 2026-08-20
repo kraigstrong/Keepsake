@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Animated,
-  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   StyleSheet,
   View,
-  type KeyboardEvent,
 } from 'react-native';
 import {
   PanGestureHandler,
@@ -84,22 +83,6 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
   // drag in progress shouldn't fight with, or get overwritten by, the
   // open/close timing.
   const [dragY] = useState(() => new Animated.Value(0));
-  // Bottom padding that keeps sheet content clear of the keyboard — see
-  // the container style comment below for why this is hand-rolled
-  // instead of KeyboardAvoidingView.
-  const [keyboardPadding] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return undefined;
-    const subscription = Keyboard.addListener('keyboardWillShow', (event: KeyboardEvent) => {
-      Animated.timing(keyboardPadding, {
-        toValue: event.endCoordinates.height,
-        duration: event.duration || ANIMATION_DURATION_MS,
-        useNativeDriver: false, // padding can't use the native driver
-      }).start();
-    });
-    return () => subscription.remove();
-  }, [keyboardPadding]);
 
   const openAnimated = useCallback(() => {
     if (reducedMotion) {
@@ -115,15 +98,12 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
 
   useEffect(() => {
     // Opening is triggered by onShow below instead — see the comment
-    // above for why starting it here doesn't work. keyboardPadding is
-    // reset here too, deliberately not on every keyboard-hide — see the
-    // container style comment below.
+    // above for why starting it here doesn't work.
     if (!visible) {
       progress.setValue(0);
       dragY.setValue(0);
-      keyboardPadding.setValue(0);
     }
-  }, [visible, progress, dragY, keyboardPadding]);
+  }, [visible, progress, dragY]);
 
   const onDragGestureEvent = Animated.event<PanGestureHandlerGestureEvent>(
     [{ nativeEvent: { translationY: dragY } }],
@@ -163,30 +143,19 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
       testID={testID}
     >
       {/* A transparent Modal renders as its own native window on iOS,
-          outside the app's own keyboard-avoidance (if any) — the sheet
+          outside the app's own KeyboardAvoidingView (if any) — the sheet
           needs its own, or a focused TextInput inside it (e.g.
           DoneCookingSheet's note field) sits directly under the keyboard
           with no way to shift out of the way. Found via live testing,
-          2026-08-14. keyboardPadding (iOS only — Android's default
+          2026-08-14. behavior="padding" (iOS only — Android's default
           windowSoftInputMode already resizes the view) adds bottom
           padding to this flex-end container as the keyboard rises,
           which pushes the sheet itself higher; it doesn't fight the
           open/close transform below, since that's a visual offset on
-          top of whatever this container's own layout height is.
-
-          Hand-rolled instead of RN's own KeyboardAvoidingView: that
-          component collapses this padding back to 0 on *any*
-          keyboardWillHide/keyboardDidHide, including one triggered as a
-          side effect of tapping a button inside the sheet (touching a
-          button blurs the currently-focused TextInput, which dismisses
-          the keyboard) — found live testing 2026-08-20, a confirm button
-          moving out from under an in-progress touch made Pressable's
-          touch-up-in-bounds check reject the release, needing a second
-          tap. keyboardPadding only ever resets when the sheet itself
-          closes (above), never merely because the keyboard hid, so
-          nothing here moves mid-touch. */}
-      <Animated.View
-        style={[styles.container, Platform.OS === 'ios' && { paddingBottom: keyboardPadding }]}
+          top of whatever this container's own layout height is. */}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Animated.View
           style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
@@ -218,7 +187,7 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
           </PanGestureHandler>
           {children}
         </Animated.View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
