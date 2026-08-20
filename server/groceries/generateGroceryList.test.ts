@@ -337,6 +337,97 @@ describe('generateGroceryList', () => {
       // the existing volume-merge test above.
       expect(flour!.amounts[0]).toBe('~3 1/4 cups flour');
     });
+
+    // Found via live testing, 2026-08-19 (Journey 1 walkthrough): a plan
+    // with crepes (several cups of flour) and cheese sauce (a few tbsp
+    // of flour), merged with the tbsp occurrence encountered first, used
+    // to display "66 tbsp flour" instead of something cup-scale.
+    it('bumps a spoon-unit total up to cup when cup is used elsewhere for the same ingredient', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '2 tbsp flour',
+            quantityMin: 2,
+            unit: 'tbsp',
+            ingredientText: 'flour',
+          }),
+        ]),
+        entry('r2', 1, [
+          line({ lineText: '4 cups flour', quantityMin: 4, unit: 'cup', ingredientText: 'flour' }),
+        ]),
+      ]);
+
+      const flour = findItem(items, 'flour');
+      expect(flour!.amounts).toHaveLength(1);
+      // 2 tbsp (1/8 cup) + 4 cups = 4 1/8 cups, not "66 tbsp".
+      expect(flour!.amounts[0]).toBe('~4 1/8 cups flour');
+    });
+
+    // A spoon-unit total never bumps to a unit no occurrence actually
+    // used — no cup anywhere in this plan means "24 tbsp" stays "24
+    // tbsp" rather than inventing a cup conversion out of nowhere.
+    it('leaves a spoon-unit total alone when no coarser unit is used elsewhere', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({
+            lineText: '12 tbsp butter',
+            quantityMin: 12,
+            unit: 'tbsp',
+            ingredientText: 'butter',
+          }),
+        ]),
+        entry('r2', 1, [
+          line({
+            lineText: '12 tbsp butter',
+            quantityMin: 12,
+            unit: 'tbsp',
+            ingredientText: 'butter',
+          }),
+        ]),
+      ]);
+
+      const butter = findItem(items, 'butter');
+      expect(butter!.amounts).toEqual(['24 tbsp butter']);
+    });
+
+    // The approved rule bumps a spoon-unit total only toward cup, never
+    // tsp toward tbsp on its own — 1 tsp + 1 tbsp salt (no cup anywhere)
+    // stays a plain sum, whichever occurrence happened to come first.
+    // Found by Codex review, PR #82: an earlier version of this fix also
+    // promoted tsp to tbsp without a cup present, which was never part
+    // of the reviewed scope.
+    it('does not promote tsp to tbsp on its own when no cup is present', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({ lineText: '1 tsp salt', quantityMin: 1, unit: 'tsp', ingredientText: 'salt' }),
+        ]),
+        entry('r2', 1, [
+          line({ lineText: '1 tbsp salt', quantityMin: 1, unit: 'tbsp', ingredientText: 'salt' }),
+        ]),
+      ]);
+
+      // 1 tsp + 1 tbsp (3 tsp), summed in tsp (the first occurrence's
+      // unit) = 4 tsp -- "~" marks the cross-unit conversion's rounding,
+      // same as the existing volume-merge tests above.
+      expect(findItem(items, 'salt')!.amounts).toEqual(['~4 tsp salt']);
+    });
+
+    // Cup and up are left alone even when a coarser unit is technically
+    // reachable — 1 cup + 1 pint stays "3 cups", not "1.5 pints" (see
+    // the "must merge" test above); this is the same rule confirmed
+    // still holding when a spoon unit is also in the mix.
+    it('does not bump a non-spoon target unit even when a coarser one is present', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({ lineText: '1 cup milk', quantityMin: 1, unit: 'cup', ingredientText: 'milk' }),
+        ]),
+        entry('r2', 1, [
+          line({ lineText: '1 pint milk', quantityMin: 1, unit: 'pint', ingredientText: 'milk' }),
+        ]),
+      ]);
+
+      expect(findItem(items, 'milk')!.amounts).toEqual(['3 cups milk']);
+    });
   });
 
   describe('categorization and staples', () => {
