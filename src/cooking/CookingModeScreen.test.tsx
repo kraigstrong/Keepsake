@@ -375,26 +375,55 @@ describe('CookingModeScreen', () => {
       expect(mockedSubmitPendingCookingEvents).toHaveBeenCalledWith('h1');
     });
 
-    it('confirming via onTouchStart alone still completes — the touch-lost-gesture workaround', async () => {
-      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
-      await renderCookingModeScreen();
-      await openDoneCookingSheet();
-
-      await fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'touchStart');
-
-      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
-    });
-
-    it('does not double-enqueue when both onTouchStart and onPress fire for one activation', async () => {
+    it('confirming via the touch-workaround path (touchStart then touchEnd) completes', async () => {
       mockedEnqueueCookingEvent.mockResolvedValue(undefined);
       await renderCookingModeScreen();
       await openDoneCookingSheet();
 
       const confirmButton = screen.getByTestId('done-cooking-confirm-button');
-      await fireEvent(confirmButton, 'touchStart');
+      await fireEvent(confirmButton, 'touchStart', { nativeEvent: { pageX: 100, pageY: 500 } });
+      await fireEvent(confirmButton, 'touchEnd');
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not double-enqueue when both the touch-workaround path and onPress fire for one activation', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      const confirmButton = screen.getByTestId('done-cooking-confirm-button');
+      await fireEvent(confirmButton, 'touchStart', { nativeEvent: { pageX: 100, pageY: 500 } });
+      await fireEvent(confirmButton, 'touchEnd');
       await fireEvent.press(confirmButton);
 
       await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
+    it('cancels the confirm when the touch drags away from the button before release', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      const confirmButton = screen.getByTestId('done-cooking-confirm-button');
+      await fireEvent(confirmButton, 'touchStart', { nativeEvent: { pageX: 100, pageY: 500 } });
+      await fireEvent(confirmButton, 'touchMove', { nativeEvent: { pageX: 100, pageY: 300 } });
+      await fireEvent(confirmButton, 'touchEnd');
+
+      expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
+    });
+
+    it('cancels the confirm on a native touch-cancel', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      const confirmButton = screen.getByTestId('done-cooking-confirm-button');
+      await fireEvent(confirmButton, 'touchStart', { nativeEvent: { pageX: 100, pageY: 500 } });
+      await fireEvent(confirmButton, 'touchCancel');
+      await fireEvent(confirmButton, 'touchEnd');
+
+      expect(mockedEnqueueCookingEvent).not.toHaveBeenCalled();
     });
 
     it('confirming with a note trims it and passes it through', async () => {
