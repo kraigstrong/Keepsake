@@ -25,7 +25,6 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Recently shipped
 
-- Cooking Mode Done Cooking double-tap fix — [PR #86](https://github.com/kraigstrong/Keepsake/pull/86), confirmed live 2026-08-20, supersedes PR #85's ineffective first attempt. Not yet merged. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Smart Meal Selection architecture proposal — [PR #84](https://github.com/kraigstrong/Keepsake/pull/84). See `docs/roadmap.md`'s Unplaced section.
 - Period-abbreviated-unit parsing fix — [PR #83](https://github.com/kraigstrong/Keepsake/pull/83). See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Grocery-merge unit-selection bug — [PR #82](https://github.com/kraigstrong/Keepsake/pull/82). See `docs/roadmap.md`'s Not-yet-triaged backlog.
