@@ -81,6 +81,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 Small items with no milestone assignment yet — moved here from `docs/current.md`'s old carried-forward list rather than left with nowhere to live. Needs its own pass to sort into milestones above; not force-sorted into this first draft.
 
+- **"Original Photo" button on RecipeDetailScreen reads as an ugly/awkward visual element** — developer feedback, 2026-08-20: for photo/image-imported recipes, the button (`RecipeDetailScreen.tsx`'s `recipe-detail-original-photo-button`, next to Start Cooking) doesn't fit the screen's look. Not a functional bug — the button works, just needs a design pass. Not picked up yet.
 - **`captureFromCamera()` physical-device confirmation** — deliberately deferred by the developer (not forgotten). Low risk: shares its permission/cancel pattern with the already-confirmed `pickExistingPhoto()`.
 - **1Password SSH agent guidance** — not addressed. Low priority for a single-developer project.
 - **Squash-merge is still allowed at the repo level** — not urgent, not yet revisited.
