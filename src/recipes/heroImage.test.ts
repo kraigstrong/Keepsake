@@ -137,4 +137,30 @@ describe('getHeroImageUrl', () => {
 
     expect(await getHeroImageUrl('household-1/missing.jpg')).toBeNull();
   });
+
+  it('reuses a cached URL for the same path instead of minting a new one', async () => {
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValue({ data: { signedUrl: 'https://example.com/cached' }, error: null });
+    mockedStorageFrom.mockReturnValue({ createSignedUrl });
+
+    const first = await getHeroImageUrl('household-1/cache-me.jpg');
+    const second = await getHeroImageUrl('household-1/cache-me.jpg');
+
+    expect(first).toBe('https://example.com/cached');
+    expect(second).toBe('https://example.com/cached');
+    expect(createSignedUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache a failed resolution — a later call retries', async () => {
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: new Error('not found') })
+      .mockResolvedValueOnce({ data: { signedUrl: 'https://example.com/retry' }, error: null });
+    mockedStorageFrom.mockReturnValue({ createSignedUrl });
+
+    expect(await getHeroImageUrl('household-1/retry-me.jpg')).toBeNull();
+    expect(await getHeroImageUrl('household-1/retry-me.jpg')).toBe('https://example.com/retry');
+    expect(createSignedUrl).toHaveBeenCalledTimes(2);
+  });
 });

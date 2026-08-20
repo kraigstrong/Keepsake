@@ -86,9 +86,24 @@ export async function uploadHeroImage(householdId: string, localUri: string): Pr
  * fall back to a placeholder instead of failing the whole screen over
  * a missing/stale image.
  */
-export async function getHeroImageUrl(path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
+// createSignedUrl mints a brand-new URL string on every call, even for
+// the same object — without caching, a screen that re-resolves the same
+// path twice in quick succession (e.g. ThisWeekScreen.tsx's load(),
+// which can genuinely run more than once as a nested tab screen's focus
+// settles) hands its <Image> a changed `uri` for an unchanged photo,
+// which visibly re-fetches/redecodes. Safe to cache by path for the
+// session: a hero image's path is a fresh random id per upload (see
+// uploadHeroImage above), never reused, so a cached URL can't ever point
+// at stale content.
+const signedUrlCache = new Map<string, string>();
 
+export async function getHeroImageUrl(path: string): Promise<string | null> {
+  const cached = signedUrlCache.get(path);
+  if (cached) return cached;
+
+  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
   if (error) return null;
+
+  signedUrlCache.set(path, data.signedUrl);
   return data.signedUrl;
 }
