@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<style>
+body{margin:0;background:#EDEBE6;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif}
+.dv-turn{padding:48px 44px 60px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 16px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-intro{font:14px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:680px;margin:0 0 36px}
+.dv-opt{display:flex;flex-direction:column;gap:16px;margin-bottom:56px}
+.dv-oid{font:600 11px ui-monospace,Menlo,monospace;padding:3px 8px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
+.dv-oname{font:700 19px system-ui,sans-serif;color:#1a1a1a}
+.dv-osub{font:400 13px system-ui,sans-serif;color:rgba(0,0,0,.5)}
+.dv-frames{display:flex;gap:24px;flex-wrap:nowrap}
+.dv-fcol{display:flex;flex-direction:column;gap:8px;flex:none}
+.dv-screenlabel{font:600 11px ui-monospace,Menlo,monospace;color:rgba(0,0,0,.42);text-align:center}
+.dv-card{width:390px;height:844px;overflow:hidden;position:relative;border:1px solid rgba(0,0,0,.14);box-shadow:0 10px 28px rgba(0,0,0,.10);flex:none}
+.dv-rationale{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:26px 30px;width:1608px;box-sizing:border-box;margin-top:4px}
+.dv-rblock h4{margin:0 0 7px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:rgba(0,0,0,.4)}
+.dv-rblock p{margin:0;font:13px/1.55 system-ui,sans-serif;color:#2a2a2a}
+.dv-swatches{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.dv-sw{width:34px;height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.12);display:flex;align-items:flex-end;justify-content:center;font:8px ui-monospace,monospace;color:rgba(0,0,0,.5);padding-bottom:1px}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Keepsake — Ink &amp; Paper</span></div>
+<p class="dv-intro">Same four screens, now carrying the real recipe/planning model from the PRD: serving scaler, categories/tags, cooking notes, a bottom tab bar (This Week / Library per the IA), and a "Keep screen awake" cue + Done Cooking action in Cooking Mode. Library is expanded to 20 recipes with Smart sort sections and category filters. A small wordmark/icon study and a bonus Import-flow screen are included at the end.</p>
+
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a><span class="dv-oname">This Week</span><span class="dv-osub">planning (editable) vs. confirmed (ready to cook)</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">This Week — Planning</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:8px 24px 0;">
+<div style="font-size:28px;font-weight:700;letter-spacing:-0.02em;">This Week</div>
+<div style="display:flex;justify-content:flex-end;margin-top:6px;"><a href="#" style="font-size:14px;font-weight:600;color:#B5502E;text-decoration:none;">Confirm Plan</a></div>
+</div>
+<div style="flex:1;padding:14px 24px 0;overflow:hidden;display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wk-1" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Herb Roast Chicken &amp; Potatoes</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="14" height="20" viewBox="0 0 14 20" fill="rgba(33,29,24,.35)"><circle cx="3" cy="3" r="1.6"/><circle cx="11" cy="3" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="11" cy="10" r="1.6"/><circle cx="3" cy="17" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wk-2" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Weeknight Spaghetti Aglio e Olio</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 2</div></div><svg width="14" height="20" viewBox="0 0 14 20" fill="rgba(33,29,24,.35)"><circle cx="3" cy="3" r="1.6"/><circle cx="11" cy="3" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="11" cy="10" r="1.6"/><circle cx="3" cy="17" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wk-3" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Chickpea Coconut Dal</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="14" height="20" viewBox="0 0 14 20" fill="rgba(33,29,24,.35)"><circle cx="3" cy="3" r="1.6"/><circle cx="11" cy="3" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="11" cy="10" r="1.6"/><circle cx="3" cy="17" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wk-4" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Sheet-Pan Salmon &amp; Asparagus</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="14" height="20" viewBox="0 0 14 20" fill="rgba(33,29,24,.35)"><circle cx="3" cy="3" r="1.6"/><circle cx="11" cy="3" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="11" cy="10" r="1.6"/><circle cx="3" cy="17" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg></div>
+</div>
+<div style="flex:none;height:64px;border-top:1px solid rgba(33,29,24,.12);display:flex;align-items:center;justify-content:space-around;padding-bottom:6px;">
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#211D18;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="11" width="13" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="17" width="8" height="2.4" rx="1.2" fill="currentColor"/></svg><span style="font-size:10.5px;font-weight:700;">This Week</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:rgba(33,29,24,.4);"><svg width="20" height="22" viewBox="0 0 20 22" fill="none"><path d="M2 2h16v18l-8-5.5L2 20V2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span style="font-size:10.5px;font-weight:500;">Library</span></div>
+</div>
+</div>
+</div></div>
+
+<div class="dv-fcol"><div class="dv-screenlabel">This Week — Confirmed</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:8px 24px 0;">
+<div style="font-size:28px;font-weight:700;letter-spacing:-0.02em;">This Week</div>
+<div style="display:flex;justify-content:flex-end;margin-top:6px;"><a href="#" style="font-size:13px;font-weight:600;color:rgba(33,29,24,.45);text-decoration:none;">Edit Plan</a></div>
+</div>
+<div style="flex:none;margin:12px 24px 0;display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(181,80,46,.07);border:1px solid rgba(181,80,46,.25);border-radius:12px;"><span style="flex:1;font-size:13.5px;color:#211D18;">Ready for groceries?</span><span style="font-size:13px;font-weight:700;color:#B5502E;">Export</span></div>
+<div style="flex:1;padding:16px 24px 0;overflow:hidden;display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wkc-1" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Herb Roast Chicken &amp; Potatoes</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="8" height="14" viewBox="0 0 8 14" fill="none"><polyline points="1,1 7,7 1,13" stroke="rgba(33,29,24,.3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wkc-2" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Weeknight Spaghetti Aglio e Olio</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 2</div></div><svg width="8" height="14" viewBox="0 0 8 14" fill="none"><polyline points="1,1 7,7 1,13" stroke="rgba(33,29,24,.3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wkc-3" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Chickpea Coconut Dal</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="8" height="14" viewBox="0 0 8 14" fill="none"><polyline points="1,1 7,7 1,13" stroke="rgba(33,29,24,.3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(33,29,24,.12);"><image-slot id="d1p-wkc-4" shape="rounded" radius="10" style="width:58px;height:58px;flex:none;" placeholder="photo"></image-slot><div style="flex:1;"><div style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;">Sheet-Pan Salmon &amp; Asparagus</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:2px;">Serves 4</div></div><svg width="8" height="14" viewBox="0 0 8 14" fill="none"><polyline points="1,1 7,7 1,13" stroke="rgba(33,29,24,.3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+</div>
+<div style="flex:none;height:64px;border-top:1px solid rgba(33,29,24,.12);display:flex;align-items:center;justify-content:space-around;padding-bottom:6px;">
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#211D18;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="11" width="13" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="17" width="8" height="2.4" rx="1.2" fill="currentColor"/></svg><span style="font-size:10.5px;font-weight:700;">This Week</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:rgba(33,29,24,.4);"><svg width="20" height="22" viewBox="0 0 20 22" fill="none"><path d="M2 2h16v18l-8-5.5L2 20V2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span style="font-size:10.5px;font-weight:500;">Library</span></div>
+</div>
+</div>
+</div></div>
+</div>
+<p style="font:13px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.55);max-width:900px;margin-top:10px;">Once confirmed: drag handles disappear (the plan is set), "Confirm Plan" demotes to a quiet "Edit Plan" link, a chevron replaces the handle to signal rows now open the recipe (toward Cooking Mode) rather than reorder it, and a one-line groceries prompt appears per the PRD's confirm → offer-export workflow (§15, §19). "Edit Plan" returns to the Planning state on the left.</p>
+</div>
+
+<div class="dv-opt" id="2b">
+<div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a><span class="dv-oname">Library</span><span class="dv-osub">20 recipes, Smart sort + category filters</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">Library</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:8px 24px 0;display:flex;align-items:center;justify-content:space-between;"><div style="font-size:28px;font-weight:700;letter-spacing:-0.02em;">Library</div><svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="color:#211D18;"><line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="7" r="2.2" fill="#F7F3EC" stroke="currentColor" stroke-width="2"/><line x1="4" y1="14" x2="20" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="2.2" fill="#F7F3EC" stroke="currentColor" stroke-width="2"/><line x1="4" y1="21" x2="20" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="21" r="2.2" fill="#F7F3EC" stroke="currentColor" stroke-width="2"/></svg></div>
+<div style="flex:none;margin:12px 24px 0;display:flex;align-items:center;gap:10px;">
+<div style="flex:1;display:flex;align-items:center;gap:8px;padding-bottom:9px;border-bottom:1.5px solid rgba(33,29,24,.28);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#211D18" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#211D18" stroke-width="2" stroke-linecap="round"/></svg><span style="font-size:15px;color:rgba(33,29,24,.45);">Search recipes</span></div>
+<div style="width:34px;height:34px;border-radius:9px;border:1px solid rgba(33,29,24,.22);display:flex;align-items:center;justify-content:center;position:relative;flex:none;margin-bottom:9px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polygon points="3,4 21,4 14,13 14,20 10,20 10,13" stroke="#211D18" stroke-width="2" stroke-linejoin="round"/></svg><div style="position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:4px;background:#B5502E;border:1.5px solid #F7F3EC;"></div></div>
+</div>
+<div style="flex:none;padding:10px 24px 0;"><span style="font-size:12.5px;font-weight:600;color:rgba(33,29,24,.5);">Sort: Smart</span></div>
+<div style="flex:1;overflow:hidden;padding:4px 24px 0;display:flex;flex-direction:column;">
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.35);margin-top:14px;">Recently Added</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Shrimp Fried Rice</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Grilled Flank Steak</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.35);margin-top:14px;">Frequently Cooked</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Herb Roast Chicken &amp; Potatoes</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Weeknight Spaghetti Aglio e Olio</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Air Fryer Chicken Thighs</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.35);margin-top:14px;">All Recipes</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Apple Crisp</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Baked Ziti</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Braised Short Ribs</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Butternut Squash Soup</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Chickpea Coconut Dal</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Chocolate Chip Cookies</div>
+<div style="padding:11px 0;border-bottom:1px solid rgba(33,29,24,.10);font-size:16px;font-weight:500;">Classic Beef Tacos</div>
+</div>
+<div style="flex:none;height:64px;border-top:1px solid rgba(33,29,24,.12);display:flex;align-items:center;justify-content:space-around;padding-bottom:6px;">
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:rgba(33,29,24,.4);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="11" width="13" height="2.4" rx="1.2" fill="currentColor"/><rect x="3" y="17" width="8" height="2.4" rx="1.2" fill="currentColor"/></svg><span style="font-size:10.5px;font-weight:500;">This Week</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#211D18;"><svg width="20" height="22" viewBox="0 0 20 22" fill="none"><path d="M2 2h16v18l-8-5.5L2 20V2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span style="font-size:10.5px;font-weight:700;">Library</span></div>
+</div>
+</div>
+</div></div>
+</div>
+<p style="font:13px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.55);max-width:600px;margin-top:10px;">Full recipe set (20, spanning protein/dish-type/prep per PRD §12): Herb Roast Chicken &amp; Potatoes, Weeknight Spaghetti Aglio e Olio, Chickpea Coconut Dal, Sheet-Pan Salmon &amp; Asparagus, Mushroom Risotto, Turkey &amp; Bean Chili, Greek Salad with Grilled Chicken, Miso Soba Noodles, Braised Short Ribs, Crispy Tofu Stir-Fry, Classic Beef Tacos, Lemon Butter Cod, Slow Cooker Pulled Pork, Air Fryer Chicken Thighs, Butternut Squash Soup, Baked Ziti, Grilled Flank Steak, Shrimp Fried Rice, Apple Crisp, Chocolate Chip Cookies.</p>
+</div>
+
+<div class="dv-opt" id="2c">
+<div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a><span class="dv-oname">Recipe Detail</span><span class="dv-osub">serving scale, categories, notes/history, overflow</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">Recipe Detail</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:6px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="15,5 8,12 15,19" stroke="#211D18" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="#211D18"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+</div>
+<div style="flex:1;overflow:hidden;padding:6px 24px 0;display:flex;flex-direction:column;">
+<image-slot id="d1p-det-hero" shape="rounded" radius="16" style="width:100%;height:158px;flex:none;" placeholder="hero photo"></image-slot>
+<div style="font-size:23px;font-weight:700;letter-spacing:-0.02em;margin-top:14px;">Herb Roast Chicken &amp; Potatoes</div>
+<div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:4px;">From <span style="color:#B5502E;font-weight:600;">seriouseats.com</span></div>
+<div style="font-size:13px;color:rgba(33,29,24,.55);margin-top:8px;">20 min active · 1 hr 10 min total</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+<div style="font-size:12.5px;color:rgba(33,29,24,.55);margin-right:2px;">Serves</div>
+<div style="display:flex;align-items:center;gap:8px;border:1px solid rgba(33,29,24,.2);border-radius:8px;padding:3px 8px;"><span style="font-size:14px;">−</span><span style="font-size:14px;font-weight:600;">4</span><span style="font-size:14px;">+</span></div>
+<div style="display:flex;gap:5px;margin-left:4px;">
+<div style="font-size:11px;font-weight:600;padding:4px 8px;border-radius:100px;border:1px solid rgba(33,29,24,.2);color:rgba(33,29,24,.45);">½×</div>
+<div style="font-size:11px;font-weight:600;padding:4px 8px;border-radius:100px;background:#211D18;color:#F7F3EC;">1×</div>
+<div style="font-size:11px;font-weight:600;padding:4px 8px;border-radius:100px;border:1px solid rgba(33,29,24,.2);color:rgba(33,29,24,.45);">2×</div>
+</div>
+</div>
+<div style="display:flex;gap:6px;margin-top:12px;">
+<div style="font-size:11.5px;padding:4px 10px;border-radius:100px;border:1px solid rgba(33,29,24,.18);color:rgba(33,29,24,.55);">Chicken</div>
+<div style="font-size:11.5px;padding:4px 10px;border-radius:100px;border:1px solid rgba(33,29,24,.18);color:rgba(33,29,24,.55);">Roast</div>
+<div style="font-size:11.5px;padding:4px 10px;border-radius:100px;border:1px solid rgba(33,29,24,.18);color:rgba(33,29,24,.55);">Oven</div>
+</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-top:18px;">Ingredients</div>
+<div style="font-size:14px;line-height:1.85;margin-top:6px;">1 whole chicken (4 lb)<br>2 lb baby potatoes, halved<br>4 sprigs rosemary<br>6 cloves garlic, smashed<br>3 tbsp olive oil<br>1 lemon, halved</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-top:14px;">Instructions</div>
+<div style="font-size:14px;line-height:1.7;margin-top:6px;">1. Heat oven to 425°F.<br>2. Season chicken inside and out.<br>3. Toss potatoes with oil, garlic, rosemary.<br>4. Set chicken on top, lemon in cavity.</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-top:14px;">Cooking Notes</div>
+<div style="font-size:13.5px;line-height:1.6;color:rgba(33,29,24,.65);margin-top:6px;font-style:italic;">"Needed another tsp salt." — Jun 2</div>
+</div>
+<div style="flex:none;padding:12px 24px 20px;"><div style="width:100%;height:50px;background:#B5502E;color:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Add to This Week</div></div>
+</div>
+</div></div>
+</div>
+</div>
+
+<div class="dv-opt" id="2d">
+<div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a><span class="dv-oname">Cooking Mode</span><span class="dv-osub">keep-awake cue + Done Cooking, light and dark</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">Cooking Mode</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;">
+<div style="flex:none;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+<div style="display:flex;align-items:center;gap:6px;"><div style="width:6px;height:6px;border-radius:3px;background:#B5502E;"></div><span style="font-size:11.5px;color:rgba(33,29,24,.5);">Staying awake while you cook</span></div>
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="5" y1="5" x2="19" y2="19" stroke="rgba(33,29,24,.4)" stroke-width="2.2" stroke-linecap="round"/><line x1="19" y1="5" x2="5" y2="19" stroke="rgba(33,29,24,.4)" stroke-width="2.2" stroke-linecap="round"/></svg>
+</div>
+<div style="flex:1;overflow:hidden;padding:14px 24px 0;">
+<div style="font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-bottom:14px;">Herb Roast Chicken &amp; Potatoes</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-bottom:10px;">Ingredients</div>
+<div style="display:flex;flex-direction:column;gap:13px;">
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#B5502E"/><polyline points="5,10 8.5,13.5 15,6.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:16px;color:rgba(33,29,24,.4);text-decoration:line-through;">1 whole chicken (4 lb)</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#B5502E"/><polyline points="5,10 8.5,13.5 15,6.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:16px;color:rgba(33,29,24,.4);text-decoration:line-through;">2 lb baby potatoes, halved</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="rgba(33,29,24,.5)" stroke-width="1.6"/></svg><span style="font-size:16px;">4 sprigs rosemary, 6 cloves garlic</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="rgba(33,29,24,.5)" stroke-width="1.6"/></svg><span style="font-size:16px;">3 tbsp olive oil, 1 lemon</span></div>
+</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin:20px 0 10px;">Instructions</div>
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#B5502E;flex:none;width:20px;">1</span><span style="font-size:16px;line-height:1.5;">Heat oven to 425°F.</span></div>
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#B5502E;flex:none;width:20px;">2</span><span style="font-size:16px;line-height:1.5;">Toss potatoes with oil, garlic and rosemary in the pan.</span></div>
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#B5502E;flex:none;width:20px;">3</span><span style="font-size:16px;line-height:1.5;">Set chicken on top, lemon in the cavity, roast 55–65 min.</span></div>
+</div>
+</div>
+<div style="flex:none;padding:12px 24px 20px;"><div style="width:100%;height:50px;background:#211D18;color:#F7F3EC;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Done Cooking</div></div>
+</div>
+</div></div>
+<div class="dv-fcol"><div class="dv-screenlabel">Cooking Mode — Dark</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#1C1A17;color:#F0EBE2;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;">
+<div style="flex:none;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+<div style="display:flex;align-items:center;gap:6px;"><div style="width:6px;height:6px;border-radius:3px;background:#D97B57;"></div><span style="font-size:11.5px;color:rgba(240,235,226,.5);">Staying awake while you cook</span></div>
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="5" y1="5" x2="19" y2="19" stroke="rgba(240,235,226,.4)" stroke-width="2.2" stroke-linecap="round"/><line x1="19" y1="5" x2="5" y2="19" stroke="rgba(240,235,226,.4)" stroke-width="2.2" stroke-linecap="round"/></svg>
+</div>
+<div style="flex:1;overflow:hidden;padding:14px 24px 0;">
+<div style="font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-bottom:14px;">Herb Roast Chicken &amp; Potatoes</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,235,226,.4);margin-bottom:10px;">Ingredients</div>
+<div style="display:flex;flex-direction:column;gap:13px;">
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#D97B57"/><polyline points="5,10 8.5,13.5 15,6.5" fill="none" stroke="#1C1A17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:16px;color:rgba(240,235,226,.35);text-decoration:line-through;">1 whole chicken (4 lb)</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="rgba(240,235,226,.45)" stroke-width="1.6"/></svg><span style="font-size:16px;">2 lb baby potatoes, halved</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="rgba(240,235,226,.45)" stroke-width="1.6"/></svg><span style="font-size:16px;">4 sprigs rosemary, 6 cloves garlic</span></div>
+<div style="display:flex;align-items:center;gap:12px;"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="rgba(240,235,226,.45)" stroke-width="1.6"/></svg><span style="font-size:16px;">3 tbsp olive oil, 1 lemon</span></div>
+</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,235,226,.4);margin:20px 0 10px;">Instructions</div>
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#D97B57;flex:none;width:20px;">1</span><span style="font-size:16px;line-height:1.5;">Heat oven to 425°F.</span></div>
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#D97B57;flex:none;width:20px;">2</span><span style="font-size:16px;line-height:1.5;">Toss potatoes with oil, garlic and rosemary in the pan.</span></div>
+<div style="display:flex;gap:12px;"><span style="font-size:15px;font-weight:700;color:#D97B57;flex:none;width:20px;">3</span><span style="font-size:16px;line-height:1.5;">Set chicken on top, lemon in the cavity, roast 55–65 min.</span></div>
+</div>
+</div>
+<div style="flex:none;padding:12px 24px 20px;"><div style="width:100%;height:50px;background:#F0EBE2;color:#1C1A17;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Done Cooking</div></div>
+</div>
+</div></div>
+</div>
+</div>
+
+<div class="dv-opt" id="2e">
+<div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a><span class="dv-oname">Bonus: Import + Wordmark</span><span class="dv-osub">not in this round's core scope, included as a preview</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">Import</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:8px 24px 0;font-size:28px;font-weight:700;letter-spacing:-0.02em;">New Recipe</div>
+<div style="flex:none;margin:16px 24px 0;display:flex;align-items:center;gap:8px;border:1.5px solid rgba(33,29,24,.25);border-radius:10px;padding:12px 14px;font-size:14px;color:rgba(33,29,24,.7);">seriouseats.com/herb-roast-chicken</div>
+<div style="flex:1;overflow:hidden;padding:18px 24px 0;">
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-bottom:8px;">Preview</div>
+<div style="display:flex;gap:12px;align-items:center;padding:12px;border:1px solid rgba(33,29,24,.12);border-radius:12px;"><image-slot id="d1p-imp-thumb" shape="rounded" radius="8" style="width:52px;height:52px;flex:none;" placeholder="photo"></image-slot><div style="font-size:15.5px;font-weight:600;">Herb Roast Chicken &amp; Potatoes</div></div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-top:18px;margin-bottom:8px;">Ingredients</div>
+<div style="display:flex;flex-direction:column;gap:9px;font-size:14px;">
+<div>1 whole chicken (4 lb)</div>
+<div>2 lb baby potatoes, halved</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:rgba(181,80,46,.07);border:1.5px dashed rgba(181,80,46,.45);border-radius:8px;">
+<span>4 sprigs rosemary <span style="color:rgba(33,29,24,.45);">(estimated)</span></span>
+<div style="display:flex;align-items:center;gap:5px;flex:none;"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 1v12M2 1h8l-2 3 2 3H2" stroke="#B5502E" stroke-width="1.6" stroke-linejoin="round"/></svg><span style="font-size:11.5px;font-weight:700;color:#B5502E;">Confirm</span></div>
+</div>
+<div>6 cloves garlic, smashed</div>
+</div>
+<div style="margin-top:8px;"><span style="font-size:12px;color:rgba(33,29,24,.45);">Tap a flagged item to confirm or edit it</span></div>
+</div>
+<div style="flex:none;padding:12px 24px 20px;"><div style="width:100%;height:50px;background:#B5502E;color:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Save Recipe</div></div>
+</div>
+</div></div>
+<div class="dv-fcol"><div class="dv-screenlabel">Wordmark / Icon</div><div class="dv-card" style="height:auto;box-shadow:none;border:none;">
+<div style="display:flex;flex-direction:column;gap:20px;padding:8px;">
+<div style="width:120px;height:120px;background:#211D18;border-radius:28px;display:flex;align-items:center;justify-content:center;"><div style="width:38px;height:48px;background:#F7F3EC;clip-path:polygon(0 0,100% 0,100% 100%,50% 76%,0 100%);"></div></div>
+<div style="font-size:38px;font-weight:700;letter-spacing:-0.02em;color:#211D18;">Keepsake</div>
+<div style="font-size:13px;color:rgba(33,29,24,.5);max-width:280px;line-height:1.5;">A quiet bookmark mark — ties the app icon back to "keeping" a recipe, and reads as a ribbon on the spine of a well-used cookbook.</div>
+</div>
+</div></div>
+</div>
+</div>
+
+<div class="dv-opt" id="2f">
+<div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a><span class="dv-oname">Grocery Export</span><span class="dv-osub">grouped review → include/exclude → export</span></div>
+<div class="dv-frames">
+<div class="dv-fcol"><div class="dv-screenlabel">Grocery Export</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;">
+<div style="flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:15px;font-weight:600;"><span>9:41</span><div style="display:flex;align-items:center;gap:6px;"><div style="display:flex;align-items:flex-end;gap:2px;"><div style="width:3px;height:4px;background:#211D18;"></div><div style="width:3px;height:6px;background:#211D18;"></div><div style="width:3px;height:8px;background:#211D18;"></div><div style="width:3px;height:10px;background:#211D18;"></div></div><div style="width:22px;height:11px;border:1.3px solid #211D18;border-radius:3px;box-sizing:border-box;padding:1.5px;"><div style="width:65%;height:100%;background:#211D18;border-radius:1px;"></div></div></div></div>
+<div style="flex:none;padding:6px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="15,5 8,12 15,19" stroke="#211D18" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+<span style="font-size:13px;font-weight:600;color:rgba(33,29,24,.5);">4 recipes</span>
+</div>
+<div style="flex:none;padding:8px 24px 0;"><div style="font-size:28px;font-weight:700;letter-spacing:-0.02em;">Groceries</div><div style="font-size:12.5px;color:rgba(33,29,24,.45);margin-top:3px;">Staples like salt, oil and pepper are left off by default</div></div>
+<div style="flex:1;overflow:hidden;padding:14px 24px 0;">
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin-bottom:6px;">Produce</div>
+<div style="display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Baby potatoes</span><span style="font-size:13px;color:rgba(33,29,24,.4);">2 lb</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Garlic</span><span style="font-size:13px;color:rgba(33,29,24,.4);">8 cloves</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Asparagus</span><span style="font-size:13px;color:rgba(33,29,24,.4);">1 bunch</span></div>
+</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin:14px 0 6px;">Meat &amp; Seafood</div>
+<div style="display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Whole chicken</span><span style="font-size:13px;color:rgba(33,29,24,.4);">4 lb</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="none" stroke="rgba(33,29,24,.35)" stroke-width="1.6"/></svg><span style="flex:1;font-size:15px;color:rgba(33,29,24,.4);">Salmon fillets</span><span style="font-size:13px;color:rgba(33,29,24,.35);">4</span></div>
+</div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(33,29,24,.4);margin:14px 0 6px;">Pantry</div>
+<div style="display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(33,29,24,.08);"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Spaghetti</span><span style="font-size:13px;color:rgba(33,29,24,.4);">1 lb</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 0;"><svg width="19" height="19" viewBox="0 0 19 19"><rect x="1" y="1" width="17" height="17" rx="4" fill="#B5502E"/><polyline points="4.5,9.5 8,13 14.5,5.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="flex:1;font-size:15px;">Chickpeas</span><span style="font-size:13px;color:rgba(33,29,24,.4);">2 cans</span></div>
+</div>
+</div>
+<div style="flex:none;padding:12px 24px 20px;"><div style="width:100%;height:50px;background:#B5502E;color:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Export to Reminders</div></div>
+</div>
+</div></div>
+
+<div class="dv-fcol"><div class="dv-screenlabel">Grocery Export — Sent</div><div class="dv-card">
+<div style="width:100%;height:100%;background:#F7F3EC;color:#211D18;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;overflow:hidden;padding:0 40px;text-align:center;">
+<div style="width:64px;height:64px;border-radius:32px;background:#211D18;display:flex;align-items:center;justify-content:center;margin-bottom:22px;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><polyline points="4,13 10,19 20,6" stroke="#F7F3EC" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;">Sent to Reminders</div>
+<div style="font-size:14px;color:rgba(33,29,24,.55);margin-top:8px;line-height:1.5;">11 items across 3 lists — Produce, Meat &amp; Seafood, Pantry.</div>
+<div style="width:100%;height:50px;background:#211D18;color:#F7F3EC;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;margin-top:28px;">Done</div>
+</div>
+</div></div>
+</div>
+<p style="font:13px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.55);max-width:600px;margin-top:10px;">Rows read as included by default (checked); tapping a row toggles it off, e.g. "Salmon fillets" shown excluded here — no editing or manual merge UI per the PRD, just include/exclude.</p>
+</div>
+
+<p class="dv-next" style="max-width:1608px;">Try next: "add Archive + Recently Deleted" · "add Settings / household" · "make this an interactive prototype"</p>
+</section>
+
+
+
+
+</x-dc>
+</body>
+</html>
