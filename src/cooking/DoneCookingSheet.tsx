@@ -1,9 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 
 import { Button } from '../components/Button';
 import { Sheet } from '../components/Sheet';
 import { colors, radii, spacing, typography } from '../theme/tokens';
+
+// How far a touch can drift from its start before the confirm button's
+// touch-tracking guard (see handleConfirmTouchMove) treats it as a
+// drag-away cancel rather than a tap. Generous relative to normal finger
+// jitter during a stationary tap, tight enough to still catch an
+// intentional drag off the button.
+const CONFIRM_CANCEL_DISTANCE = 24;
 
 export interface DoneCookingSheetProps {
   visible: boolean;
@@ -57,18 +71,6 @@ export function DoneCookingSheet({
       setUserToggled(false);
     }
   }
-  // Guards against the confirm button's onPress and onPressIn (see below)
-  // both firing for one activation. A ref, not state: the two events can
-  // fire close enough together that a state-based guard could still read
-  // stale (pre-update) on the second call, whereas a ref read-then-write
-  // inside the same event-handler call is immediately consistent. Reset
-  // via effect rather than inline during render — mutating a ref during
-  // render is a lint error (react-hooks/refs) and, unlike removeFromPlan's
-  // reset above, this one has no same-render output to stay in sync with.
-  const hasFiredConfirmRef = useRef(false);
-  useEffect(() => {
-    if (visible) hasFiredConfirmRef.current = false;
-  }, [visible]);
   // Codex review, PR #50: the block above only fires on visible's own
   // false->true edge. If the sheet was already open when the plan
   // lookup was still pending (canRemoveFromPlan false at that point),
@@ -83,11 +85,55 @@ export function DoneCookingSheet({
     }
   }
 
+  // Confirm button uses raw touch events (see ButtonProps.onTouchStart
+  // for the full diagnosis) instead of onPress/onPressIn, which RN can
+  // lose entirely for this specific gesture. hasFiredConfirmRef makes it
+  // safe to also keep onPress wired (needed for VoiceOver/TalkBack) —
+  // both share one once-per-open handler. touchOriginRef/touchCancelledRef
+  // defer the actual confirm to touch-end and cancel on a large enough
+  // move or a native touch-cancel (Codex review, PR #86), so a
+  // dragged-away or interrupted touch doesn't record a false completion
+  // — the drag-to-cancel behavior a normal Pressable gives for free, that
+  // bypassing Pressability here would otherwise lose.
+  const hasFiredConfirmRef = useRef(false);
+  const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const touchCancelledRef = useRef(false);
+  useEffect(() => {
+    if (visible) hasFiredConfirmRef.current = false;
+  }, [visible]);
+
   function handleConfirm() {
-    if (hasFiredConfirmRef.current) return;
+    // onTouchEnd bypasses Pressable's own `disabled` gating (it's a raw
+    // View prop, not part of Pressability) — isSubmitting must be
+    // checked here explicitly rather than relying on the Button's
+    // disabled prop alone.
+    if (isSubmitting || hasFiredConfirmRef.current) return;
     hasFiredConfirmRef.current = true;
     onConfirm(note.trim() || null, canRemoveFromPlan && removeFromPlan);
     setNote('');
+  }
+
+  function handleConfirmTouchStart(event: GestureResponderEvent) {
+    touchOriginRef.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+    touchCancelledRef.current = false;
+  }
+
+  function handleConfirmTouchMove(event: GestureResponderEvent) {
+    const origin = touchOriginRef.current;
+    if (!origin) return;
+    const dx = event.nativeEvent.pageX - origin.x;
+    const dy = event.nativeEvent.pageY - origin.y;
+    if (Math.hypot(dx, dy) > CONFIRM_CANCEL_DISTANCE) {
+      touchCancelledRef.current = true;
+    }
+  }
+
+  function handleConfirmTouchEnd() {
+    if (!touchCancelledRef.current) handleConfirm();
+  }
+
+  function handleConfirmTouchCancel() {
+    touchCancelledRef.current = true;
   }
 
   return (
@@ -124,12 +170,11 @@ export function DoneCookingSheet({
 
       <Button
         title="Done Cooking"
-        // Both wired to the same (once-only) handler: onPressIn for the
-        // touch-race workaround (see ButtonProps.onPressIn), onPress kept
-        // so VoiceOver/TalkBack activation — which dispatches through
-        // onPress, not onPressIn — still confirms.
         onPress={handleConfirm}
-        onPressIn={handleConfirm}
+        onTouchStart={handleConfirmTouchStart}
+        onTouchMove={handleConfirmTouchMove}
+        onTouchEnd={handleConfirmTouchEnd}
+        onTouchCancel={handleConfirmTouchCancel}
         disabled={isSubmitting}
         testID="done-cooking-confirm-button"
       />

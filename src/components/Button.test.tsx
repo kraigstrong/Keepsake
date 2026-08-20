@@ -26,23 +26,22 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
-  it('calls onPressIn on touch-down when provided', async () => {
-    const onPressIn = jest.fn();
-    await render(<Button title="Save" onPress={() => {}} onPressIn={onPressIn} />);
+  it('calls onTouchStart on touch-down when provided', async () => {
+    const onTouchStart = jest.fn();
+    await render(<Button title="Save" onPress={() => {}} onTouchStart={onTouchStart} />);
 
-    await fireEvent(screen.getByRole('button', { name: 'Save' }), 'pressIn');
+    await fireEvent(screen.getByRole('button', { name: 'Save' }), 'touchStart');
 
-    expect(onPressIn).toHaveBeenCalledTimes(1);
+    expect(onTouchStart).toHaveBeenCalledTimes(1);
   });
 
-  it('does not call onPressIn when disabled', async () => {
-    const onPressIn = jest.fn();
-    await render(<Button title="Save" onPress={() => {}} onPressIn={onPressIn} disabled />);
-
-    await fireEvent(screen.getByRole('button', { name: 'Save' }), 'pressIn');
-
-    expect(onPressIn).not.toHaveBeenCalled();
-  });
+  // Not tested: onTouchStart firing even when disabled. That's real
+  // RN behavior (onTouchStart is a raw View prop, not Pressability-gated
+  // — see ButtonProps.onTouchStart), but RTL's fireEvent simulates its
+  // own, more conservative model that gates raw touch events on
+  // Pressable's onStartShouldSetResponder() too, so it can't observe
+  // that distinction. DoneCookingSheet's own isSubmitting check is the
+  // real guard against this in production.
 
   it('does not disable Dynamic Type font scaling on its label', async () => {
     await render(<Button title="Save" onPress={() => {}} />);

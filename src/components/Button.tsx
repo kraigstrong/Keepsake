@@ -1,15 +1,24 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, type GestureResponderEvent } from 'react-native';
 
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface ButtonProps {
   title: string;
-  onPress?: () => void;
-  /** Fires on touch-down instead of the (default) touch-up-in-bounds
-   * onPress. Only needed by callers working around Pressability's bounds
-   * check being unreliable when the view relocates mid-touch — see
-   * DoneCookingSheet's confirm button. */
-  onPressIn?: () => void;
+  onPress: () => void;
+  /** Passed straight through to the underlying Pressable's raw View touch
+   * props — not part of Pressability, so they fire even when `disabled`
+   * (callers using them must guard that themselves) and bypass
+   * Pressability's own gesture state machine, which RN's touch-responder
+   * negotiation can occasionally lose entirely (neither onPress nor
+   * onPressIn ever fires) — confirmed via live device testing,
+   * 2026-08-20, specifically when a sibling multiline (UITextView-backed)
+   * TextInput loses focus concurrently with the touch. See
+   * DoneCookingSheet's confirm button for the full diagnosis and a
+   * working cancel-aware guard built on this family of events. */
+  onTouchStart?: (event: GestureResponderEvent) => void;
+  onTouchMove?: (event: GestureResponderEvent) => void;
+  onTouchEnd?: () => void;
+  onTouchCancel?: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   testID?: string;
@@ -18,7 +27,10 @@ export interface ButtonProps {
 export function Button({
   title,
   onPress,
-  onPressIn,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onTouchCancel,
   variant = 'primary',
   disabled,
   testID,
@@ -26,7 +38,10 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={onPressIn}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
       disabled={disabled}
       accessibilityRole="button"
       testID={testID}
