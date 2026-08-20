@@ -110,7 +110,14 @@ export function DoneCookingSheet({
 
       <Button
         title="Done Cooking"
-        onPress={handleConfirm}
+        // onPressIn, not onPress: dismissing the note TextInput's keyboard
+        // (a side effect of touching this button while it's focused)
+        // re-collapses the sheet's KeyboardAvoidingView padding live,
+        // mid-touch. onPress's touch-up-in-bounds check then measures
+        // this button's shifted position and rejects the release,
+        // requiring a second tap. onPressIn fires at touch-down, before
+        // that shift has a chance to happen.
+        onPressIn={handleConfirm}
         disabled={isSubmitting}
         testID="done-cooking-confirm-button"
       />
