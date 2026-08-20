@@ -14,9 +14,11 @@ import { getHeroImageUrls } from '../recipes/heroImage';
  * and can wait (boundedly — see waitForThisWeekPrefetch) for it to
  * actually finish before dismissing the splash, so ThisWeekScreen's
  * first paint is already fully populated instead of visibly loading a
- * second time right after. Keyed by userId so a real sign-out/sign-in
- * (e.g. a shared dev/test device) can't serve one account's prefetch to
- * another.
+ * second time right after. Keyed by userId, and further fenced by a
+ * per-request token (below), so a real sign-out/sign-in in quick
+ * succession (e.g. a shared dev/test device) can't have an earlier,
+ * slower request's late completion overwrite a later one's already-
+ * correct result.
  *
  * Fired before household is confirmed to exist (deliberately — that's
  * what makes it early enough to matter), so a first-time user's
@@ -31,16 +33,32 @@ let prefetchedPlanResult: ThisWeekPlan | null = null;
 // Settles once the plan AND every entry's hero image have been resolved
 // (or failed) — what waitForThisWeekPrefetch races against a timeout.
 let prefetchedReadyPromise: Promise<void> | null = null;
+// Bumped on every new prefetchThisWeek call and captured per-request, so
+// a request's async continuations can tell whether they're still the
+// current one before writing to the shared state above. Without this, a
+// slower earlier request (e.g. account A's) resolving after a later one
+// (account B's) already started would overwrite prefetchedPlanResult
+// with A's plan while prefetchedForUserId still correctly reads "B" —
+// peekPrefetchedThisWeekPlan('B') would then hand B account A's recipe
+// titles and cache-warmed photos. Real risk on a shared device (a real
+// sign-out/sign-in in quick succession), not just the dev/test scenario
+// the userId keying alone was written to guard against.
+let requestToken = 0;
 
 export function prefetchThisWeek(userId: string): void {
   if (prefetchedForUserId === userId && prefetchedPlanPromise) return;
+  const token = ++requestToken;
   prefetchedForUserId = userId;
   prefetchedPlanResult = null;
   prefetchedPlanPromise = fetchCurrentWeeklyPlan();
   // Swallowed here — a failed prefetch shouldn't surface on its own;
   // loadThisWeekPlan below still surfaces it to whatever consumes it,
   // same as a normal fetchCurrentWeeklyPlan() rejection would.
-  prefetchedPlanPromise.then((plan) => (prefetchedPlanResult = plan)).catch(() => {});
+  prefetchedPlanPromise
+    .then((plan) => {
+      if (token === requestToken) prefetchedPlanResult = plan;
+    })
+    .catch(() => {});
 
   prefetchedReadyPromise = prefetchedPlanPromise
     .then(async (plan) => {

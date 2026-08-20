@@ -255,6 +255,33 @@ describe('peekPrefetchedThisWeekPlan', () => {
 
     expect(peekPrefetchedThisWeekPlan('user-2')).toBeNull();
   });
+
+  it('does not let a slower earlier request overwrite a faster later one (cross-account fence)', async () => {
+    // Reproduces a real sign-out/sign-in in quick succession: account A's
+    // fetch is kicked off first but resolves *after* account B's, which
+    // was started second. Without a per-request token, A's late .then()
+    // would overwrite prefetchedPlanResult with A's plan while
+    // prefetchedForUserId still correctly reads "B" — handing account B
+    // account A's recipe titles and cache-warmed photos.
+    const api = jest.requireMock('./api');
+    let resolveA!: (value: ThisWeekPlan) => void;
+    api.fetchCurrentWeeklyPlan.mockReturnValueOnce(
+      new Promise<ThisWeekPlan>((resolve) => (resolveA = resolve)),
+    );
+    api.fetchCurrentWeeklyPlan.mockResolvedValueOnce(plan('user-B-plan'));
+    const { prefetchThisWeek, peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-A');
+    prefetchThisWeek('user-B');
+    await new Promise(process.nextTick);
+    expect(peekPrefetchedThisWeekPlan('user-B')).toEqual(plan('user-B-plan'));
+
+    // Account A's slower request finally resolves, after B's already won.
+    resolveA(plan('user-A-plan'));
+    await new Promise(process.nextTick);
+
+    expect(peekPrefetchedThisWeekPlan('user-B')).toEqual(plan('user-B-plan'));
+  });
 });
 
 describe('waitForThisWeekPrefetch', () => {
