@@ -94,7 +94,8 @@ beforeEach(() => {
   mockedUseRouter.mockReturnValue({ push });
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
-  mockedHeroImage.getHeroImageUrl.mockResolvedValue(null);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue({});
+  mockedHeroImage.getCachedHeroImageUrl.mockReturnValue(null);
   mockedApi.confirmThisWeek.mockResolvedValue(undefined);
   mockedApi.reopenThisWeek.mockResolvedValue(undefined);
   mockedApi.removeFromThisWeek.mockResolvedValue(undefined);

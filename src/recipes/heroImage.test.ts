@@ -3,7 +3,9 @@ import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
 import {
+  getCachedHeroImageUrl,
   getHeroImageUrl,
+  getHeroImageUrls,
   pickHeroImage,
   stripMetadataAndResize,
   uploadHeroImage,
@@ -162,5 +164,94 @@ describe('getHeroImageUrl', () => {
     expect(await getHeroImageUrl('household-1/retry-me.jpg')).toBeNull();
     expect(await getHeroImageUrl('household-1/retry-me.jpg')).toBe('https://example.com/retry');
     expect(createSignedUrl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('getHeroImageUrls', () => {
+  it('resolves every path in one batched call', async () => {
+    const createSignedUrls = jest.fn().mockResolvedValue({
+      data: [
+        { path: 'household-1/a.jpg', signedUrl: 'https://example.com/a', error: null },
+        { path: 'household-1/b.jpg', signedUrl: 'https://example.com/b', error: null },
+      ],
+      error: null,
+    });
+    mockedStorageFrom.mockReturnValue({ createSignedUrls });
+
+    const result = await getHeroImageUrls(['household-1/a.jpg', 'household-1/b.jpg']);
+
+    expect(result).toEqual({
+      'household-1/a.jpg': 'https://example.com/a',
+      'household-1/b.jpg': 'https://example.com/b',
+    });
+    expect(createSignedUrls).toHaveBeenCalledWith(['household-1/a.jpg', 'household-1/b.jpg'], 3600);
+  });
+
+  it('de-duplicates paths and skips already-cached ones', async () => {
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValue({ data: { signedUrl: 'https://example.com/cached' }, error: null });
+    const createSignedUrls = jest.fn().mockResolvedValue({
+      data: [{ path: 'household-1/new.jpg', signedUrl: 'https://example.com/new', error: null }],
+      error: null,
+    });
+    mockedStorageFrom.mockReturnValue({ createSignedUrl, createSignedUrls });
+    await getHeroImageUrl('household-1/already-cached.jpg');
+
+    const result = await getHeroImageUrls([
+      'household-1/already-cached.jpg',
+      'household-1/already-cached.jpg',
+      'household-1/new.jpg',
+    ]);
+
+    expect(result).toEqual({
+      'household-1/already-cached.jpg': 'https://example.com/cached',
+      'household-1/new.jpg': 'https://example.com/new',
+    });
+    expect(createSignedUrls).toHaveBeenCalledWith(['household-1/new.jpg'], 3600);
+  });
+
+  it('omits a path that failed to resolve, without throwing', async () => {
+    mockedStorageFrom.mockReturnValue({
+      createSignedUrls: () =>
+        Promise.resolve({
+          data: [{ path: 'household-1/ok.jpg', signedUrl: 'https://example.com/ok', error: null }],
+          error: null,
+        }),
+    });
+
+    const result = await getHeroImageUrls(['household-1/ok.jpg', 'household-1/missing.jpg']);
+
+    expect(result).toEqual({ 'household-1/ok.jpg': 'https://example.com/ok' });
+  });
+
+  it('does not call Storage at all when every path is already cached', async () => {
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValue({ data: { signedUrl: 'https://example.com/cached' }, error: null });
+    const createSignedUrls = jest.fn();
+    mockedStorageFrom.mockReturnValue({ createSignedUrl, createSignedUrls });
+    await getHeroImageUrl('household-1/already-cached.jpg');
+
+    await getHeroImageUrls(['household-1/already-cached.jpg']);
+
+    expect(createSignedUrls).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCachedHeroImageUrl', () => {
+  it('returns null for a path that was never resolved', () => {
+    expect(getCachedHeroImageUrl('household-1/never-fetched.jpg')).toBeNull();
+  });
+
+  it('returns the cached URL for a path resolved by getHeroImageUrl', async () => {
+    mockedStorageFrom.mockReturnValue({
+      createSignedUrl: () =>
+        Promise.resolve({ data: { signedUrl: 'https://example.com/peeked' }, error: null }),
+    });
+
+    await getHeroImageUrl('household-1/peek-me.jpg');
+
+    expect(getCachedHeroImageUrl('household-1/peek-me.jpg')).toBe('https://example.com/peeked');
   });
 });

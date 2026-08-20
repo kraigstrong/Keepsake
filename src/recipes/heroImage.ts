@@ -107,3 +107,43 @@ export async function getHeroImageUrl(path: string): Promise<string | null> {
   signedUrlCache.set(path, data.signedUrl);
   return data.signedUrl;
 }
+
+/**
+ * Batched form of getHeroImageUrl — one createSignedUrls network round
+ * trip for every requested path instead of one createSignedUrl call
+ * each, so a screen with several entries can set all their thumbnail
+ * URLs into state together instead of one at a time as each individual
+ * call happens to resolve (ThisWeekScreen.tsx's original per-entry
+ * forEach visibly trickled images in this way). Already-cached paths are
+ * served straight from the cache and never included in the batch call.
+ * Returns only the paths it could resolve — a path missing from the
+ * result either failed or was never requested with anything to resolve.
+ */
+export async function getHeroImageUrls(paths: string[]): Promise<Record<string, string>> {
+  const uniquePaths = [...new Set(paths)];
+  const uncached = uniquePaths.filter((path) => !signedUrlCache.has(path));
+
+  if (uncached.length > 0) {
+    const { data } = await supabase.storage.from('recipe-images').createSignedUrls(uncached, 3600);
+    data?.forEach((result) => {
+      if (result.path && result.signedUrl) signedUrlCache.set(result.path, result.signedUrl);
+    });
+  }
+
+  const resolved: Record<string, string> = {};
+  uniquePaths.forEach((path) => {
+    const cached = signedUrlCache.get(path);
+    if (cached) resolved[path] = cached;
+  });
+  return resolved;
+}
+
+/**
+ * Synchronous cache-only read, no network call — lets a screen read
+ * whatever's already resolved (e.g. warmed by src/thisWeek/prefetch.ts
+ * during StartupScreen) as its React state's initial value, instead of
+ * starting from nothing and populating asynchronously after mount.
+ */
+export function getCachedHeroImageUrl(path: string): string | null {
+  return signedUrlCache.get(path) ?? null;
+}

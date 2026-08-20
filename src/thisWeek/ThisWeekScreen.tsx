@@ -12,7 +12,7 @@ import {
   type ThisWeekEntry,
   type ThisWeekPlan,
 } from './api';
-import { loadThisWeekPlan } from './prefetch';
+import { loadThisWeekPlan, peekPrefetchedThisWeekPlan } from './prefetch';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
@@ -22,7 +22,7 @@ import { OfflineState } from '../components/OfflineState';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
-import { getHeroImageUrl } from '../recipes/heroImage';
+import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -45,6 +45,21 @@ function describeServings(entry: ThisWeekEntry): string {
   return `${Math.round(entry.multiplier * 100) / 100}×`;
 }
 
+// Reads getHeroImageUrls' own per-path cache directly (src/recipes/
+// heroImage.ts) rather than threading a returned map through — used both
+// as the very first render's lazy initial state (whatever
+// prefetchThisWeek already warmed) and again after load()'s own
+// getHeroImageUrls call, so both paths agree on one source of truth.
+function heroUrlsFromEntries(entries: ThisWeekEntry[]): Record<string, string> {
+  const urls: Record<string, string> = {};
+  entries.forEach((entry) => {
+    if (!entry.heroImagePath) return;
+    const cached = getCachedHeroImageUrl(entry.heroImagePath);
+    if (cached) urls[entry.id] = cached;
+  });
+  return urls;
+}
+
 /**
  * OFF-04 / ADR-0021: This Week is always-online, no local mirror — a
  * failed load or mutation while offline is a normal, expected outcome
@@ -59,8 +74,17 @@ export function ThisWeekScreen() {
   const { session } = useSession();
   const userId = session?.user.id ?? null;
 
-  const [plan, setPlan] = useState<ThisWeekPlan | null>(null);
-  const [heroUrls, setHeroUrls] = useState<Record<string, string>>({});
+  // Seeded from AuthenticatedRouteBoundary's prefetch (src/thisWeek/
+  // prefetch.ts) when it already resolved before this screen mounted —
+  // the whole point of waiting for that prefetch during StartupScreen is
+  // wasted if this screen still starts from nothing and populates itself
+  // a beat later. load() below still runs as normal on focus and is what
+  // actually keeps this correct; this only avoids a visible empty/loading
+  // first paint on the common cold-launch path.
+  const [plan, setPlan] = useState<ThisWeekPlan | null>(() => peekPrefetchedThisWeekPlan(userId));
+  const [heroUrls, setHeroUrls] = useState<Record<string, string>>(() =>
+    heroUrlsFromEntries(peekPrefetchedThisWeekPlan(userId)?.entries ?? []),
+  );
   const [loadError, setLoadError] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [removed, setRemoved] = useState<RemovedEntryState | null>(null);
@@ -76,12 +100,17 @@ export function ThisWeekScreen() {
       const current = await loadThisWeekPlan(userId);
       setPlan(current);
       setLoadError(false);
-      current.entries.forEach((entry) => {
-        if (!entry.heroImagePath) return;
-        getHeroImageUrl(entry.heroImagePath).then((url) => {
-          if (url) setHeroUrls((prev) => ({ ...prev, [entry.id]: url }));
-        });
-      });
+
+      const heroImagePaths = current.entries
+        .map((entry) => entry.heroImagePath)
+        .filter((path): path is string => path !== null);
+      if (heroImagePaths.length > 0) {
+        // One batched call (see getHeroImageUrls) so every thumbnail that
+        // resolves lands in the same setHeroUrls update instead of
+        // trickling in one at a time as N individual calls each resolve.
+        await getHeroImageUrls(heroImagePaths);
+        setHeroUrls((prev) => ({ ...prev, ...heroUrlsFromEntries(current.entries) }));
+      }
     } catch {
       setLoadError(true);
     }

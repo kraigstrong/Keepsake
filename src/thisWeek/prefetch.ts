@@ -1,17 +1,22 @@
+import { Image } from 'react-native';
+
 import { fetchCurrentWeeklyPlan, type ThisWeekPlan } from './api';
-import { getHeroImageUrl } from '../recipes/heroImage';
+import { getHeroImageUrls } from '../recipes/heroImage';
 
 /**
  * One-shot, in-memory only — not a cache layer (ADR-0021: This Week
  * stays always-online with no local mirror; every focus after the first
  * still calls fetchCurrentWeeklyPlan() itself, exactly as before this
  * existed). Exists so AuthenticatedRouteBoundary (app/_layout.tsx) can
- * kick off This Week's network fetch as soon as a session resolves —
- * running concurrently with HouseholdProvider's own fetch, while
- * StartupScreen is still showing — instead of ThisWeekScreen only
- * starting it after routing there. Keyed by userId so a real
- * sign-out/sign-in (e.g. a shared dev/test device) can't serve one
- * account's prefetch to another.
+ * kick off This Week's network fetch — plan and hero images both — as
+ * soon as a session resolves, running concurrently with
+ * HouseholdProvider's own fetch while StartupScreen is still showing,
+ * and can wait (boundedly — see waitForThisWeekPrefetch) for it to
+ * actually finish before dismissing the splash, so ThisWeekScreen's
+ * first paint is already fully populated instead of visibly loading a
+ * second time right after. Keyed by userId so a real sign-out/sign-in
+ * (e.g. a shared dev/test device) can't serve one account's prefetch to
+ * another.
  *
  * Fired before household is confirmed to exist (deliberately — that's
  * what makes it early enough to matter), so a first-time user's
@@ -21,45 +26,98 @@ import { getHeroImageUrl } from '../recipes/heroImage';
  * already refetches on every focus and has its own error-state handling.
  */
 let prefetchedForUserId: string | null = null;
-let prefetched: Promise<ThisWeekPlan> | null = null;
+let prefetchedPlanPromise: Promise<ThisWeekPlan> | null = null;
+let prefetchedPlanResult: ThisWeekPlan | null = null;
+// Settles once the plan AND every entry's hero image have been resolved
+// (or failed) — what waitForThisWeekPrefetch races against a timeout.
+let prefetchedReadyPromise: Promise<void> | null = null;
 
 export function prefetchThisWeek(userId: string): void {
-  if (prefetchedForUserId === userId && prefetched) return;
+  if (prefetchedForUserId === userId && prefetchedPlanPromise) return;
   prefetchedForUserId = userId;
-  prefetched = fetchCurrentWeeklyPlan();
+  prefetchedPlanResult = null;
+  prefetchedPlanPromise = fetchCurrentWeeklyPlan();
   // Swallowed here — a failed prefetch shouldn't surface on its own;
   // loadThisWeekPlan below still surfaces it to whatever consumes it,
   // same as a normal fetchCurrentWeeklyPlan() rejection would.
-  prefetched.catch(() => {});
+  prefetchedPlanPromise.then((plan) => (prefetchedPlanResult = plan)).catch(() => {});
 
-  // Also warms getHeroImageUrl's own per-path cache (src/recipes/
-  // heroImage.ts) for every entry, in parallel, as soon as the plan
-  // itself resolves — the whole reason to prefetch the plan early is
-  // wasted if ThisWeekScreen still has to resolve every thumbnail's
-  // signed URL one at a time after routing there. A cache hit later
-  // resolves synchronously, so entries that finished resolving during
-  // StartupScreen appear together instead of trickling in by network
-  // latency. Errors are swallowed the same way — ThisWeekScreen's own
-  // getHeroImageUrl call is what actually surfaces a real failure.
-  prefetched
-    .then((plan) => {
-      plan.entries.forEach((entry) => {
-        if (entry.heroImagePath) getHeroImageUrl(entry.heroImagePath).catch(() => {});
-      });
+  prefetchedReadyPromise = prefetchedPlanPromise
+    .then(async (plan) => {
+      const paths = plan.entries
+        .map((entry) => entry.heroImagePath)
+        .filter((path): path is string => path !== null);
+      if (paths.length === 0) return;
+
+      // Resolving the signed URL only gets the string ready — the actual
+      // photo bytes are a separate network fetch RN's <Image> makes on
+      // its own the first time a given uri renders, which is what was
+      // still visibly trickling in one at a time even after the URLs
+      // themselves resolved together. Image.prefetch() downloads into
+      // RN's native image cache ahead of time, keyed by the exact same
+      // uri string ThisWeekScreen's <Image source={{uri}}> will use, so
+      // that later render is a cache hit instead of a fresh download.
+      const urlsByPath = await getHeroImageUrls(paths).catch(() => ({}) as Record<string, string>);
+      await Promise.all(
+        Object.values(urlsByPath).map((url) => Image.prefetch(url).catch(() => false)),
+      );
     })
     .catch(() => {});
 }
 
 function consumePrefetchedThisWeek(userId: string): Promise<ThisWeekPlan> | null {
   if (prefetchedForUserId !== userId) return null;
-  const result = prefetched;
-  prefetched = null;
+  const result = prefetchedPlanPromise;
+  prefetchedPlanPromise = null;
+  prefetchedPlanResult = null;
+  prefetchedReadyPromise = null;
   prefetchedForUserId = null;
   return result;
 }
 
-/** What ThisWeekScreen actually calls on every load. */
+/** What ThisWeekScreen's load() actually calls on every load. */
 export function loadThisWeekPlan(userId: string | null): Promise<ThisWeekPlan> {
   const pending = userId ? consumePrefetchedThisWeek(userId) : null;
   return pending ?? fetchCurrentWeeklyPlan();
+}
+
+/**
+ * Synchronous, cache-only read (no network, doesn't consume) — lets
+ * ThisWeekScreen seed its plan state directly from an already-resolved
+ * prefetch as its very first render, instead of starting from null and
+ * populating asynchronously after mount. Returns null if nothing has
+ * resolved yet (or nothing was ever prefetched for this userId); the
+ * normal load() flow still runs regardless and is what actually keeps
+ * the screen correct.
+ */
+export function peekPrefetchedThisWeekPlan(userId: string | null): ThisWeekPlan | null {
+  if (!userId || prefetchedForUserId !== userId) return null;
+  return prefetchedPlanResult;
+}
+
+/**
+ * Waits (up to timeoutMs) for the prefetch to fully settle — plan and
+ * every hero image — so AuthenticatedRouteBoundary can hold StartupScreen
+ * up until This Week is actually ready to render complete, rather than
+ * dismissing purely on session/household state and letting This Week do
+ * its own visible load right after. Bounded so a slow or failed prefetch
+ * can't leave the splash up indefinitely; resolves immediately if there's
+ * nothing to wait for (never prefetched, or already for a different
+ * userId).
+ */
+export function waitForThisWeekPrefetch(userId: string, timeoutMs: number): Promise<void> {
+  if (prefetchedForUserId !== userId || !prefetchedReadyPromise) return Promise.resolve();
+  const readyPromise = prefetchedReadyPromise;
+  return new Promise<void>((resolve) => {
+    // Cleared once the ready promise wins the race, rather than a bare
+    // Promise.race, so the timer doesn't linger for the rest of
+    // timeoutMs after this already resolved — harmless in the app
+    // (nothing awaits it), but it's what Jest correctly flagged as an
+    // open handle in tests otherwise.
+    const timer = setTimeout(resolve, timeoutMs);
+    readyPromise.then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }

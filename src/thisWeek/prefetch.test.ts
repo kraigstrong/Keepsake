@@ -1,3 +1,5 @@
+import { Image } from 'react-native';
+
 import type { ThisWeekEntry, ThisWeekPlan } from './api';
 
 // prefetchThisWeek/loadThisWeekPlan share module-level singleton state, so
@@ -23,7 +25,10 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 beforeEach(() => {
   jest.resetModules();
+  jest.spyOn(Image, 'prefetch').mockResolvedValue(true);
 });
+
+afterEach(() => jest.restoreAllMocks());
 
 function plan(id: string, entries: ThisWeekEntry[] = []): ThisWeekPlan {
   return { id, status: 'planning', entries };
@@ -130,7 +135,7 @@ describe('prefetchThisWeek', () => {
     expect(api.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
   });
 
-  it('warms every entry’s hero-image URL as soon as the plan resolves', async () => {
+  it('warms every entry’s hero-image URL as soon as the plan resolves, in one batched call', async () => {
     const api = jest.requireMock('./api');
     const heroImage = jest.requireMock('../recipes/heroImage');
     api.fetchCurrentWeeklyPlan.mockResolvedValue(
@@ -140,17 +145,52 @@ describe('prefetchThisWeek', () => {
         entry({ id: 'e3', heroImagePath: null }),
       ]),
     );
-    heroImage.getHeroImageUrl.mockResolvedValue('https://example.com/signed');
+    heroImage.getHeroImageUrls.mockResolvedValue({
+      'household-1/a.jpg': 'https://example.com/a',
+      'household-1/b.jpg': 'https://example.com/b',
+    });
     const { prefetchThisWeek } = require('./prefetch');
 
     prefetchThisWeek('user-1');
     // Let the plan promise's .then() microtask (which fires the hero
-    // fetches) run before asserting.
+    // fetch) run before asserting.
     await new Promise(process.nextTick);
 
-    expect(heroImage.getHeroImageUrl).toHaveBeenCalledTimes(2);
-    expect(heroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/a.jpg');
-    expect(heroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/b.jpg');
+    expect(heroImage.getHeroImageUrls).toHaveBeenCalledTimes(1);
+    expect(heroImage.getHeroImageUrls).toHaveBeenCalledWith([
+      'household-1/a.jpg',
+      'household-1/b.jpg',
+    ]);
+  });
+
+  it('prefetches each resolved image URL into the native image cache', async () => {
+    const api = jest.requireMock('./api');
+    const heroImage = jest.requireMock('../recipes/heroImage');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(
+      plan('p1', [entry({ id: 'e1', heroImagePath: 'household-1/a.jpg' })]),
+    );
+    heroImage.getHeroImageUrls.mockResolvedValue({ 'household-1/a.jpg': 'https://example.com/a' });
+    const { prefetchThisWeek } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    // A full task flush — getHeroImageUrls resolving and then
+    // Image.prefetch being called off its result are two separate
+    // microtask layers.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(Image.prefetch).toHaveBeenCalledWith('https://example.com/a');
+  });
+
+  it('does not call getHeroImageUrls when no entry has a hero image', async () => {
+    const api = jest.requireMock('./api');
+    const heroImage = jest.requireMock('../recipes/heroImage');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(plan('p1', [entry({ heroImagePath: null })]));
+    const { prefetchThisWeek } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    await new Promise(process.nextTick);
+
+    expect(heroImage.getHeroImageUrls).not.toHaveBeenCalled();
   });
 
   it('does not throw when a hero-image warm-up fails', async () => {
@@ -159,10 +199,114 @@ describe('prefetchThisWeek', () => {
     api.fetchCurrentWeeklyPlan.mockResolvedValue(
       plan('p1', [entry({ heroImagePath: 'household-1/a.jpg' })]),
     );
-    heroImage.getHeroImageUrl.mockRejectedValue(new Error('storage down'));
+    heroImage.getHeroImageUrls.mockRejectedValue(new Error('storage down'));
     const { prefetchThisWeek } = require('./prefetch');
 
     expect(() => prefetchThisWeek('user-1')).not.toThrow();
     await new Promise(process.nextTick);
+  });
+});
+
+describe('peekPrefetchedThisWeekPlan', () => {
+  it('returns null when nothing was prefetched', () => {
+    const { peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    expect(peekPrefetchedThisWeekPlan('user-1')).toBeNull();
+  });
+
+  it('returns null when userId is null', () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(plan('p1'));
+    const { prefetchThisWeek, peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+
+    expect(peekPrefetchedThisWeekPlan(null)).toBeNull();
+  });
+
+  it('returns null while the prefetch is still pending', () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockReturnValue(new Promise(() => {}));
+    const { prefetchThisWeek, peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+
+    expect(peekPrefetchedThisWeekPlan('user-1')).toBeNull();
+  });
+
+  it('returns the resolved plan once the prefetch settles', async () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(plan('p1'));
+    const { prefetchThisWeek, peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    await new Promise(process.nextTick);
+
+    expect(peekPrefetchedThisWeekPlan('user-1')).toEqual(plan('p1'));
+  });
+
+  it('does not serve a different userId a resolved plan', async () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(plan('p1'));
+    const { prefetchThisWeek, peekPrefetchedThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    await new Promise(process.nextTick);
+
+    expect(peekPrefetchedThisWeekPlan('user-2')).toBeNull();
+  });
+});
+
+describe('waitForThisWeekPrefetch', () => {
+  it('resolves immediately when nothing was prefetched', async () => {
+    const { waitForThisWeekPrefetch } = require('./prefetch');
+
+    await expect(waitForThisWeekPrefetch('user-1', 1000)).resolves.toBeUndefined();
+  });
+
+  it('resolves immediately for a userId that does not match the prefetch', async () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockReturnValue(new Promise(() => {}));
+    const { prefetchThisWeek, waitForThisWeekPrefetch } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+
+    await expect(waitForThisWeekPrefetch('user-2', 1000)).resolves.toBeUndefined();
+  });
+
+  it('waits for the plan and hero-image warm-up to both settle', async () => {
+    const api = jest.requireMock('./api');
+    const heroImage = jest.requireMock('../recipes/heroImage');
+    let resolveHeroWarm!: () => void;
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(
+      plan('p1', [entry({ heroImagePath: 'household-1/a.jpg' })]),
+    );
+    heroImage.getHeroImageUrls.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHeroWarm = () => resolve({});
+      }),
+    );
+    const { prefetchThisWeek, waitForThisWeekPrefetch } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    let settled = false;
+    waitForThisWeekPrefetch('user-1', 5000).then(() => (settled = true));
+    await new Promise(process.nextTick);
+    expect(settled).toBe(false);
+
+    resolveHeroWarm();
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+    expect(settled).toBe(true);
+  });
+
+  it('times out instead of waiting forever on a slow prefetch', async () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockReturnValue(new Promise(() => {}));
+    const { prefetchThisWeek, waitForThisWeekPrefetch } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+
+    await expect(waitForThisWeekPrefetch('user-1', 10)).resolves.toBeUndefined();
   });
 });
