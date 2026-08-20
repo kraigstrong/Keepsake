@@ -40,6 +40,17 @@ describe('parseQuantity — fixture corpus', () => {
       unit: 'cup',
       ingredientText: 'flour',
     },
+    // "N and X/Y unit" phrasing, a recipe-blog convention distinct from
+    // plain-whitespace mixed fractions (found via live testing,
+    // 2026-08-19: sallysbakingaddiction.com's "1 and 3/4 cups (219g)
+    // all-purpose flour").
+    {
+      line: '1 and 3/4 cups (219g) all-purpose flour',
+      quantityMin: 1.75,
+      quantityMax: 1.75,
+      unit: 'cup',
+      ingredientText: 'all-purpose flour',
+    },
     {
       line: '3/4 tsp salt',
       quantityMin: 0.75,
@@ -69,6 +80,13 @@ describe('parseQuantity — fixture corpus', () => {
       quantityMax: 1.5,
       unit: 'tsp',
       ingredientText: 'vanilla',
+    },
+    {
+      line: '1 and ½ cups milk',
+      quantityMin: 1.5,
+      quantityMax: 1.5,
+      unit: 'cup',
+      ingredientText: 'milk',
     },
     {
       line: '¼ tsp cayenne',

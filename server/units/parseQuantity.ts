@@ -56,9 +56,12 @@ const VULGAR_FRACTION_CHARS = Object.keys(VULGAR_FRACTIONS).join('');
 // text; the first that matches wins. Each has exactly one capture
 // group shape consumed by parseNumberValue below.
 const NUMBER_PATTERNS: RegExp[] = [
-  /^(\d+)\s+(\d+)\/(\d+)/, // mixed ascii fraction: "2 1/2"
+  // mixed ascii fraction: "2 1/2", and the "N and X/Y" phrasing some
+  // recipe blogs use instead of plain whitespace (found via live
+  // testing, 2026-08-19: sallysbakingaddiction.com's "1 and 3/4 cups").
+  /^(\d+)\s+(?:and\s+)?(\d+)\/(\d+)/i,
   /^(\d+)\/(\d+)/, // simple ascii fraction: "1/2"
-  new RegExp(`^(\\d+)\\s*([${VULGAR_FRACTION_CHARS}])`), // mixed unicode: "1½" / "1 ½"
+  new RegExp(`^(\\d+)\\s*(?:and\\s+)?([${VULGAR_FRACTION_CHARS}])`, 'i'), // mixed unicode: "1½" / "1 ½" / "1 and ½"
   new RegExp(`^([${VULGAR_FRACTION_CHARS}])`), // bare unicode: "½"
   /^(\d+(?:\.\d+)?)/, // integer or decimal: "2" / "2.5"
 ];
