@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { Sheet } from '../components/Sheet';
@@ -71,63 +71,76 @@ export function DoneCookingSheet({
     }
   }
 
+  // Fires on both onTouchStart and onPress (below) — confirmed via live
+  // device testing, 2026-08-20: RN's touch-responder negotiation can lose
+  // this exact gesture outright (neither onPressIn nor onPress ever
+  // fires) specifically when the sibling note TextInput — multiline, so
+  // UITextView-backed on iOS, unlike a single-line UITextField — loses
+  // focus concurrently with the touch. Diagnostic logging on-device ruled
+  // out every other candidate (Sheet's own keyboard-avoidance padding,
+  // wrapping in a ScrollView with keyboardShouldPersistTaps) before
+  // landing on this: onTouchStart, a raw View touch event bypassing
+  // Pressability's higher-level gesture state machine entirely, fired
+  // reliably on the very same broken first tap where onPress/onPressIn
+  // did not. The guard below makes it safe to also keep onPress wired
+  // (needed for VoiceOver/TalkBack, which activates via onPress, not
+  // onTouchStart) without double-firing on an unaffected tap where both
+  // fire normally.
+  const hasFiredConfirmRef = useRef(false);
+  useEffect(() => {
+    if (visible) hasFiredConfirmRef.current = false;
+  }, [visible]);
+
   function handleConfirm() {
+    // onTouchStart bypasses Pressable's own `disabled` gating (it's a
+    // raw View prop, not part of Pressability) — isSubmitting must be
+    // checked here explicitly rather than relying on the Button's
+    // disabled prop alone.
+    if (isSubmitting || hasFiredConfirmRef.current) return;
+    hasFiredConfirmRef.current = true;
     onConfirm(note.trim() || null, canRemoveFromPlan && removeFromPlan);
     setNote('');
   }
 
   return (
     <Sheet visible={visible} onDismiss={onDismiss} testID="done-cooking-sheet">
-      {/* keyboardShouldPersistTaps="handled": without it, the *first* tap
-          on the confirm button (or the toggle) while the note field is
-          focused is consumed entirely by iOS ending the TextInput's
-          editing session and never reaches the tapped control at all —
-          confirmed live 2026-08-20 via diagnostic logging showing zero
-          touch events fired on that first tap. This is a documented iOS
-          quirk specific to multiline TextInput (UITextView-backed, unlike
-          single-line UITextField) tapped from outside itself; ScrollView's
-          keyboardShouldPersistTaps is RN's own opt-out of that default,
-          delivering the tap to its child normally instead. Not a scroll
-          view in the usual sense — this sheet's content never needs to
-          scroll — used here purely for that one prop's behavior. */}
-      <ScrollView keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Done Cooking</Text>
+      <Text style={styles.title}>Done Cooking</Text>
 
-        <TextInput
-          testID="done-cooking-note-input"
-          style={styles.noteInput}
-          placeholder="Anything worth remembering next time? (optional)"
-          placeholderTextColor={colors.textTertiary}
-          value={note}
-          onChangeText={setNote}
-          multiline
-        />
+      <TextInput
+        testID="done-cooking-note-input"
+        style={styles.noteInput}
+        placeholder="Anything worth remembering next time? (optional)"
+        placeholderTextColor={colors.textTertiary}
+        value={note}
+        onChangeText={setNote}
+        multiline
+      />
 
-        {canRemoveFromPlan && (
-          <Pressable
-            style={styles.toggleRow}
-            onPress={() => {
-              setUserToggled(true);
-              setRemoveFromPlan((previous) => !previous);
-            }}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: removeFromPlan }}
-            testID="done-cooking-remove-from-plan-toggle"
-          >
-            <View style={[styles.checkbox, removeFromPlan && styles.checkboxSelected]}>
-              {removeFromPlan && <Text style={styles.checkmark}>{'✓'}</Text>}
-            </View>
-            <Text style={styles.toggleLabel}>Remove from This Week</Text>
-          </Pressable>
-        )}
+      {canRemoveFromPlan && (
+        <Pressable
+          style={styles.toggleRow}
+          onPress={() => {
+            setUserToggled(true);
+            setRemoveFromPlan((previous) => !previous);
+          }}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: removeFromPlan }}
+          testID="done-cooking-remove-from-plan-toggle"
+        >
+          <View style={[styles.checkbox, removeFromPlan && styles.checkboxSelected]}>
+            {removeFromPlan && <Text style={styles.checkmark}>{'✓'}</Text>}
+          </View>
+          <Text style={styles.toggleLabel}>Remove from This Week</Text>
+        </Pressable>
+      )}
 
-        <Button
-          title="Done Cooking"
-          onPress={handleConfirm}
-          disabled={isSubmitting}
-          testID="done-cooking-confirm-button"
-        />
-      </ScrollView>
+      <Button
+        title="Done Cooking"
+        onPress={handleConfirm}
+        onTouchStart={handleConfirm}
+        disabled={isSubmitting}
+        testID="done-cooking-confirm-button"
+      />
     </Sheet>
   );
 }

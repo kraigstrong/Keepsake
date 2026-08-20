@@ -5,15 +5,33 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 export interface ButtonProps {
   title: string;
   onPress: () => void;
+  /** Passed straight through to the underlying Pressable's onTouchStart —
+   * a raw View touch prop, not part of Pressability, so it fires even
+   * when `disabled` (callers using it must guard that themselves). Only
+   * needed by callers working around RN's touch-responder negotiation
+   * occasionally losing a gesture outright, so neither onPress nor
+   * onPressIn ever fires — confirmed via live device testing, 2026-08-20,
+   * specifically when a sibling multiline (UITextView-backed) TextInput
+   * loses focus concurrently with the touch. See DoneCookingSheet's
+   * confirm button for the full diagnosis and a working guard pattern. */
+  onTouchStart?: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   testID?: string;
 }
 
-export function Button({ title, onPress, variant = 'primary', disabled, testID }: ButtonProps) {
+export function Button({
+  title,
+  onPress,
+  onTouchStart,
+  variant = 'primary',
+  disabled,
+  testID,
+}: ButtonProps) {
   return (
     <Pressable
       onPress={onPress}
+      onTouchStart={onTouchStart}
       disabled={disabled}
       accessibilityRole="button"
       testID={testID}

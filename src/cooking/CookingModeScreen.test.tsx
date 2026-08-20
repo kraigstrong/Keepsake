@@ -375,6 +375,28 @@ describe('CookingModeScreen', () => {
       expect(mockedSubmitPendingCookingEvents).toHaveBeenCalledWith('h1');
     });
 
+    it('confirming via onTouchStart alone still completes — the touch-lost-gesture workaround', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      await fireEvent(screen.getByTestId('done-cooking-confirm-button'), 'touchStart');
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not double-enqueue when both onTouchStart and onPress fire for one activation', async () => {
+      mockedEnqueueCookingEvent.mockResolvedValue(undefined);
+      await renderCookingModeScreen();
+      await openDoneCookingSheet();
+
+      const confirmButton = screen.getByTestId('done-cooking-confirm-button');
+      await fireEvent(confirmButton, 'touchStart');
+      await fireEvent.press(confirmButton);
+
+      await waitFor(() => expect(mockedEnqueueCookingEvent).toHaveBeenCalledTimes(1));
+    });
+
     it('confirming with a note trims it and passes it through', async () => {
       mockedEnqueueCookingEvent.mockResolvedValue(undefined);
       await renderCookingModeScreen();
