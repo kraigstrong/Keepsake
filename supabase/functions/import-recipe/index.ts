@@ -297,16 +297,33 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Not every fail()/error branch below also calls console.error: bad user
+  // input (malformed URL, thin page content, an unreadable photo upload)
+  // and expected races (a losing claim_import_job call) already surface
+  // through the stored job row and response — logging those as errors
+  // would just be noise. console.error is reserved for branches where
+  // something in Keepsake's own pipeline broke unexpectedly (AI
+  // extraction, Storage/DB reads and writes past the point ADR-0017
+  // expects them to succeed) — the failures worth finding in Supabase's
+  // function logs without first knowing which job to query for.
   async function fail(status: number, message: string): Promise<Response> {
     // ADR-0020: claim_token proves this call still holds the claim it
     // was given — a worker whose claim has since been superseded by a
     // reclaim can no longer mark the job failed out from under the new
     // claimant.
-    await supabase.rpc('fail_import_job', {
+    const { error: failError } = await supabase.rpc('fail_import_job', {
       job_id: job.id,
       claim_token: job.claim_token,
       error_message: message,
     });
+    // fail_import_job itself failing is always worth logging, regardless
+    // of why fail() was called — a claim_token mismatch or DB write
+    // failure here means the job can be left stuck in 'processing'
+    // instead of recording the real outcome, undermining the observability
+    // this comment's own boundary promises.
+    if (failError) {
+      console.error(`Could not mark job ${job.id} failed:`, failError.message);
+    }
     return jsonResponse({ jobId: job.id, error: message }, status);
   }
 
@@ -348,6 +365,10 @@ Deno.serve(async (req: Request) => {
             })
             .single();
           if (error || !completed) {
+            console.error(
+              `Could not complete duplicate-import job ${job.id}:`,
+              error?.message ?? 'no data returned',
+            );
             return jsonResponse(
               { jobId: job.id, error: error?.message ?? 'Could not complete import job' },
               500,
@@ -408,6 +429,13 @@ Deno.serve(async (req: Request) => {
         .from('recipe-images')
         .download(originalPhotoPath);
       if (downloadError || !photoBlob) {
+        // originalPhotoPath is caller-controlled (the request body's
+        // photoPath) — JSON.stringify rather than raw interpolation so a
+        // forged newline/control character can't inject fake log lines.
+        console.error(
+          `Could not download uploaded photo for job ${job.id} at ${JSON.stringify(originalPhotoPath)}:`,
+          downloadError?.message ?? 'not found',
+        );
         return await fail(
           502,
           `Could not read the uploaded photo: ${downloadError?.message ?? 'not found'}`,
@@ -432,6 +460,7 @@ Deno.serve(async (req: Request) => {
           { useProductionModels },
         );
       } catch (error) {
+        console.error(`Photo recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
 
@@ -475,6 +504,7 @@ Deno.serve(async (req: Request) => {
           useProductionModels,
         });
       } catch (error) {
+        console.error(`URL recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
 
@@ -563,6 +593,10 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (finalizeError || !finalizedJob) {
+      console.error(
+        `Could not finalize job ${job.id} after successful extraction:`,
+        finalizeError?.message ?? 'no data returned',
+      );
       return await fail(502, finalizeError?.message ?? 'Could not save the imported recipe');
     }
 
@@ -578,6 +612,7 @@ Deno.serve(async (req: Request) => {
       200,
     );
   } catch (error) {
+    console.error(`Unexpected import failure for job ${job.id}:`, errorMessage(error));
     return await fail(500, `Unexpected import failure: ${errorMessage(error)}`);
   }
 });
