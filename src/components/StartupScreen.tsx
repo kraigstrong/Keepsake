@@ -29,7 +29,17 @@ export function StartupScreen() {
   const [barProgress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    if (reducedMotion) return;
+    // reducedMotion starts false on every mount (useReducedMotion resolves
+    // the real OS preference asynchronously) — so this always starts the
+    // fade-in first, then must actively correct it if the preference turns
+    // out to be true, rather than only skipping a *future* start. Without
+    // stopAnimation()+setValue(1) here, an already-started fade would keep
+    // animating to completion instead of snapping to its resting state.
+    if (reducedMotion) {
+      wordmarkProgress.stopAnimation();
+      wordmarkProgress.setValue(1);
+      return;
+    }
     Animated.timing(wordmarkProgress, {
       toValue: 1,
       duration: 400,
