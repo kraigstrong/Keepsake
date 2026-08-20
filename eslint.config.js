@@ -40,6 +40,9 @@ module.exports = [
       // lintable by this Node/RN project's ESLint config. See
       // tsconfig.json's matching exclusion for the full reasoning.
       'supabase/functions/*',
+      // Design-tool-generated reference material (docs/design/), not app
+      // source — same treatment as the Deno exclusion above.
+      'docs/design/**/*.js',
     ],
   },
 ];
