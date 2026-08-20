@@ -86,9 +86,95 @@ export async function uploadHeroImage(householdId: string, localUri: string): Pr
  * fall back to a placeholder instead of failing the whole screen over
  * a missing/stale image.
  */
-export async function getHeroImageUrl(path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
+// createSignedUrl mints a brand-new URL string on every call, even for
+// the same object — without caching, a screen that re-resolves the same
+// path twice in quick succession (e.g. ThisWeekScreen.tsx's load(),
+// which can genuinely run more than once as a nested tab screen's focus
+// settles) hands its <Image> a changed `uri` for an unchanged photo,
+// which visibly re-fetches/redecodes. Safe to cache by path for the
+// session: a hero image's path is a fresh random id per upload (see
+// uploadHeroImage above), never reused, so a cached URL can't ever point
+// at stale content. Entries do still expire, though — Storage's own
+// signed-URL lifetime — since a long-lived app process (RN apps can sit
+// backgrounded for a long time without being killed) would otherwise
+// keep handing out a URL Storage has already stopped honoring, with no
+// way to recover short of a restart.
+const SIGNED_URL_TTL_MS = 3600 * 1000;
+// A cached URL is treated as expired this long before Storage's actual
+// cutoff, so a caller can't be handed one that expires moments after use.
+const SIGNED_URL_SAFETY_MARGIN_MS = 60 * 1000;
 
+interface CachedSignedUrl {
+  url: string;
+  expiresAt: number;
+}
+
+const signedUrlCache = new Map<string, CachedSignedUrl>();
+
+function readSignedUrlCache(path: string): string | null {
+  const entry = signedUrlCache.get(path);
+  if (!entry) return null;
+  if (Date.now() >= entry.expiresAt) {
+    signedUrlCache.delete(path);
+    return null;
+  }
+  return entry.url;
+}
+
+function writeSignedUrlCache(path: string, url: string): void {
+  signedUrlCache.set(path, {
+    url,
+    expiresAt: Date.now() + SIGNED_URL_TTL_MS - SIGNED_URL_SAFETY_MARGIN_MS,
+  });
+}
+
+export async function getHeroImageUrl(path: string): Promise<string | null> {
+  const cached = readSignedUrlCache(path);
+  if (cached) return cached;
+
+  const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
   if (error) return null;
+
+  writeSignedUrlCache(path, data.signedUrl);
   return data.signedUrl;
+}
+
+/**
+ * Batched form of getHeroImageUrl — one createSignedUrls network round
+ * trip for every requested path instead of one createSignedUrl call
+ * each, so a screen with several entries can set all their thumbnail
+ * URLs into state together instead of one at a time as each individual
+ * call happens to resolve (ThisWeekScreen.tsx's original per-entry
+ * forEach visibly trickled images in this way). Already-cached paths are
+ * served straight from the cache and never included in the batch call.
+ * Returns only the paths it could resolve — a path missing from the
+ * result either failed or was never requested with anything to resolve.
+ */
+export async function getHeroImageUrls(paths: string[]): Promise<Record<string, string>> {
+  const uniquePaths = [...new Set(paths)];
+  const uncached = uniquePaths.filter((path) => !readSignedUrlCache(path));
+
+  if (uncached.length > 0) {
+    const { data } = await supabase.storage.from('recipe-images').createSignedUrls(uncached, 3600);
+    data?.forEach((result) => {
+      if (result.path && result.signedUrl) writeSignedUrlCache(result.path, result.signedUrl);
+    });
+  }
+
+  const resolved: Record<string, string> = {};
+  uniquePaths.forEach((path) => {
+    const cached = readSignedUrlCache(path);
+    if (cached) resolved[path] = cached;
+  });
+  return resolved;
+}
+
+/**
+ * Synchronous cache-only read, no network call — lets a screen read
+ * whatever's already resolved (e.g. warmed by src/thisWeek/prefetch.ts
+ * during StartupScreen) as its React state's initial value, instead of
+ * starting from nothing and populating asynchronously after mount.
+ */
+export function getCachedHeroImageUrl(path: string): string | null {
+  return readSignedUrlCache(path);
 }

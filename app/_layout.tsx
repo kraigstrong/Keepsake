@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { ChevronLeftIcon } from '../src/components/icons/ChevronLeftIcon';
 import { OfflineState } from '../src/components/OfflineState';
+import { StartupScreen } from '../src/components/StartupScreen';
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { submitPendingCookingEvents } from '../src/cooking/outboxEngine';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
@@ -24,6 +25,7 @@ import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
 import { syncHousehold } from '../src/sync/syncEngine';
 import { colors, spacing } from '../src/theme/tokens';
+import { prefetchThisWeek, waitForThisWeekPrefetch } from '../src/thisWeek/prefetch';
 
 // Runs once, at module-evaluation time — before RootLayout's first
 // render — because Sentry wants init() to run as early as possible so
@@ -285,26 +287,73 @@ function OfflineBanner() {
   );
 }
 
+// Bounded wait for This Week's prefetch (below) before StartupScreen
+// dismisses for an onboarded user — long enough for a normal fetch to
+// land, short enough that a slow/failed one doesn't leave the splash up
+// unreasonably long. This Week just falls back to its own loading state
+// past this point, same as before the prefetch existed.
+const THIS_WEEK_PREFETCH_WAIT_MS = 2500;
+
 // Three mutually exclusive branches on one Stack (ADR-0007/ADR-0008):
 // signed out, signed in but missing a profile/household (onboarding),
-// or fully set up. `isLoading` briefly gates nothing/blank rather than
-// a real loading state — swapped for the shared loading component once
-// that exists (later Phase 2 commit).
+// or fully set up. `isLoading` gates StartupScreen rather than routing
+// anywhere yet.
 function AuthenticatedRouteBoundary() {
   const router = useRouter();
   const { session, isLoading: sessionLoading } = useSession();
   const { profile, household, isLoading: householdLoading } = useHousehold();
   useDevAutoSignIn();
 
-  if (sessionLoading) {
-    return null;
-  }
-  if (session !== null && householdLoading) {
-    return null;
-  }
-
+  const userId = session?.user.id ?? null;
   const isOnboarded = session !== null && profile !== null && household !== null;
   const needsOnboarding = session !== null && !isOnboarded;
+
+  // Kicks off This Week's network fetch as soon as a session exists —
+  // running concurrently with HouseholdProvider's own fetch, while
+  // StartupScreen (below) is still showing — instead of waiting for
+  // ThisWeekScreen to start it after routing there. See
+  // src/thisWeek/prefetch.ts for what happens when there's no household
+  // yet (a first-time user mid-onboarding).
+  useEffect(() => {
+    if (userId) prefetchThisWeek(userId);
+  }, [userId]);
+
+  // Holds StartupScreen up until This Week's prefetch actually settles
+  // (or times out), once onboarded, so the tabs stack's first paint is
+  // already fully populated instead of ThisWeekScreen visibly loading a
+  // second time right after this screen dismisses. Resets synchronously
+  // during render on a userId change (same "adjust state during render"
+  // pattern as HouseholdProvider's isLoading fix) rather than trying to
+  // carry a stale "ready" flag across a real sign-out/sign-in — a rare
+  // edge case where doing so would only cost the optimization, not
+  // correctness (see prefetch.ts's userId keying for why).
+  const [thisWeekReady, setThisWeekReady] = useState(false);
+  const [readyCheckedForUserId, setReadyCheckedForUserId] = useState(userId);
+  if (userId !== readyCheckedForUserId) {
+    setReadyCheckedForUserId(userId);
+    setThisWeekReady(false);
+  }
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    waitForThisWeekPrefetch(userId, THIS_WEEK_PREFETCH_WAIT_MS).then(() => {
+      if (!cancelled) setThisWeekReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (sessionLoading) {
+    return <StartupScreen />;
+  }
+  if (session !== null && householdLoading) {
+    return <StartupScreen />;
+  }
+  if (isOnboarded && !thisWeekReady) {
+    return <StartupScreen />;
+  }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
