@@ -239,6 +239,42 @@ describe('getHeroImageUrls', () => {
   });
 });
 
+describe('signed URL expiry', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('treats a cached URL as expired once its lifetime has passed, and re-fetches', async () => {
+    jest.useFakeTimers();
+    const createSignedUrl = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { signedUrl: 'https://example.com/first' }, error: null })
+      .mockResolvedValueOnce({ data: { signedUrl: 'https://example.com/second' }, error: null });
+    mockedStorageFrom.mockReturnValue({ createSignedUrl });
+
+    expect(await getHeroImageUrl('household-1/expiring.jpg')).toBe('https://example.com/first');
+
+    // Past the real 3600s Storage lifetime (and this cache's own earlier
+    // safety-margin cutoff) — simulates a long-lived app process outliving
+    // the signed URL it cached.
+    jest.advanceTimersByTime(3600 * 1000 + 1000);
+
+    expect(await getHeroImageUrl('household-1/expiring.jpg')).toBe('https://example.com/second');
+    expect(createSignedUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resolve an expired URL from getCachedHeroImageUrl either', async () => {
+    jest.useFakeTimers();
+    mockedStorageFrom.mockReturnValue({
+      createSignedUrl: () =>
+        Promise.resolve({ data: { signedUrl: 'https://example.com/expiring' }, error: null }),
+    });
+
+    await getHeroImageUrl('household-1/peek-expiring.jpg');
+    jest.advanceTimersByTime(3600 * 1000 + 1000);
+
+    expect(getCachedHeroImageUrl('household-1/peek-expiring.jpg')).toBeNull();
+  });
+});
+
 describe('getCachedHeroImageUrl', () => {
   it('returns null for a path that was never resolved', () => {
     expect(getCachedHeroImageUrl('household-1/never-fetched.jpg')).toBeNull();

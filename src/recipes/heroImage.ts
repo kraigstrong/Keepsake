@@ -94,17 +94,48 @@ export async function uploadHeroImage(householdId: string, localUri: string): Pr
 // which visibly re-fetches/redecodes. Safe to cache by path for the
 // session: a hero image's path is a fresh random id per upload (see
 // uploadHeroImage above), never reused, so a cached URL can't ever point
-// at stale content.
-const signedUrlCache = new Map<string, string>();
+// at stale content. Entries do still expire, though — Storage's own
+// signed-URL lifetime — since a long-lived app process (RN apps can sit
+// backgrounded for a long time without being killed) would otherwise
+// keep handing out a URL Storage has already stopped honoring, with no
+// way to recover short of a restart.
+const SIGNED_URL_TTL_MS = 3600 * 1000;
+// A cached URL is treated as expired this long before Storage's actual
+// cutoff, so a caller can't be handed one that expires moments after use.
+const SIGNED_URL_SAFETY_MARGIN_MS = 60 * 1000;
+
+interface CachedSignedUrl {
+  url: string;
+  expiresAt: number;
+}
+
+const signedUrlCache = new Map<string, CachedSignedUrl>();
+
+function readSignedUrlCache(path: string): string | null {
+  const entry = signedUrlCache.get(path);
+  if (!entry) return null;
+  if (Date.now() >= entry.expiresAt) {
+    signedUrlCache.delete(path);
+    return null;
+  }
+  return entry.url;
+}
+
+function writeSignedUrlCache(path: string, url: string): void {
+  signedUrlCache.set(path, {
+    url,
+    expiresAt: Date.now() + SIGNED_URL_TTL_MS - SIGNED_URL_SAFETY_MARGIN_MS,
+  });
+}
 
 export async function getHeroImageUrl(path: string): Promise<string | null> {
-  const cached = signedUrlCache.get(path);
+  const cached = readSignedUrlCache(path);
   if (cached) return cached;
 
   const { data, error } = await supabase.storage.from('recipe-images').createSignedUrl(path, 3600);
   if (error) return null;
 
-  signedUrlCache.set(path, data.signedUrl);
+  writeSignedUrlCache(path, data.signedUrl);
   return data.signedUrl;
 }
 
@@ -121,18 +152,18 @@ export async function getHeroImageUrl(path: string): Promise<string | null> {
  */
 export async function getHeroImageUrls(paths: string[]): Promise<Record<string, string>> {
   const uniquePaths = [...new Set(paths)];
-  const uncached = uniquePaths.filter((path) => !signedUrlCache.has(path));
+  const uncached = uniquePaths.filter((path) => !readSignedUrlCache(path));
 
   if (uncached.length > 0) {
     const { data } = await supabase.storage.from('recipe-images').createSignedUrls(uncached, 3600);
     data?.forEach((result) => {
-      if (result.path && result.signedUrl) signedUrlCache.set(result.path, result.signedUrl);
+      if (result.path && result.signedUrl) writeSignedUrlCache(result.path, result.signedUrl);
     });
   }
 
   const resolved: Record<string, string> = {};
   uniquePaths.forEach((path) => {
-    const cached = signedUrlCache.get(path);
+    const cached = readSignedUrlCache(path);
     if (cached) resolved[path] = cached;
   });
   return resolved;
@@ -145,5 +176,5 @@ export async function getHeroImageUrls(paths: string[]): Promise<Record<string, 
  * starting from nothing and populating asynchronously after mount.
  */
 export function getCachedHeroImageUrl(path: string): string | null {
-  return signedUrlCache.get(path) ?? null;
+  return readSignedUrlCache(path);
 }
