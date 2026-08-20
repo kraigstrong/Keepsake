@@ -307,6 +307,42 @@ describe('parseQuantity — fixture corpus', () => {
       ingredientText: 'butter',
     },
 
+    // Compound parenthetical annotations (found via the same 2026-08-19
+    // survey as the "and" mixed-number bug, same site): a ranged
+    // annotation, and a dual-unit slash annotation restating the
+    // parenthetical in a second unit.
+    {
+      line: '3–5 Tablespoons (45–75g/ml) heavy cream',
+      quantityMin: 3,
+      quantityMax: 5,
+      unit: 'tbsp',
+      ingredientText: 'heavy cream',
+    },
+    {
+      line: '1/2 cup (113g/120ml) vegetable oil',
+      quantityMin: 0.5,
+      quantityMax: 0.5,
+      unit: 'cup',
+      ingredientText: 'vegetable oil',
+    },
+    // Whitespace around the "/" separator (Codex review finding on
+    // PR #89, 2026-08-20) — the same conventional spacing
+    // ALTERNATE_UNIT_SEPARATOR already tolerates outside the parens.
+    {
+      line: '1/2 cup (113g / 120ml) vegetable oil',
+      quantityMin: 0.5,
+      quantityMax: 0.5,
+      unit: 'cup',
+      ingredientText: 'vegetable oil',
+    },
+    {
+      line: '1/2 cup (113g/ 120ml) vegetable oil',
+      quantityMin: 0.5,
+      quantityMax: 0.5,
+      unit: 'cup',
+      ingredientText: 'vegetable oil',
+    },
+
     // Abbreviated unit with a trailing period (found via live testing,
     // 2026-08-19): matchUnit() must consume the period itself, not just
     // the unit text, or it's left behind as a stray leading "." blocking

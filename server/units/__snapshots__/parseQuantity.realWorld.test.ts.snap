@@ -1124,6 +1124,27 @@ exports[`parseQuantity — real-world ingredient corpus parses every line from "
 ]
 `;
 
+exports[`parseQuantity — real-world ingredient corpus parses every line from "Recipe on sallysbakingaddiction.com (exact page not recorded), compound parentheticals" without throwing, matching the recorded snapshot 1`] = `
+[
+  {
+    "ingredientText": "heavy cream",
+    "line": "3–5 Tablespoons (45–75g/ml) heavy cream",
+    "lineText": "3–5 Tablespoons (45–75g/ml) heavy cream",
+    "quantityMax": 5,
+    "quantityMin": 3,
+    "unit": "tbsp",
+  },
+  {
+    "ingredientText": "vegetable oil",
+    "line": "1/2 cup (113g/120ml) vegetable oil",
+    "lineText": "1/2 cup (113g/120ml) vegetable oil",
+    "quantityMax": 0.5,
+    "quantityMin": 0.5,
+    "unit": "cup",
+  },
+]
+`;
+
 exports[`parseQuantity — real-world ingredient corpus parses every line from "Soft Chocolate Chip Cookies (King Arthur Baking)" without throwing, matching the recorded snapshot 1`] = `
 [
   {
