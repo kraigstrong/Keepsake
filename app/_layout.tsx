@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { ChevronLeftIcon } from '../src/components/icons/ChevronLeftIcon';
 import { OfflineState } from '../src/components/OfflineState';
+import { StartupScreen } from '../src/components/StartupScreen';
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { submitPendingCookingEvents } from '../src/cooking/outboxEngine';
 import { DeepLinkProvider } from '../src/deepLinks/DeepLinkProvider';
@@ -287,9 +288,8 @@ function OfflineBanner() {
 
 // Three mutually exclusive branches on one Stack (ADR-0007/ADR-0008):
 // signed out, signed in but missing a profile/household (onboarding),
-// or fully set up. `isLoading` briefly gates nothing/blank rather than
-// a real loading state — swapped for the shared loading component once
-// that exists (later Phase 2 commit).
+// or fully set up. `isLoading` gates StartupScreen rather than routing
+// anywhere yet.
 function AuthenticatedRouteBoundary() {
   const router = useRouter();
   const { session, isLoading: sessionLoading } = useSession();
@@ -297,10 +297,10 @@ function AuthenticatedRouteBoundary() {
   useDevAutoSignIn();
 
   if (sessionLoading) {
-    return null;
+    return <StartupScreen />;
   }
   if (session !== null && householdLoading) {
-    return null;
+    return <StartupScreen />;
   }
 
   const isOnboarded = session !== null && profile !== null && household !== null;

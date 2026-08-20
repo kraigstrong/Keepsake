@@ -37,6 +37,21 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Tracks which userId profile/household/isLoading currently reflect.
+  // When userId changes, force isLoading back to true in this same
+  // render (React's "adjusting state during render" pattern) rather than
+  // waiting for the effect below to run on the next pass. Without this,
+  // there's one render — right when SessionProvider resolves from no
+  // session to a real one — where userId has already changed but this
+  // provider hasn't re-fetched yet, so it still reports isLoading=false
+  // with the previous (no-user) household=null. AuthenticatedRouteBoundary
+  // reads that as "fully loaded, no household" and flashes onboarding.
+  const [loadedForUserId, setLoadedForUserId] = useState(userId);
+  if (userId !== loadedForUserId) {
+    setLoadedForUserId(userId);
+    setIsLoading(true);
+  }
+
   // No setState here — a pure fetch so both the mount/userId-change effect
   // below and the mutation handlers can share it. Kept out of the effect
   // itself because an async function's setState calls made before its

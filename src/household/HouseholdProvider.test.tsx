@@ -150,6 +150,32 @@ describe('HouseholdProvider / useHousehold', () => {
     await waitFor(() => expect(result.current.household).toEqual({ id: 'household-1' }));
   });
 
+  it('re-enters loading synchronously when the signed-in user changes', async () => {
+    mockedUseSession.mockReturnValue({ session: null });
+    mockedApi.fetchProfile.mockResolvedValue(null);
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+
+    const { result, rerender } = await renderHook(() => useHousehold(), {
+      wrapper: HouseholdProvider,
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.household).toBeNull();
+
+    // Simulates SessionProvider resolving from no session to a real one:
+    // isLoading must flip back to true as soon as userId changes, driven
+    // by the render itself rather than the fetch below — proven by
+    // fetchHousehold never resolving here, so isLoading has no other way
+    // to become true. Without this, a consumer (AuthenticatedRouteBoundary)
+    // reading context in the gap before the fetch completes would see
+    // isLoading=false with the previous user's (null) household and
+    // misread it as "no household, fully loaded".
+    mockedApi.fetchHousehold.mockReturnValue(new Promise(() => {}));
+    mockedUseSession.mockReturnValue({ session: { user: { id: 'user-2' } } });
+    rerender({});
+
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+  });
+
   it('throws when used outside a HouseholdProvider', async () => {
     await expect(renderHook(() => useHousehold())).rejects.toThrow(
       'useHousehold must be used within a HouseholdProvider',
