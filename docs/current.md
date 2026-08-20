@@ -21,10 +21,11 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Next action
 
-[PR #85](https://github.com/kraigstrong/Keepsake/pull/85) merged 2026-08-20 with only the first (ineffective) attempt at the Done Cooking double-tap fix — the `onPressIn` workaround, which live testing afterward showed doesn't actually resolve the bug. The real, confirmed-live fix (`onTouchStart`, plus a Codex-flagged cancel-aware guard) is on the same branch (`cooking/done-cooking-double-tap`) in [PR #86](https://github.com/kraigstrong/Keepsake/pull/86), which supersedes #85 — that's what needs to land, not #85. Once #86 merges: pick one of the onboarding-flash loading screen (remaining Journey 1 bug), one of the two new `parseQuantity()` edge cases from the 2026-08-19 survey ("N and X/Y unit" mixed numbers, or compound parenthetical annotations), the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
+No branch currently in flight. Pick one: the onboarding-flash loading screen (remaining Journey 1 bug), one of the two new `parseQuantity()` edge cases from the 2026-08-19 survey ("N and X/Y unit" mixed numbers, or compound parenthetical annotations), the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
 
 ## Recently shipped
 
+- Cooking Mode Done Cooking double-tap fix — [PR #86](https://github.com/kraigstrong/Keepsake/pull/86), merged 2026-08-20. [PR #85](https://github.com/kraigstrong/Keepsake/pull/85) had merged earlier the same night with only a first, ineffective attempt (an `onPressIn` workaround premised on a root cause later disproven live); #86 superseded it with the actual fix, confirmed working live and independently verified across four rounds of Codex review overnight. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Smart Meal Selection architecture proposal — [PR #84](https://github.com/kraigstrong/Keepsake/pull/84). See `docs/roadmap.md`'s Unplaced section.
 - Period-abbreviated-unit parsing fix — [PR #83](https://github.com/kraigstrong/Keepsake/pull/83). See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Grocery-merge unit-selection bug — [PR #82](https://github.com/kraigstrong/Keepsake/pull/82). See `docs/roadmap.md`'s Not-yet-triaged backlog.
