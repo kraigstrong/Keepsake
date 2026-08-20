@@ -20,13 +20,12 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | REC-02 | Ingredient sections | 4 | Done (tested) |
 | REC-03 | Instruction sections | 4 | Done (tested) |
 | REC-04 | Permanent notes | 4 | Done (tested) |
-| REC-05 | Cooking history, separate from permanent notes | 15 | Done (tested)Δ |
+| REC-05 | Cooking history, separate from permanent notes | 15 | Done (tested) |
 | REC-06 | Source URL and attribution | 4 / 8 | Done (tested) |
 | REC-07 | Structured categories and tags on the recipe | 4 | Done (tested) |
 | REC-08 | Version history | 5 | Done (tested) |
 | REC-09 | No recipe description field exists | 4 | Done (tested) |
 
-Δ See the Cooking Mode (COOK) section below for the full footnote — same evidence and same still-open physical-device gate.
 
 ## Import (IMP)
 
@@ -132,23 +131,23 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| COOK-01 | Single scrolling cooking screen | 15 | Done (tested)Δ |
-| COOK-02 | Keep screen awake | 15 | Done (tested)Δ |
-| COOK-03 | Check off ingredients and instructions | 15 | Done (tested)Δ |
-| COOK-04 | Checklist progress is device-specific | 15 | Done (tested)Δ |
-| COOK-05 | Done Cooking clears progress, records timestamp, optional removal from This Week | 15 | Done (tested)Δ |
-| COOK-06 | Done Cooking prompts for a cooking note | 15 | Done (tested)Δ |
+| COOK-01 | Single scrolling cooking screen | 15 | Done (tested) |
+| COOK-02 | Keep screen awake | 15 | Done (tested) |
+| COOK-03 | Check off ingredients and instructions | 15 | Done (tested) |
+| COOK-04 | Checklist progress is device-specific | 15 | Done (tested) |
+| COOK-05 | Done Cooking clears progress, records timestamp, optional removal from This Week | 15 | Done (tested) |
+| COOK-06 | Done Cooking prompts for a cooking note | 15 | Done (tested) |
 
 ## Cooking Notes (NOTE)
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| NOTE-01 | Short note capture after cooking | 15 | Done (tested)Δ |
-| NOTE-02 | Chronological note history | 15 | Done (tested)Δ |
-| NOTE-03 | Newest note preview near top | 15 | Done (tested)Δ |
-| NOTE-04 | Permanent recipe notes remain a separate concept | 4 / 15 | Done (tested)Δ |
+| NOTE-01 | Short note capture after cooking | 15 | Done (tested) |
+| NOTE-02 | Chronological note history | 15 | Done (tested) |
+| NOTE-03 | Newest note preview near top | 15 | Done (tested) |
+| NOTE-04 | Permanent recipe notes remain a separate concept | 4 / 15 | Done (tested) |
 
-Δ Jest coverage only (`src/cooking/*.test.ts(x)`, `src/recipes/RecipeDetailScreen.test.tsx`'s cooking-history cases) — no pgTAP for `cooking_events`' RPCs run locally (no Docker in this environment; `supabase/tests/database/cooking_event_rpcs.test.sql` is CI-only, same convention as every phase since 12). ADR-0003 requires a **physical device** for this phase's own exit gate (screen-awake/real-kitchen-use class, same reasoning as Phase 15's keep-awake risk spike) — not yet performed; see `docs/history/phase-15-cooking-mode.md`'s Conditional Pass follow-ups.
+ADR-0003's physical-device exit gate for Phase 15 (screen-awake/real-kitchen-use class) closed 2026-08-19: live device walkthrough (Journey 1) confirmed screen-awake, checklist behavior, Done Cooking, and note capture/history all work as specified. One real bug found in the process, tracked separately rather than blocking this gate: Done Cooking needs two taps after typing a note (`KeyboardAvoidingView` relayout race in `Sheet.tsx:156` — see `docs/roadmap.md`'s Not-yet-triaged backlog). Previously Jest-only (`src/cooking/*.test.ts(x)`, `src/recipes/RecipeDetailScreen.test.tsx`'s cooking-history cases); pgTAP for `cooking_events`' RPCs remains CI-only (no Docker in this environment).
 
 ## Grocery Export (GRO)
 
@@ -194,7 +193,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 ¥ Status was stale ("Not Started" despite every feature phase since 6 enforcing this). Two enforcement patterns, both real: This Week and Grocery Review proactively gate on `ConnectivityProvider` with a dedicated offline state (`ThisWeekScreen.test.tsx`/`GroceryReviewScreen.test.tsx`, "shows an offline state and never fetches while offline"); Import and Recipe Editor have no pre-check but every mutating call is wrapped in error handling that surfaces a network failure as an error state rather than hanging or silently no-opping (`ImportRecipeScreen.tsx`, `RecipeEditorScreen.tsx` — both have `catch` blocks feeding `ErrorState`/inline error text). Either way, no code path in this app can write while offline (ADR-0013: the local mirror is read-only). Corrected 2026-08-13 during Phase 17's traceability sweep.
 
-Δ See the Cooking Mode (COOK) section above for the full footnote — same evidence and same still-open physical-device gate.
+Δ ADR-0003 requires a **physical device** specifically running offline for this pair (distinct from Phase 15's general screen-awake/real-kitchen-use gate, closed 2026-08-19 — see the Cooking Mode (COOK) section above). Not yet performed; see `docs/history/phase-15-cooking-mode.md`'s Conditional Pass follow-ups.
 
 ## Version History (VER)
 
