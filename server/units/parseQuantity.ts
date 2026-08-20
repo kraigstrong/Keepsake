@@ -163,13 +163,9 @@ function matchUnit(text: string): { unit: Unit; matchedLength: number } | null {
   const key = match[1]!.toLowerCase();
   const synonym = UNIT_SYNONYMS[key];
   if (!synonym || !isUnit(synonym)) return null;
-  // Abbreviated units ("oz.", "lb.", "tbsp.") are often written with a
-  // trailing period. Consuming it here — the one place both the primary
-  // and alternate-unit call sites match units — keeps it from being left
-  // behind as a stray leading "." on whatever text follows (found via
-  // live testing, 2026-08-19: "6 oz. (180g) medium cheddar cheese" left
-  // stripParentheticalAlternateUnit() unable to match its anchored "^\("
-  // check against the leftover ". (180g)...").
+  // Abbreviated units ("oz.", "lb.") often carry a trailing period; consume
+  // it here so it isn't left as a stray leading "." on whatever follows
+  // (docs/roadmap.md's Not-yet-triaged backlog has the incident history).
   let matchedLength = match[0].length;
   if (text[matchedLength] === '.') {
     matchedLength += 1;
