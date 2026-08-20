@@ -204,6 +204,7 @@ const CONTAINER_WORDS = ['can', 'jar', 'package', 'pkg', 'bag', 'box', 'containe
 const CONTAINER_PATTERN = new RegExp(`^\\s*(?:${CONTAINER_WORDS.join('|')})\\b\\.?\\s*`, 'i');
 const OPEN_PAREN = /^\(\s*/;
 const CLOSE_PAREN = /^\s*\)\s*/;
+const PAREN_ALT_UNIT_SEPARATOR = /^\s*\/\s*/;
 
 // Found via live testing, 2026-08-14: "2 1/4 cups (290 g) all-purpose
 // flour" writes the same alternate-unit annotation the slash/comma
@@ -225,6 +226,9 @@ const CLOSE_PAREN = /^\s*\)\s*/;
 // number+unit pair, or, when the magnitude is the same as the first
 // (as in the ranged case above), just the bare unit. Both are still
 // only ever a single such group; nothing in the survey needed more.
+// The "/" tolerates surrounding whitespace ("113g / 120ml", "113g/
+// 120ml") the same way ALTERNATE_UNIT_SEPARATOR already does for the
+// non-parenthesized form — a real gap Codex review caught, 2026-08-20.
 function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean): string {
   if (!hasPrimaryUnit) return text;
   const openMatch = OPEN_PAREN.exec(text);
@@ -250,10 +254,13 @@ function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean):
   if (!unit) return text;
   rest = rest.slice(unit.matchedLength);
 
-  if (rest[0] === '/') {
-    const afterSlash = rest.slice(1);
+  const altSeparatorMatch = PAREN_ALT_UNIT_SEPARATOR.exec(rest);
+  if (altSeparatorMatch) {
+    const afterSlash = rest.slice(altSeparatorMatch[0].length);
     const altNumber = matchNumber(afterSlash);
-    const afterAltNumber = altNumber ? afterSlash.slice(altNumber.matchedLength) : afterSlash;
+    const afterAltNumber = (
+      altNumber ? afterSlash.slice(altNumber.matchedLength) : afterSlash
+    ).replace(/^\s+/, '');
     const altUnit = matchUnit(afterAltNumber);
     if (altUnit) {
       rest = afterAltNumber.slice(altUnit.matchedLength);
