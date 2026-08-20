@@ -22,10 +22,11 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Next action
 
-One of the two new `parseQuantity()` edge cases from the 2026-08-19 survey ("N and X/Y unit" mixed numbers, or compound parenthetical annotations), the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), the 22-icon UI-set replacement now scoped in `docs/roadmap.md`'s Not-yet-triaged backlog (blocked on app-icon PNG rasterization tooling), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
+Branch `reliability/mixed-number-and-phrasing` is ready for review/push (see Recently shipped below — not yet pushed/PR'd). After that: the remaining `parseQuantity()` edge case from the 2026-08-19 survey (compound parenthetical annotations), the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), the 22-icon UI-set replacement now scoped in `docs/roadmap.md`'s Not-yet-triaged backlog (blocked on app-icon PNG rasterization tooling), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
 
 ## Recently shipped
 
+- `parseQuantity()` "N and X/Y unit" mixed-number fix, verified against a fresh 16-recipe/~165-line real-world pull, plus a new maintained real-world ingredient corpus + snapshot regression test (`server/units/realWorldIngredientCorpus.ts`) for future `parseQuantity()` work — branch `reliability/mixed-number-and-phrasing`, local CI green (typecheck/lint/format:check/test/check:client-secrets), not yet pushed/PR'd. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Cold-launch onboarding-flash fix + StartupScreen — [PR #87](https://github.com/kraigstrong/Keepsake/pull/87), merged 2026-08-20, confirmed live on-device. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Cooking Mode Done Cooking double-tap fix — [PR #86](https://github.com/kraigstrong/Keepsake/pull/86), merged 2026-08-20. [PR #85](https://github.com/kraigstrong/Keepsake/pull/85) had merged earlier the same night with only a first, ineffective attempt (an `onPressIn` workaround premised on a root cause later disproven live); #86 superseded it with the actual fix, confirmed working live and independently verified across four rounds of Codex review overnight. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - Smart Meal Selection architecture proposal — [PR #84](https://github.com/kraigstrong/Keepsake/pull/84). See `docs/roadmap.md`'s Unplaced section.
