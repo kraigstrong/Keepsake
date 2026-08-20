@@ -84,9 +84,6 @@ function bumpFromSpoonUnit(value: number, from: Unit, presentUnits: ReadonlySet<
   if (presentUnits.has('cup') && convertQuantity(value, from, 'cup') >= 1) {
     return 'cup';
   }
-  if (from === 'tsp' && presentUnits.has('tbsp') && convertQuantity(value, from, 'tbsp') >= 1) {
-    return 'tbsp';
-  }
   return from;
 }
 

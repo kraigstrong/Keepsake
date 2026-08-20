@@ -390,6 +390,28 @@ describe('generateGroceryList', () => {
       expect(butter!.amounts).toEqual(['24 tbsp butter']);
     });
 
+    // The approved rule bumps a spoon-unit total only toward cup, never
+    // tsp toward tbsp on its own — 1 tsp + 1 tbsp salt (no cup anywhere)
+    // stays a plain sum, whichever occurrence happened to come first.
+    // Found by Codex review, PR #82: an earlier version of this fix also
+    // promoted tsp to tbsp without a cup present, which was never part
+    // of the reviewed scope.
+    it('does not promote tsp to tbsp on its own when no cup is present', () => {
+      const items = generateGroceryList([
+        entry('r1', 1, [
+          line({ lineText: '1 tsp salt', quantityMin: 1, unit: 'tsp', ingredientText: 'salt' }),
+        ]),
+        entry('r2', 1, [
+          line({ lineText: '1 tbsp salt', quantityMin: 1, unit: 'tbsp', ingredientText: 'salt' }),
+        ]),
+      ]);
+
+      // 1 tsp + 1 tbsp (3 tsp), summed in tsp (the first occurrence's
+      // unit) = 4 tsp -- "~" marks the cross-unit conversion's rounding,
+      // same as the existing volume-merge tests above.
+      expect(findItem(items, 'salt')!.amounts).toEqual(['~4 tsp salt']);
+    });
+
     // Cup and up are left alone even when a coarser unit is technically
     // reachable — 1 cup + 1 pint stays "3 cups", not "1.5 pints" (see
     // the "must merge" test above); this is the same rule confirmed
