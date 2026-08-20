@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#EAE4DA; font-family:-apple-system,'SF Pro Text','Inter',system-ui,sans-serif; }
+  a { color:#B5502E; text-decoration:none; }
+  a:hover { color:#8F3E22; }
+</style>
+</helmet>
+
+<section style="padding:56px 56px 96px;display:flex;flex-direction:column;gap:40px;">
+
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:760px;">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(28,27,25,.5);">Turn 1 · New feature</div>
+    <div style="font-size:38px;font-weight:700;letter-spacing:-.02em;color:#1C1B19;">Help me choose</div>
+    <div style="font-size:17px;line-height:1.5;color:rgba(28,27,25,.62);text-wrap:pretty;">A selection round that supplements This Week. One model for solo and household: smart deck → independent swipes → shortlist or consensus → review → This Week. Frame <a href="#1d">1d</a> is live — drag the card, or use the buttons.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:13px;color:rgba(28,27,25,.55);">
+      <span style="padding:6px 12px;border:1px solid rgba(28,27,25,.14);border-radius:99px;">Entry from This Week</span>
+      <span style="padding:6px 12px;border:1px solid rgba(28,27,25,.14);border-radius:99px;">Solo / together, one screen</span>
+      <span style="padding:6px 12px;border:1px solid rgba(28,27,25,.14);border-radius:99px;">Async, no live session</span>
+      <span style="padding:6px 12px;border:1px solid rgba(28,27,25,.14);border-radius:99px;">Nothing added without confirming</span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;">
+
+    <div id="1a" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1a</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Entry — This Week</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="display:flex;align-items:center;gap:5px;"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#1C1B19"></rect><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#1C1B19"></rect><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#1C1B19"></rect><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#1C1B19"></rect></svg><svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 3.6a9 9 0 0 1 13 0" stroke="#1C1B19" stroke-width="1.6" stroke-linecap="round"></path><path d="M4 6.5a5.4 5.4 0 0 1 7 0" stroke="#1C1B19" stroke-width="1.6" stroke-linecap="round"></path><circle cx="7.5" cy="9.6" r="1.2" fill="#1C1B19"></circle></svg><svg width="24" height="12" viewBox="0 0 24 12"><rect x="0.5" y="0.5" width="20" height="11" rx="3.2" stroke="rgba(28,27,25,.4)" fill="none"></rect><rect x="2.5" y="2.5" width="9" height="7" rx="1.6" fill="#1C1B19"></rect><path d="M22 4.2v3.6" stroke="rgba(28,27,25,.4)" stroke-width="1.6" stroke-linecap="round"></path></svg></span></div>
+        <div style="flex:none;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;"><div style="font-size:30px;font-weight:700;letter-spacing:-.02em;">This Week</div><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="#1C1B19" stroke-width="2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" stroke="#1C1B19" stroke-width="2" stroke-linecap="round"></path></svg></div>
+        <div style="flex:none;padding:14px 24px 0;display:flex;gap:12px;">
+          <div style="flex:1;height:46px;border-radius:15px;border:1px solid rgba(28,27,25,.16);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Edit Plan</div>
+          <div style="flex:1;height:46px;border-radius:15px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Review Groceries</div>
+        </div>
+        <div style="flex:none;margin-top:18px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:56px;height:56px;border-radius:12px;background:rgba(28,27,25,.07);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(28,27,25,.35);">CR</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Crepes</div><div style="font-size:14px;color:rgba(28,27,25,.5);margin-top:2px;">4×</div></div><svg width="9" height="16" viewBox="0 0 9 16" fill="none"><polyline points="1,1 8,8 1,15" stroke="rgba(28,27,25,.35)" stroke-width="1.8" stroke-linecap="round"></polyline></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:56px;height:56px;border-radius:12px;background:rgba(28,27,25,.07);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(28,27,25,.35);">ST</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Steak with Creamy Pepper…</div><div style="font-size:14px;color:rgba(28,27,25,.5);margin-top:2px;">Serves 2</div></div><svg width="9" height="16" viewBox="0 0 9 16" fill="none"><polyline points="1,1 8,8 1,15" stroke="rgba(28,27,25,.35)" stroke-width="1.8" stroke-linecap="round"></polyline></svg></div>
+        </div>
+        <div style="flex:none;padding:24px;display:flex;flex-direction:column;gap:8px;">
+          <div style="height:50px;border-radius:15px;border:1.5px solid rgba(181,80,46,.45);display:flex;align-items:center;justify-content:center;gap:9px;font-size:16px;font-weight:600;color:#B5502E;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="12" height="15" rx="2.5" stroke="#B5502E" stroke-width="1.9"></rect><path d="M17.5 7.5l3 1.6-3.4 8.8" stroke="#B5502E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>Help me choose</div>
+          <div style="font-size:13px;line-height:1.4;color:rgba(28,27,25,.5);text-align:center;padding:0 14px;">Swipe through a few suggestions from your library — on your own or with the household.</div>
+        </div>
+        <div style="flex:none;margin-top:auto;position:relative;">
+          <div style="position:absolute;right:24px;bottom:96px;width:58px;height:58px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round"></path></svg></div>
+          <div style="border-top:1px solid rgba(28,27,25,.10);height:82px;display:flex;align-items:flex-start;padding-top:12px;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="18" viewBox="0 0 24 18" fill="none"><path d="M2 3h18M2 9h13M2 15h8" stroke="#1C1B19" stroke-width="2.6" stroke-linecap="round"></path></svg><span style="font-size:12px;font-weight:700;">This Week</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;opacity:.45;"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5h14v17l-7-5-7 5z" stroke="#1C1B19" stroke-width="1.9" stroke-linejoin="round"></path></svg><span style="font-size:12px;font-weight:600;">Library</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1b</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Start a round — one sheet</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);position:relative;">
+        <div style="position:absolute;inset:0;background:rgba(28,27,25,.32);"></div>
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;color:#FFF;position:relative;"><span>9:41</span><span style="opacity:.85;">▮▮▮</span></div>
+        <div style="flex:1;"></div>
+        <div style="position:relative;background:#F5F0E8;border-radius:28px 28px 38px 38px;padding:10px 24px 30px;">
+          <div style="width:38px;height:4px;border-radius:99px;background:rgba(28,27,25,.18);margin:0 auto 20px;"></div>
+          <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;">Help me choose</div>
+          <div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);margin-top:6px;">12 suggestions picked from your library — recipes you haven't made lately, and nothing that repeats what's already planned.</div>
+          <div style="margin-top:22px;display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);">
+            <div><div style="font-size:16px;font-weight:600;">Meals to find</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Just a target — you can stop anytime</div></div>
+            <div style="display:flex;align-items:center;gap:14px;"><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="14" height="2" viewBox="0 0 14 2"><path d="M0 1h14" stroke="#1C1B19" stroke-width="2"></path></svg></div><div style="font-size:22px;font-weight:700;min-width:22px;text-align:center;">4</div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 0v14M0 7h14" stroke="#1C1B19" stroke-width="2"></path></svg></div></div>
+          </div>
+          <div style="margin-top:22px;display:flex;flex-direction:column;gap:10px;">
+            <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Pick on my own</div>
+            <div style="height:56px;border-radius:16px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;gap:10px;font-size:17px;font-weight:600;">Pick together<span style="display:flex;">
+              <span style="width:22px;height:22px;border-radius:50%;background:#C4A882;border:2px solid #F5F0E8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#4A3A22;">D</span>
+              <span style="width:22px;height:22px;border-radius:50%;background:#9FAE96;border:2px solid #F5F0E8;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#2F3A28;">P</span>
+              <span style="width:22px;height:22px;border-radius:50%;background:#C89A8C;border:2px solid #F5F0E8;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#4A2A22;">S</span></span></div>
+          </div>
+          <div style="margin-top:14px;font-size:13px;color:rgba(28,27,25,.45);text-align:center;">Together works asynchronously — everyone swipes when they have a minute.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1c</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Pick together — who's in</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">Pick together</span><span style="width:36px;"></span></div>
+        <div style="flex:none;padding:24px 24px 0;"><div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);">Everyone you include gets the same 12 suggestions and swipes on their own time.</div></div>
+        <div style="flex:none;margin-top:20px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:42px;height:42px;border-radius:50%;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">M</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Maya <span style="font-weight:400;color:rgba(28,27,25,.45);">(you)</span></div></div><div style="font-size:14px;color:rgba(28,27,25,.4);">Always in</div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:42px;height:42px;border-radius:50%;background:#C4A882;color:#4A3A22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">D</div><div style="flex:1;font-size:17px;font-weight:600;">Dev</div><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:42px;height:42px;border-radius:50%;background:#9FAE96;color:#2F3A28;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">P</div><div style="flex:1;font-size:17px;font-weight:600;">Priya</div><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:42px;height:42px;border-radius:50%;background:#C89A8C;color:#4A2A22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">S</div><div style="flex:1;font-size:17px;font-weight:600;">Sam</div><div style="width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(28,27,25,.25);"></div></div>
+        </div>
+        <div style="flex:none;padding:18px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+          <div><div style="font-size:16px;font-weight:600;">Wrap up by</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">You can close the round sooner</div></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:99px;border:1px solid rgba(28,27,25,.16);font-size:15px;font-weight:600;">Thu 8:00 PM<svg width="9" height="6" viewBox="0 0 9 6" fill="none"><polyline points="1,1 4.5,5 8,1" stroke="rgba(28,27,25,.5)" stroke-width="1.6" stroke-linecap="round"></polyline></svg></div>
+        </div>
+        <div style="flex:none;padding:22px 24px 0;"><div style="font-size:15px;color:#B5502E;font-weight:600;">+ Invite someone to the household</div></div>
+        <div style="flex:none;margin-top:auto;padding:0 24px 34px;">
+          <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Start round with 3</div>
+          <div style="font-size:13px;color:rgba(28,27,25,.45);text-align:center;margin-top:10px;">Dev and Priya get a notification. You can start swiping now.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1d" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1d</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">The deck — live, drag or tap</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);user-select:none;touch-action:none;">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;">
+          <div onClick="{{ pause }}" style="font-size:16px;color:#B5502E;cursor:pointer;">Pause</div>
+          <div style="font-size:14px;font-weight:600;color:rgba(28,27,25,.55);">{{ progressLabel }}</div>
+          <div style="font-size:14px;font-weight:700;color:#B5502E;">{{ yesLabel }}</div>
+        </div>
+        <div style="flex:none;margin:14px 24px 0;height:3px;border-radius:99px;background:rgba(28,27,25,.10);overflow:hidden;"><div style="height:100%;background:#B5502E;border-radius:99px;transition:width .25s ease;width:{{ progressPct }};"></div></div>
+
+        <div style="flex:1;position:relative;margin:20px 24px 0;">
+          <div style="position:absolute;left:14px;right:14px;top:16px;bottom:16px;border-radius:22px;background:#EFE8DC;border:1px solid rgba(28,27,25,.08);"></div>
+          <div style="position:absolute;left:7px;right:7px;top:8px;bottom:8px;border-radius:22px;background:#F3ECE1;border:1px solid rgba(28,27,25,.09);"></div>
+          <div onPointerDown="{{ onDown }}" onPointerMove="{{ onMove }}" onPointerUp="{{ onUp }}" onPointerCancel="{{ onUp }}" onClick="{{ openDetail }}" style="position:absolute;inset:0;border-radius:22px;background:#FFFCF6;border:1px solid rgba(28,27,25,.12);box-shadow:0 10px 26px rgba(28,27,25,.10);overflow:hidden;display:flex;flex-direction:column;cursor:grab;transform:{{ cardTransform }};transition:{{ cardTransition }};">
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:26px 24px;background:{{ cardTint }};">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(28,27,25,.45);">{{ cardKind }}</div>
+              <div style="font-size:34px;font-weight:700;letter-spacing:-.025em;line-height:1.08;margin-top:10px;text-wrap:balance;">{{ cardTitle }}</div>
+              <div style="font-size:15px;line-height:1.4;color:rgba(28,27,25,.55);margin-top:12px;">{{ cardIngredients }}</div>
+            </div>
+            <div style="flex:none;padding:16px 24px;border-top:1px solid rgba(28,27,25,.10);display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-size:14px;color:rgba(28,27,25,.6);">{{ cardMeta }}</div>
+              <div style="font-size:14px;font-weight:600;color:#B5502E;">Details</div>
+            </div>
+            <div style="position:absolute;top:22px;left:22px;padding:7px 13px;border-radius:8px;border:2px solid #6B7F5E;color:#6B7F5E;font-size:15px;font-weight:700;letter-spacing:.04em;transform:rotate(-8deg);opacity:{{ yesStamp }};">YES</div>
+            <div style="position:absolute;top:22px;right:22px;padding:7px 13px;border-radius:8px;border:2px solid rgba(28,27,25,.5);color:rgba(28,27,25,.6);font-size:15px;font-weight:700;letter-spacing:.04em;transform:rotate(8deg);opacity:{{ noStamp }};">NOT THIS WEEK</div>
+          </div>
+        </div>
+
+        <div style="flex:none;padding:22px 24px 12px;display:flex;align-items:center;gap:12px;">
+          <div onClick="{{ undo }}" style="width:50px;height:50px;border-radius:50%;border:1px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ undoOpacity }};"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 9h11a5 5 0 0 1 0 10h-6" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="8,4.5 3.5,9 8,13.5" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div>
+          <div onClick="{{ pass }}" style="flex:1;height:50px;border-radius:15px;border:1.5px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;cursor:pointer;">Not this week</div>
+          <div onClick="{{ like }}" style="flex:1;height:50px;border-radius:15px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;cursor:pointer;">Yes</div>
+        </div>
+        <div style="flex:none;padding:0 24px 32px;">
+          <div style="font-size:13px;text-align:center;color:rgba(28,27,25,.45);">{{ hintLine }}</div>
+          <div style="margin-top:10px;height:46px;border-radius:15px;background:#1C1B19;color:#F5F0E8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;opacity:{{ finishOpacity }};">Review {{ yesCount }} picks</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1e" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1e</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Photo card + undo</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><div style="font-size:16px;color:#B5502E;">Pause</div><div style="font-size:14px;font-weight:600;color:rgba(28,27,25,.55);">5 of 12</div><div style="font-size:14px;font-weight:700;color:#B5502E;">2 yes</div></div>
+        <div style="flex:none;margin:14px 24px 0;height:3px;border-radius:99px;background:rgba(28,27,25,.10);"><div style="height:100%;width:38%;background:#B5502E;border-radius:99px;"></div></div>
+        <div style="flex:1;position:relative;margin:20px 24px 0;">
+          <div style="position:absolute;left:7px;right:7px;top:8px;bottom:8px;border-radius:22px;background:#F3ECE1;border:1px solid rgba(28,27,25,.09);"></div>
+          <div style="position:absolute;inset:0;border-radius:22px;background:#FFFCF6;border:1px solid rgba(28,27,25,.12);box-shadow:0 10px 26px rgba(28,27,25,.10);overflow:hidden;display:flex;flex-direction:column;">
+            <div style="flex:none;height:300px;"><image-slot id="ks-card-salmon" shape="rect" placeholder="Miso butter salmon rice bowl"></image-slot></div>
+            <div style="flex:1;padding:20px 24px;">
+              <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.12;">Miso Butter Salmon Rice Bowl</div>
+              <div style="font-size:15px;line-height:1.4;color:rgba(28,27,25,.55);margin-top:10px;">Salmon · white miso · short-grain rice · cucumber</div>
+            </div>
+            <div style="flex:none;padding:16px 24px;border-top:1px solid rgba(28,27,25,.10);display:flex;align-items:center;justify-content:space-between;"><div style="font-size:14px;color:rgba(28,27,25,.6);">30 min · Not made since March</div><div style="font-size:14px;font-weight:600;color:#B5502E;">Details</div></div>
+          </div>
+        </div>
+        <div style="flex:none;padding:22px 24px 12px;display:flex;align-items:center;gap:12px;">
+          <div style="width:50px;height:50px;border-radius:50%;border:1px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 9h11a5 5 0 0 1 0 10h-6" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="8,4.5 3.5,9 8,13.5" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div>
+          <div style="flex:1;height:50px;border-radius:15px;border:1.5px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Not this week</div>
+          <div style="flex:1;height:50px;border-radius:15px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Yes</div>
+        </div>
+        <div style="flex:none;padding:0 20px 30px;">
+          <div style="height:48px;border-radius:14px;background:#1C1B19;display:flex;align-items:center;justify-content:space-between;padding:0 18px;"><span style="font-size:15px;color:#F5F0E8;">Passed on Chai Tea Loaf</span><span style="font-size:15px;font-weight:700;color:#E8A98C;">Undo</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1f" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1f</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Detail inside a round</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Close</span><span style="font-size:14px;font-weight:600;color:rgba(28,27,25,.5);">Still deciding · 5 of 12</span></div>
+        <div style="flex:none;margin:16px 24px 0;height:180px;border-radius:18px;overflow:hidden;"><image-slot id="ks-detail-salmon" shape="rect" placeholder="Salmon bowl hero"></image-slot></div>
+        <div style="flex:none;padding:18px 24px 0;">
+          <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.14;">Miso Butter Salmon Rice Bowl</div>
+          <div style="font-size:15px;color:rgba(28,27,25,.55);margin-top:8px;">30 min · Serves 4 · Weeknight, Fish</div>
+        </div>
+        <div style="flex:none;margin:20px 24px 0;padding:16px 18px;border-radius:14px;background:rgba(181,80,46,.07);border:1px solid rgba(181,80,46,.18);">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B5502E;">Why this recipe</div>
+          <div style="font-size:15px;line-height:1.5;color:rgba(28,27,25,.72);margin-top:8px;">You haven't made it since March, it's the only fish in the deck, and it doesn't overlap with the pasta already in This Week.</div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:20px 24px 0;">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(28,27,25,.45);">Ingredients</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px;font-size:15px;color:rgba(28,27,25,.8);">
+            <div>4 salmon fillets</div><div>2 tbsp white miso</div><div>3 tbsp butter, softened</div><div>2 cups short-grain rice</div><div>1 cucumber, thinly sliced</div><div>Rice vinegar, sesame, scallion</div>
+          </div>
+        </div>
+        <div style="flex:none;padding:14px 24px 30px;display:flex;gap:12px;border-top:1px solid rgba(28,27,25,.10);">
+          <div style="flex:1;height:50px;border-radius:15px;border:1.5px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Not this week</div>
+          <div style="flex:1;height:50px;border-radius:15px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Yes</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1g" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1g</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Pause & resume</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;"><div style="font-size:30px;font-weight:700;letter-spacing:-.02em;">This Week</div><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="#1C1B19" stroke-width="2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="#1C1B19" stroke-width="2" stroke-linecap="round"></path></svg></div>
+        <div style="flex:none;margin:18px 24px 0;padding:18px;border-radius:16px;border:1px solid rgba(28,27,25,.14);background:#FFFCF6;">
+          <div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:17px;font-weight:600;">Round in progress</div><div style="font-size:13px;color:rgba(28,27,25,.5);">Closes Thu 8 PM</div></div>
+          <div style="font-size:15px;color:rgba(28,27,25,.6);margin-top:6px;">You're 5 of 12 in · 2 yes so far</div>
+          <div style="margin-top:14px;height:3px;border-radius:99px;background:rgba(28,27,25,.10);"><div style="height:100%;width:38%;background:#B5502E;border-radius:99px;"></div></div>
+          <div style="margin-top:16px;display:flex;gap:10px;">
+            <div style="flex:1;height:46px;border-radius:14px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Keep going</div>
+            <div style="height:46px;padding:0 18px;border-radius:14px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Results</div>
+          </div>
+        </div>
+        <div style="flex:none;margin-top:22px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:56px;height:56px;border-radius:12px;background:rgba(28,27,25,.07);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(28,27,25,.35);">CR</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Crepes</div><div style="font-size:14px;color:rgba(28,27,25,.5);margin-top:2px;">4×</div></div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:56px;height:56px;border-radius:12px;background:rgba(28,27,25,.07);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(28,27,25,.35);">ST</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Steak with Creamy Pepper…</div><div style="font-size:14px;color:rgba(28,27,25,.5);margin-top:2px;">Serves 2</div></div></div>
+        </div>
+        <div style="flex:none;padding:22px 24px 0;"><div style="font-size:13px;line-height:1.5;color:rgba(28,27,25,.5);">Leaving mid-round keeps your swipes. Nothing lands in This Week until you review and confirm.</div></div>
+        <div style="flex:none;margin-top:auto;border-top:1px solid rgba(28,27,25,.10);height:82px;display:flex;align-items:flex-start;padding-top:12px;">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="18" viewBox="0 0 24 18" fill="none"><path d="M2 3h18M2 9h13M2 15h8" stroke="#1C1B19" stroke-width="2.6" stroke-linecap="round"></path></svg><span style="font-size:12px;font-weight:700;">This Week</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;opacity:.45;"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5h14v17l-7-5-7 5z" stroke="#1C1B19" stroke-width="1.9" stroke-linejoin="round"></path></svg><span style="font-size:12px;font-weight:600;">Library</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1h" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1h</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Group — waiting</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">This week's round</span><span style="width:36px;"></span></div>
+        <div style="flex:none;padding:28px 24px 0;">
+          <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;">You're done — 2 of 3 in</div>
+          <div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);margin-top:8px;">Votes stay hidden until the round closes, so nobody's swayed. Closes Thursday 8 PM.</div>
+        </div>
+        <div style="flex:none;margin-top:26px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:40px;height:40px;border-radius:50%;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">M</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Maya (you)</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Finished · 4 yes</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><polyline points="1,7 6,12 17,1.5" stroke="#B5502E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:40px;height:40px;border-radius:50%;background:#C4A882;color:#4A3A22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">D</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Dev</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Finished · yesterday</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><polyline points="1,7 6,12 17,1.5" stroke="#B5502E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:40px;height:40px;border-radius:50%;background:#9FAE96;color:#2F3A28;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">P</div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Priya</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">7 of 12 · started 2 h ago</div></div><div style="font-size:15px;font-weight:600;color:#B5502E;">Remind</div></div>
+        </div>
+        <div style="flex:none;margin:26px 24px 0;padding:16px 18px;border-radius:14px;background:rgba(28,27,25,.04);">
+          <div style="font-size:15px;line-height:1.5;color:rgba(28,27,25,.65);">3 recipes already have everyone's yes. You can close early — Priya's remaining swipes just won't count.</div>
+        </div>
+        <div style="flex:none;margin-top:auto;padding:0 24px 34px;display:flex;flex-direction:column;gap:10px;">
+          <div style="height:56px;border-radius:16px;background:#1C1B19;color:#F5F0E8;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Close round &amp; see matches</div>
+          <div style="height:50px;border-radius:15px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Nudge everyone</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1i" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1i</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Solo shortlist</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">Your shortlist</span><span style="font-size:16px;color:#B5502E;">Edit</span></div>
+        <div style="flex:none;padding:22px 24px 0;"><div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);">5 yes out of 12. Pick the ones you actually want — drag to set the order you'll cook them.</div></div>
+        <div style="flex:none;margin-top:20px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Miso Butter Salmon Rice Bowl</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">30 min</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><path d="M1 2h16M1 7h16M1 12h16" stroke="rgba(28,27,25,.3)" stroke-width="1.8" stroke-linecap="round"></path></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Green Chile Chicken Enchiladas</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">55 min</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><path d="M1 2h16M1 7h16M1 12h16" stroke="rgba(28,27,25,.3)" stroke-width="1.8" stroke-linecap="round"></path></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Coconut Dal with Lime</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">35 min · pantry</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><path d="M1 2h16M1 7h16M1 12h16" stroke="rgba(28,27,25,.3)" stroke-width="1.8" stroke-linecap="round"></path></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Sheet-Pan Harissa Chicken</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">45 min</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><path d="M1 2h16M1 7h16M1 12h16" stroke="rgba(28,27,25,.3)" stroke-width="1.8" stroke-linecap="round"></path></svg></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);opacity:.55;"><div style="width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(28,27,25,.28);"></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Chai Tea Loaf</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Baking · not a meal</div></div><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><path d="M1 2h16M1 7h16M1 12h16" stroke="rgba(28,27,25,.3)" stroke-width="1.8" stroke-linecap="round"></path></svg></div>
+        </div>
+        <div style="flex:none;padding:20px 24px 0;"><div style="font-size:15px;font-weight:600;color:#B5502E;">Keep browsing the remaining 3</div></div>
+        <div style="flex:none;margin-top:auto;padding:0 24px 34px;">
+          <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Continue with 4</div>
+          <div style="font-size:13px;color:rgba(28,27,25,.45);text-align:center;margin-top:10px;">Next: set servings, then add to This Week.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1j" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1j</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Group consensus</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">Matches</span><span style="width:36px;"></span></div>
+        <div style="flex:none;padding:20px 24px 0;"><div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);">Closed with 3 of 3 in. Tap the ones you want this week.</div></div>
+
+        <div style="flex:none;padding:24px 24px 8px;"><div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#B5502E;">Everyone wants this</div></div>
+        <div style="flex:none;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Sheet-Pan Harissa Chicken</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Maya, Dev, Priya</div></div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Miso Butter Salmon Rice Bowl</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Maya, Dev, Priya</div></div></div>
+        </div>
+
+        <div style="flex:none;padding:22px 24px 8px;"><div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(28,27,25,.5);">Most of you</div></div>
+        <div style="flex:none;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Green Chile Chicken Enchiladas</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">2 of 3 chose this · Priya passed</div></div></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(28,27,25,.28);"></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Mushroom Ragù Polenta</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">2 of 3 chose this</div></div></div>
+        </div>
+
+        <div style="flex:none;padding:22px 24px 8px;"><div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(28,27,25,.5);">Mixed interest</div></div>
+        <div style="flex:none;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);opacity:.7;"><div style="width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(28,27,25,.28);"></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Coconut Dal with Lime</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">1 of 3 chose this</div></div></div>
+        </div>
+
+        <div style="flex:none;margin-top:auto;padding:16px 24px 34px;">
+          <div style="font-size:15px;font-weight:600;color:#B5502E;margin-bottom:14px;">Suggest a few more</div>
+          <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Continue with 3</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1k" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1k</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Review → This Week</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">Add to This Week</span><span style="width:36px;"></span></div>
+        <div style="flex:none;padding:22px 24px 0;"><div style="font-size:15px;line-height:1.45;color:rgba(28,27,25,.6);">Same confirmation as always — set quantities, then add.</div></div>
+        <div style="flex:none;margin-top:20px;">
+          <div style="padding:16px 24px;border-top:1px solid rgba(28,27,25,.10);display:flex;align-items:center;gap:14px;"><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Sheet-Pan Harissa Chicken</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:3px;">Everyone wants this</div></div><div style="display:flex;align-items:center;gap:12px;"><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="2" viewBox="0 0 12 2"><path d="M0 1h12" stroke="#1C1B19" stroke-width="2"></path></svg></div><div style="font-size:16px;font-weight:600;min-width:52px;text-align:center;">Serves 4</div><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0v12M0 6h12" stroke="#1C1B19" stroke-width="2"></path></svg></div></div></div>
+          <div style="padding:16px 24px;border-top:1px solid rgba(28,27,25,.10);display:flex;align-items:center;gap:14px;"><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Miso Butter Salmon Rice Bowl</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:3px;">Everyone wants this</div></div><div style="display:flex;align-items:center;gap:12px;"><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="2" viewBox="0 0 12 2"><path d="M0 1h12" stroke="#1C1B19" stroke-width="2"></path></svg></div><div style="font-size:16px;font-weight:600;min-width:52px;text-align:center;">Serves 4</div><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0v12M0 6h12" stroke="#1C1B19" stroke-width="2"></path></svg></div></div></div>
+          <div style="padding:16px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);display:flex;align-items:center;gap:14px;"><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Green Chile Chicken Enchiladas</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:3px;">2 of 3 chose this</div></div><div style="display:flex;align-items:center;gap:12px;"><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="2" viewBox="0 0 12 2"><path d="M0 1h12" stroke="#1C1B19" stroke-width="2"></path></svg></div><div style="font-size:16px;font-weight:600;min-width:52px;text-align:center;">2×</div><div style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(28,27,25,.2);display:flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0v12M0 6h12" stroke="#1C1B19" stroke-width="2"></path></svg></div></div></div>
+        </div>
+        <div style="flex:none;margin:22px 24px 0;padding:14px 16px;border-radius:12px;background:rgba(28,27,25,.05);display:flex;gap:10px;align-items:flex-start;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-top:2px;flex:none;"><circle cx="8" cy="8" r="7" stroke="rgba(28,27,25,.4)" stroke-width="1.6"></circle><path d="M8 4.5v.5M8 7v4.5" stroke="rgba(28,27,25,.5)" stroke-width="1.8" stroke-linecap="round"></path></svg>
+          <div style="font-size:14px;line-height:1.45;color:rgba(28,27,25,.6);">Mushroom Ragù Polenta was archived during the round, so it's no longer available.</div>
+        </div>
+        <div style="flex:none;margin-top:auto;padding:0 24px 34px;">
+          <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Add 3 to This Week</div>
+          <div style="font-size:13px;color:rgba(28,27,25,.45);text-align:center;margin-top:10px;">Groceries update after you review the list.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1l" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;font-weight:700;color:#B5502E;border:1px solid rgba(181,80,46,.35);border-radius:99px;padding:3px 9px;">1l</span><span style="font-size:14px;font-weight:600;color:#1C1B19;">Too few matches</span></div>
+      <div style="width:390px;height:844px;background:#F5F0E8;color:#1C1B19;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;border-radius:38px;border:1px solid rgba(28,27,25,.12);box-shadow:0 18px 40px rgba(28,27,25,.10);">
+        <div style="flex:none;height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;font-size:14px;font-weight:600;"><span>9:41</span><span style="color:rgba(28,27,25,.45);">▮▮▮</span></div>
+        <div style="flex:none;padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:17px;color:#B5502E;">Back</span><span style="font-size:17px;font-weight:600;">Matches</span><span style="width:36px;"></span></div>
+        <div style="flex:none;padding:56px 24px 0;text-align:center;">
+          <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;">Only one clear match</div>
+          <div style="font-size:15px;line-height:1.5;color:rgba(28,27,25,.6);margin-top:10px;">Everyone agreed on Coconut Dal. The rest of the deck split — nothing else got more than one yes.</div>
+        </div>
+        <div style="flex:none;margin-top:32px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid rgba(28,27,25,.10);border-bottom:1px solid rgba(28,27,25,.10);"><div style="width:26px;height:26px;border-radius:50%;background:#B5502E;display:flex;align-items:center;justify-content:center;"><svg width="14" height="11" viewBox="0 0 14 11" fill="none"><polyline points="1,5.5 5,9.5 13,1.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg></div><div style="flex:1;"><div style="font-size:17px;font-weight:600;">Coconut Dal with Lime</div><div style="font-size:13px;color:rgba(28,27,25,.5);margin-top:2px;">Everyone wants this</div></div></div>
+        </div>
+        <div style="flex:none;padding:28px 24px 0;display:flex;flex-direction:column;gap:10px;">
+          <div style="height:52px;border-radius:15px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Send 8 more suggestions</div>
+          <div style="height:52px;border-radius:15px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">See what got a single yes</div>
+          <div style="height:52px;border-radius:15px;border:1.5px solid rgba(28,27,25,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;">Plan it by hand instead</div>
+        </div>
+        <div style="flex:none;margin-top:auto;padding:0 24px 34px;">
+          <div style="height:56px;border-radius:16px;background:#B5502E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;">Add 1 to This Week</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1720,&quot;height&quot;:1100}}">
+const DECK = [
+  { title: "Sheet-Pan Harissa Chicken", kind: "Weeknight · 45 min", ing: "Chicken thighs · harissa · new potatoes · lemon", meta: "Cooked twice this spring", tint: "rgba(181,80,46,.07)" },
+  { title: "Coconut Dal with Lime", kind: "Pantry · 35 min", ing: "Red lentils · coconut milk · ginger · lime", meta: "Nothing to shop for", tint: "rgba(159,174,150,.16)" },
+  { title: "Green Chile Chicken Enchiladas", kind: "Comfort · 55 min", ing: "Tortillas · roasted green chile · jack cheese", meta: "Dev's favourite", tint: "rgba(196,168,130,.18)" },
+  { title: "Charred Broccoli & White Bean Salad", kind: "Light · 25 min", ing: "Broccoli · cannellini · anchovy · chilli", meta: "Not made since January", tint: "rgba(28,27,25,.05)" },
+  { title: "Mushroom Ragù Polenta", kind: "Slow · 70 min", ing: "Mixed mushrooms · polenta · thyme · parmesan", meta: "New to your library", tint: "rgba(200,154,140,.16)" },
+  { title: "Lemon Herb Roast Chicken", kind: "Sunday · 90 min", ing: "Whole chicken · lemon · tarragon · shallots", meta: "Last cooked in April", tint: "rgba(181,80,46,.06)" },
+  { title: "Spaghetti Bolognese", kind: "Weeknight · 50 min", ing: "Beef · soffritto · tinned tomato · pasta", meta: "Cooked 6× this year", tint: "rgba(159,174,150,.13)" },
+  { title: "Miso Butter Salmon Rice Bowl", kind: "Fish · 30 min", ing: "Salmon · white miso · rice · cucumber", meta: "Not made since March", tint: "rgba(196,168,130,.15)" },
+  { title: "Chicken Larb Lettuce Cups", kind: "Light · 25 min", ing: "Chicken mince · lime · mint · toasted rice", meta: "Only cooked once", tint: "rgba(159,174,150,.15)" },
+  { title: "Braised Chickpeas & Greens", kind: "Pantry · 40 min", ing: "Chickpeas · chard · preserved lemon", meta: "Nothing to shop for", tint: "rgba(28,27,25,.05)" },
+  { title: "Sesame Noodles with Smashed Cucumber", kind: "Cold · 20 min", ing: "Wheat noodles · tahini · chilli oil · cucumber", meta: "Not made since last summer", tint: "rgba(200,154,140,.14)" },
+  { title: "Cacio e Pepe", kind: "Fast · 15 min", ing: "Bucatini · pecorino · black pepper", meta: "Skipped — pasta already planned", tint: "rgba(181,80,46,.06)" }
+];
+const TARGET = 4;
+
+class Component extends DCLogic {
+  state = { i: 0, dx: 0, dragging: false, history: [], yes: 0, flying: 0 };
+
+  decide(kind) {
+    const i = this.state.i;
+    if (i >= DECK.length) return;
+    this.setState(s => ({
+      flying: kind === "yes" ? 460 : -460, dragging: false,
+      history: s.history.concat([{ i, kind }]),
+      yes: s.yes + (kind === "yes" ? 1 : 0)
+    }));
+    setTimeout(() => this.setState(s => ({ i: Math.min(s.i + 1, DECK.length), flying: 0, dx: 0 })), 220);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const card = DECK[Math.min(s.i, DECK.length - 1)];
+    const done = s.i >= DECK.length;
+    const off = s.flying || s.dx;
+    const rot = off / 26;
+    return {
+      cardTitle: done ? "That's the deck" : card.title,
+      cardKind: done ? "Round complete" : card.kind,
+      cardIngredients: done ? "Review your picks whenever you're ready — or ask for a few more suggestions." : card.ing,
+      cardMeta: done ? s.yes + " yes" : card.meta,
+      cardTint: done ? "rgba(28,27,25,.04)" : card.tint,
+      cardTransform: "translateX(" + off + "px) rotate(" + rot + "deg)",
+      cardTransition: s.dragging ? "none" : "transform .22s cubic-bezier(.3,.8,.4,1)",
+      yesStamp: String(Math.max(0, Math.min(1, off / 90))),
+      noStamp: String(Math.max(0, Math.min(1, -off / 90))),
+      progressLabel: done ? DECK.length + " of " + DECK.length : (s.i + 1) + " of " + DECK.length,
+      progressPct: Math.round((s.i / DECK.length) * 100) + "%",
+      yesLabel: s.yes + " yes",
+      yesCount: s.yes,
+      undoOpacity: s.history.length ? "1" : ".35",
+      finishOpacity: s.yes >= TARGET || done ? "1" : "0",
+      hintLine: s.yes >= TARGET ? "You've got " + s.yes + " — finish now or keep looking." : (done ? "Nothing gets added until you confirm." : "Drag the card, or use the buttons below."),
+      like: () => this.decide("yes"),
+      pass: () => this.decide("no"),
+      pause: () => this.setState({ i: 0, dx: 0, yes: 0, history: [], flying: 0 }),
+      undo: () => this.setState(s2 => {
+        if (!s2.history.length) return null;
+        const last = s2.history[s2.history.length - 1];
+        return { i: last.i, dx: 0, flying: 0, history: s2.history.slice(0, -1), yes: s2.yes - (last.kind === "yes" ? 1 : 0) };
+      }),
+      openDetail: () => {},
+      onDown: e => { if (this.state.i >= DECK.length) return; this._x0 = e.clientX; e.currentTarget.setPointerCapture(e.pointerId); this.setState({ dragging: true, dx: 0 }); },
+      onMove: e => { if (!this.state.dragging) return; this.setState({ dx: e.clientX - this._x0 }); },
+      onUp: () => {
+        if (!this.state.dragging) return;
+        const dx = this.state.dx;
+        if (dx > 95) this.decide("yes");
+        else if (dx < -95) this.decide("no");
+        else this.setState({ dragging: false, dx: 0 });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>
