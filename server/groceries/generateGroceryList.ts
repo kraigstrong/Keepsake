@@ -8,7 +8,12 @@
  */
 
 import { convertToSystem } from '../units/convertUnit.ts';
-import { unitClass, convertQuantity, type UnitSystem } from '../units/quantityVocabulary.ts';
+import {
+  unitClass,
+  convertQuantity,
+  type Unit,
+  type UnitSystem,
+} from '../units/quantityVocabulary.ts';
 import { scaleQuantity } from '../units/scaleQuantity.ts';
 import { formatIngredientLine } from '../units/formatIngredientLine.ts';
 import type { ParsedIngredientLine } from '../units/parseQuantity.ts';
@@ -62,13 +67,36 @@ function groceryDisplayText(ingredientText: string): string {
   return stripLeadingModifier(ingredientText.split(',', 1)[0]!.trim());
 }
 
+// Spoon-measured units (tsp/tbsp) are the one case where "whichever
+// unit the first occurrence happened to use" reads badly at scale —
+// found via live testing, 2026-08-19 (crepes' several cups of flour +
+// cheese sauce's few tbsp merged to "66 tbsp flour"). Cup and up
+// (cup/pint/quart/gallon, oz/lb) are left alone even when a coarser
+// unit is technically available: "3 cups milk" merging 1 cup + 1 pint
+// already reads fine, and auto-bumping every same-class pair up to
+// its largest present unit would turn that into "1.5 pints milk" —
+// worse, not better. Never bumps to a unit no occurrence actually
+// used (server/groceries/generateGroceryList.ts's own conservative
+// posture, ADR-0022 decision 4).
+const SPOON_UNITS: ReadonlySet<Unit> = new Set(['tsp', 'tbsp']);
+
+function bumpFromSpoonUnit(value: number, from: Unit, presentUnits: ReadonlySet<Unit>): Unit {
+  if (presentUnits.has('cup') && convertQuantity(value, from, 'cup') >= 1) {
+    return 'cup';
+  }
+  if (from === 'tsp' && presentUnits.has('tbsp') && convertQuantity(value, from, 'tbsp') >= 1) {
+    return 'tbsp';
+  }
+  return from;
+}
+
 function sumSubgroup(occurrences: ScaledOccurrence[]): string {
   const first = occurrences[0]!;
   if (first.quantityMin === null || occurrences.length === 1) {
     return formatIngredientLine(first);
   }
 
-  const targetUnit = first.unit;
+  let targetUnit = first.unit;
   let summedMin = 0;
   let summedMax = 0;
   for (const occurrence of occurrences) {
@@ -80,6 +108,20 @@ function sumSubgroup(occurrences: ScaledOccurrence[]): string {
     } else {
       summedMin += convertQuantity(min, occurrence.unit, targetUnit);
       summedMax += convertQuantity(max, occurrence.unit, targetUnit);
+    }
+  }
+
+  if (targetUnit !== null && SPOON_UNITS.has(targetUnit)) {
+    const presentUnits = new Set(
+      occurrences
+        .map((occurrence) => occurrence.unit)
+        .filter((unit): unit is Unit => unit !== null),
+    );
+    const bumpedUnit = bumpFromSpoonUnit(summedMin, targetUnit, presentUnits);
+    if (bumpedUnit !== targetUnit) {
+      summedMin = convertQuantity(summedMin, targetUnit, bumpedUnit);
+      summedMax = convertQuantity(summedMax, targetUnit, bumpedUnit);
+      targetUnit = bumpedUnit;
     }
   }
 
