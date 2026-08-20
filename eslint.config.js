@@ -16,11 +16,15 @@ module.exports = [
     },
   },
   {
-    // sentry.ts/posthog.ts guard init with module-level state, so their
-    // tests need a fresh module instance per test case (resetModules() +
-    // dynamic require()) — a static top-level import would share that
-    // state across every test in the file.
-    files: ['src/observability/sentry.test.ts', 'src/observability/posthog.test.ts'],
+    // sentry.ts/posthog.ts/prefetch.ts guard init/singleton state with
+    // module-level state, so their tests need a fresh module instance per
+    // test case (resetModules() + dynamic require()) — a static top-level
+    // import would share that state across every test in the file.
+    files: [
+      'src/observability/sentry.test.ts',
+      'src/observability/posthog.test.ts',
+      'src/thisWeek/prefetch.test.ts',
+    ],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },

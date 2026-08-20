@@ -13,10 +13,12 @@ import { ThisWeekScreen } from './ThisWeekScreen';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import * as heroImage from '../recipes/heroImage';
+import { useSession } from '../session/SessionProvider';
 
 jest.mock('./api');
 jest.mock('../recipes/heroImage');
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 // Real useFocusEffect only re-invokes its callback on a focus event, or
 // when the memoized callback's identity changes while still focused
 // (ThisWeekScreen.tsx relies on the latter for the isOnline -> load()
@@ -62,6 +64,7 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseSession = useSession as jest.Mock;
 
 const push = jest.fn();
 
@@ -90,6 +93,7 @@ beforeEach(() => {
   mockLastFocusEffect = null;
   mockedUseRouter.mockReturnValue({ push });
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedHeroImage.getHeroImageUrl.mockResolvedValue(null);
   mockedApi.confirmThisWeek.mockResolvedValue(undefined);
   mockedApi.reopenThisWeek.mockResolvedValue(undefined);

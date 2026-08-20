@@ -6,13 +6,13 @@ import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/R
 import {
   addRecipeToThisWeek,
   confirmThisWeek,
-  fetchCurrentWeeklyPlan,
   removeFromThisWeek,
   reopenThisWeek,
   reorderThisWeek,
   type ThisWeekEntry,
   type ThisWeekPlan,
 } from './api';
+import { loadThisWeekPlan } from './prefetch';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
@@ -23,6 +23,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getHeroImageUrl } from '../recipes/heroImage';
+import { useSession } from '../session/SessionProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 // How long the "Removed — Undo" banner stays up (ADR-0021: client-side
@@ -55,6 +56,8 @@ export function ThisWeekScreen() {
   const router = useRouter();
   const { isOnline } = useConnectivity();
   const { showToast } = useToast();
+  const { session } = useSession();
+  const userId = session?.user.id ?? null;
 
   const [plan, setPlan] = useState<ThisWeekPlan | null>(null);
   const [heroUrls, setHeroUrls] = useState<Record<string, string>>({});
@@ -70,7 +73,7 @@ export function ThisWeekScreen() {
 
   const load = useCallback(async () => {
     try {
-      const current = await fetchCurrentWeeklyPlan();
+      const current = await loadThisWeekPlan(userId);
       setPlan(current);
       setLoadError(false);
       current.entries.forEach((entry) => {
@@ -82,7 +85,7 @@ export function ThisWeekScreen() {
     } catch {
       setLoadError(true);
     }
-  }, []);
+  }, [userId]);
 
   // isOnline is a real dependency, not just an exhaustive-deps
   // formality: useFocusEffect re-runs its callback immediately whenever

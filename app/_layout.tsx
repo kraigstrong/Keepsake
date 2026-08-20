@@ -25,6 +25,7 @@ import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
 import { syncHousehold } from '../src/sync/syncEngine';
 import { colors, spacing } from '../src/theme/tokens';
+import { prefetchThisWeek } from '../src/thisWeek/prefetch';
 
 // Runs once, at module-evaluation time — before RootLayout's first
 // render — because Sentry wants init() to run as early as possible so
@@ -295,6 +296,16 @@ function AuthenticatedRouteBoundary() {
   const { session, isLoading: sessionLoading } = useSession();
   const { profile, household, isLoading: householdLoading } = useHousehold();
   useDevAutoSignIn();
+
+  // Kicks off This Week's network fetch as soon as a session exists —
+  // running concurrently with HouseholdProvider's own fetch, while
+  // StartupScreen (below) is still showing — instead of waiting for
+  // ThisWeekScreen to start it after routing there. See
+  // src/thisWeek/prefetch.ts for what happens when there's no household
+  // yet (a first-time user mid-onboarding).
+  useEffect(() => {
+    if (session?.user.id) prefetchThisWeek(session.user.id);
+  }, [session?.user.id]);
 
   if (sessionLoading) {
     return <StartupScreen />;
