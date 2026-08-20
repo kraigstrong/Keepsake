@@ -1,4 +1,5 @@
 import { fetchCurrentWeeklyPlan, type ThisWeekPlan } from './api';
+import { getHeroImageUrl } from '../recipes/heroImage';
 
 /**
  * One-shot, in-memory only — not a cache layer (ADR-0021: This Week
@@ -30,6 +31,23 @@ export function prefetchThisWeek(userId: string): void {
   // loadThisWeekPlan below still surfaces it to whatever consumes it,
   // same as a normal fetchCurrentWeeklyPlan() rejection would.
   prefetched.catch(() => {});
+
+  // Also warms getHeroImageUrl's own per-path cache (src/recipes/
+  // heroImage.ts) for every entry, in parallel, as soon as the plan
+  // itself resolves — the whole reason to prefetch the plan early is
+  // wasted if ThisWeekScreen still has to resolve every thumbnail's
+  // signed URL one at a time after routing there. A cache hit later
+  // resolves synchronously, so entries that finished resolving during
+  // StartupScreen appear together instead of trickling in by network
+  // latency. Errors are swallowed the same way — ThisWeekScreen's own
+  // getHeroImageUrl call is what actually surfaces a real failure.
+  prefetched
+    .then((plan) => {
+      plan.entries.forEach((entry) => {
+        if (entry.heroImagePath) getHeroImageUrl(entry.heroImagePath).catch(() => {});
+      });
+    })
+    .catch(() => {});
 }
 
 function consumePrefetchedThisWeek(userId: string): Promise<ThisWeekPlan> | null {

@@ -1,20 +1,44 @@
-import type { ThisWeekPlan } from './api';
+import type { ThisWeekEntry, ThisWeekPlan } from './api';
 
 // prefetchThisWeek/loadThisWeekPlan share module-level singleton state, so
 // each test gets a fresh module instance via resetModules() + a dynamic
 // require — same reasoning as posthog.test.ts/sentry.test.ts.
 jest.mock('./api');
-// ./api is auto-mocked above, but Jest still loads the real module once to
-// derive its shape — which would otherwise trip src/supabase/instance.ts's
-// missing-env-var throw.
+jest.mock('../recipes/heroImage');
+// ../recipes/heroImage is auto-mocked above, but Jest still loads the real
+// module once to derive its shape — which would otherwise trip its own
+// expo-image-picker/expo-image-manipulator/expo-file-system imports and
+// src/supabase/instance.ts's missing-env-var throw (same reasoning as
+// heroImage.test.ts's own mocks).
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(),
+}));
+jest.mock('expo-image-manipulator', () => ({
+  ImageManipulator: { manipulate: jest.fn() },
+  SaveFormat: { JPEG: 'jpeg' },
+}));
+jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 beforeEach(() => {
   jest.resetModules();
 });
 
-function plan(id: string): ThisWeekPlan {
-  return { id, status: 'planning', entries: [] };
+function plan(id: string, entries: ThisWeekEntry[] = []): ThisWeekPlan {
+  return { id, status: 'planning', entries };
+}
+
+function entry(overrides: Partial<ThisWeekEntry> = {}): ThisWeekEntry {
+  return {
+    id: overrides.id ?? 'entry-1',
+    recipeId: overrides.recipeId ?? 'recipe-1',
+    title: overrides.title ?? 'Herb Roast Chicken',
+    heroImagePath: 'heroImagePath' in overrides ? overrides.heroImagePath! : null,
+    multiplier: overrides.multiplier ?? 1,
+    servingsCount: overrides.servingsCount ?? 4,
+    position: overrides.position ?? 0,
+  };
 }
 
 describe('loadThisWeekPlan', () => {
@@ -104,5 +128,41 @@ describe('prefetchThisWeek', () => {
     prefetchThisWeek('user-1');
 
     expect(api.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('warms every entry’s hero-image URL as soon as the plan resolves', async () => {
+    const api = jest.requireMock('./api');
+    const heroImage = jest.requireMock('../recipes/heroImage');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(
+      plan('p1', [
+        entry({ id: 'e1', heroImagePath: 'household-1/a.jpg' }),
+        entry({ id: 'e2', heroImagePath: 'household-1/b.jpg' }),
+        entry({ id: 'e3', heroImagePath: null }),
+      ]),
+    );
+    heroImage.getHeroImageUrl.mockResolvedValue('https://example.com/signed');
+    const { prefetchThisWeek } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+    // Let the plan promise's .then() microtask (which fires the hero
+    // fetches) run before asserting.
+    await new Promise(process.nextTick);
+
+    expect(heroImage.getHeroImageUrl).toHaveBeenCalledTimes(2);
+    expect(heroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/a.jpg');
+    expect(heroImage.getHeroImageUrl).toHaveBeenCalledWith('household-1/b.jpg');
+  });
+
+  it('does not throw when a hero-image warm-up fails', async () => {
+    const api = jest.requireMock('./api');
+    const heroImage = jest.requireMock('../recipes/heroImage');
+    api.fetchCurrentWeeklyPlan.mockResolvedValue(
+      plan('p1', [entry({ heroImagePath: 'household-1/a.jpg' })]),
+    );
+    heroImage.getHeroImageUrl.mockRejectedValue(new Error('storage down'));
+    const { prefetchThisWeek } = require('./prefetch');
+
+    expect(() => prefetchThisWeek('user-1')).not.toThrow();
+    await new Promise(process.nextTick);
   });
 });
