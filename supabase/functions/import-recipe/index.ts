@@ -311,11 +311,19 @@ Deno.serve(async (req: Request) => {
     // was given — a worker whose claim has since been superseded by a
     // reclaim can no longer mark the job failed out from under the new
     // claimant.
-    await supabase.rpc('fail_import_job', {
+    const { error: failError } = await supabase.rpc('fail_import_job', {
       job_id: job.id,
       claim_token: job.claim_token,
       error_message: message,
     });
+    // fail_import_job itself failing is always worth logging, regardless
+    // of why fail() was called — a claim_token mismatch or DB write
+    // failure here means the job can be left stuck in 'processing'
+    // instead of recording the real outcome, undermining the observability
+    // this comment's own boundary promises.
+    if (failError) {
+      console.error(`Could not mark job ${job.id} failed:`, failError.message);
+    }
     return jsonResponse({ jobId: job.id, error: message }, status);
   }
 
@@ -421,8 +429,11 @@ Deno.serve(async (req: Request) => {
         .from('recipe-images')
         .download(originalPhotoPath);
       if (downloadError || !photoBlob) {
+        // originalPhotoPath is caller-controlled (the request body's
+        // photoPath) — JSON.stringify rather than raw interpolation so a
+        // forged newline/control character can't inject fake log lines.
         console.error(
-          `Could not download uploaded photo for job ${job.id} at ${originalPhotoPath}:`,
+          `Could not download uploaded photo for job ${job.id} at ${JSON.stringify(originalPhotoPath)}:`,
           downloadError?.message ?? 'not found',
         );
         return await fail(
