@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../components/Button';
@@ -57,6 +57,18 @@ export function DoneCookingSheet({
       setUserToggled(false);
     }
   }
+  // Guards against the confirm button's onPress and onPressIn (see below)
+  // both firing for one activation. A ref, not state: the two events can
+  // fire close enough together that a state-based guard could still read
+  // stale (pre-update) on the second call, whereas a ref read-then-write
+  // inside the same event-handler call is immediately consistent. Reset
+  // via effect rather than inline during render — mutating a ref during
+  // render is a lint error (react-hooks/refs) and, unlike removeFromPlan's
+  // reset above, this one has no same-render output to stay in sync with.
+  const hasFiredConfirmRef = useRef(false);
+  useEffect(() => {
+    if (visible) hasFiredConfirmRef.current = false;
+  }, [visible]);
   // Codex review, PR #50: the block above only fires on visible's own
   // false->true edge. If the sheet was already open when the plan
   // lookup was still pending (canRemoveFromPlan false at that point),
@@ -72,6 +84,8 @@ export function DoneCookingSheet({
   }
 
   function handleConfirm() {
+    if (hasFiredConfirmRef.current) return;
+    hasFiredConfirmRef.current = true;
     onConfirm(note.trim() || null, canRemoveFromPlan && removeFromPlan);
     setNote('');
   }
@@ -110,13 +124,11 @@ export function DoneCookingSheet({
 
       <Button
         title="Done Cooking"
-        // onPressIn, not onPress: dismissing the note TextInput's keyboard
-        // (a side effect of touching this button while it's focused)
-        // re-collapses the sheet's KeyboardAvoidingView padding live,
-        // mid-touch. onPress's touch-up-in-bounds check then measures
-        // this button's shifted position and rejects the release,
-        // requiring a second tap. onPressIn fires at touch-down, before
-        // that shift has a chance to happen.
+        // Both wired to the same (once-only) handler: onPressIn for the
+        // touch-race workaround (see ButtonProps.onPressIn), onPress kept
+        // so VoiceOver/TalkBack activation — which dispatches through
+        // onPress, not onPressIn — still confirms.
+        onPress={handleConfirm}
         onPressIn={handleConfirm}
         disabled={isSubmitting}
         testID="done-cooking-confirm-button"
