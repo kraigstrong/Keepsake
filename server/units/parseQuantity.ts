@@ -216,24 +216,54 @@ const CLOSE_PAREN = /^\s*\)\s*/;
 // restatement of it, and must never be stripped. hasPrimaryUnit is
 // exactly that distinction, passed in from the one call site that
 // already knows whether matchUnit succeeded.
+//
+// The parenthetical itself can be compound (found via the same
+// 2026-08-19 survey as the mixed-number "and" bug, same site):
+// "(45–75g/ml)" is a ranged annotation (matched the same way the
+// primary quantity's own range is), and "(113g/120ml)" restates the
+// annotation in a second unit after a "/" — either as a full second
+// number+unit pair, or, when the magnitude is the same as the first
+// (as in the ranged case above), just the bare unit. Both are still
+// only ever a single such group; nothing in the survey needed more.
 function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean): string {
   if (!hasPrimaryUnit) return text;
   const openMatch = OPEN_PAREN.exec(text);
   if (!openMatch) return text;
 
-  const inside = text.slice(openMatch[0].length);
-  const number = matchNumber(inside);
+  let rest = text.slice(openMatch[0].length);
+
+  const number = matchNumber(rest);
   if (!number) return text;
+  rest = rest.slice(number.matchedLength);
 
-  const afterNumber = inside.slice(number.matchedLength).replace(/^\s+/, '');
-  const unit = matchUnit(afterNumber);
+  const rangeMatch = RANGE_SEPARATOR.exec(rest);
+  if (rangeMatch) {
+    const afterSeparator = rest.slice(rangeMatch[0].length);
+    const secondNumber = matchNumber(afterSeparator);
+    if (secondNumber) {
+      rest = afterSeparator.slice(secondNumber.matchedLength);
+    }
+  }
+  rest = rest.replace(/^\s+/, '');
+
+  const unit = matchUnit(rest);
   if (!unit) return text;
+  rest = rest.slice(unit.matchedLength);
 
-  const afterUnit = afterNumber.slice(unit.matchedLength);
-  const closeMatch = CLOSE_PAREN.exec(afterUnit);
-  if (!closeMatch) return text; // no closing paren right after the unit — not confidently this pattern
+  if (rest[0] === '/') {
+    const afterSlash = rest.slice(1);
+    const altNumber = matchNumber(afterSlash);
+    const afterAltNumber = altNumber ? afterSlash.slice(altNumber.matchedLength) : afterSlash;
+    const altUnit = matchUnit(afterAltNumber);
+    if (altUnit) {
+      rest = afterAltNumber.slice(altUnit.matchedLength);
+    }
+  }
 
-  return afterUnit.slice(closeMatch[0].length);
+  const closeMatch = CLOSE_PAREN.exec(rest);
+  if (!closeMatch) return text; // no closing paren right after — not confidently this pattern
+
+  return rest.slice(closeMatch[0].length);
 }
 
 function stripAlternateUnit(text: string, hasPrimaryUnit: boolean): string {

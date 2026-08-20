@@ -317,6 +317,17 @@ export const REAL_WORLD_INGREDIENT_CORPUS: IngredientCorpusEntry[] = [
       'sallysbakingaddiction.com, confirmed live 2026-08-19 — see docs/roadmap.md Not-yet-triaged backlog',
     lines: ['1 and 3/4 cups (219g) all-purpose flour'],
   },
+  {
+    // Same survey and site as the entry above, same caveat: the exact
+    // page/recipe title wasn't recorded at the time, only the domain
+    // and these two lines. Motivated the compound-parenthetical fix —
+    // a ranged annotation and a dual-unit slash annotation, respectively.
+    recipe:
+      'Recipe on sallysbakingaddiction.com (exact page not recorded), compound parentheticals',
+    source:
+      'sallysbakingaddiction.com, confirmed live 2026-08-19 — see docs/roadmap.md Not-yet-triaged backlog',
+    lines: ['3–5 Tablespoons (45–75g/ml) heavy cream', '1/2 cup (113g/120ml) vegetable oil'],
+  },
 ];
 
 export const REAL_WORLD_INGREDIENT_LINES: string[] = REAL_WORLD_INGREDIENT_CORPUS.flatMap(
