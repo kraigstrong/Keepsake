@@ -288,6 +288,32 @@ describe('parseQuantity — fixture corpus', () => {
       unit: 'lb',
       ingredientText: 'butter',
     },
+
+    // Abbreviated unit with a trailing period (found via live testing,
+    // 2026-08-19): matchUnit() must consume the period itself, not just
+    // the unit text, or it's left behind as a stray leading "." blocking
+    // both the parenthetical- and separator-form alternate-unit strips.
+    {
+      line: '6 oz. (180g) medium cheddar cheese',
+      quantityMin: 6,
+      quantityMax: 6,
+      unit: 'oz',
+      ingredientText: 'medium cheddar cheese',
+    },
+    {
+      line: '1 lb. / 500g beef',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'lb',
+      ingredientText: 'beef',
+    },
+    {
+      line: '2 tbsp. olive oil',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: 'tbsp',
+      ingredientText: 'olive oil',
+    },
   ];
 
   it.each(cases)('parses "$line"', ({ line, quantityMin, quantityMax, unit, ingredientText }) => {

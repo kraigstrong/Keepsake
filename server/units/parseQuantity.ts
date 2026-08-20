@@ -163,7 +163,14 @@ function matchUnit(text: string): { unit: Unit; matchedLength: number } | null {
   const key = match[1]!.toLowerCase();
   const synonym = UNIT_SYNONYMS[key];
   if (!synonym || !isUnit(synonym)) return null;
-  return { unit: synonym, matchedLength: match[0].length };
+  // Abbreviated units ("oz.", "lb.") often carry a trailing period; consume
+  // it here so it isn't left as a stray leading "." on whatever follows
+  // (docs/roadmap.md's Not-yet-triaged backlog has the incident history).
+  let matchedLength = match[0].length;
+  if (text[matchedLength] === '.') {
+    matchedLength += 1;
+  }
+  return { unit: synonym, matchedLength };
 }
 
 function unparsed(lineText: string): ParsedIngredientLine {
