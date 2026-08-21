@@ -4,7 +4,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-**Iconography replacement** — `docs/roadmap.md`'s Not-yet-triaged item, "Replace app iconography with the 'Keepsake · Ink & Paper' icon system". Branch `design/icon-system-replacement` exists and is planned through the decision gate (2026-08-20); **implementation not started**, paused on the developer's usage limit. The 6-commit plan, both developer decisions, and the findings verified against the design file all live in that roadmap entry — resume from there rather than re-deriving.
+**Iconography replacement** — `docs/roadmap.md`'s Not-yet-triaged item, "Replace app iconography with the 'Keepsake · Ink & Paper' icon system". Branch `design/icon-system-replacement`, 8 commits, **in-app icon set done and ready for review**; local CI green (typecheck/lint/format:check/test/check:client-secrets). Built live with the developer over one session, with feedback between each slice. The app-icon PNG assets are deliberately split off as a separate work item — see that roadmap entry for what shipped, the decisions taken during the build, and what remains.
 
 Still open underneath it: `docs/roadmap.md`'s **MVP Validation** milestone. Journey 1 (website success) closed live 2026-08-19; the remaining backlog item is the live two-actor session to close Journey 3 (shared household) (see Blocked, below).
 
@@ -26,7 +26,7 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Next action
 
-Resume the iconography replacement on branch `design/icon-system-replacement` at step 1 of the plan in `docs/roadmap.md`'s entry (the shared `Icon` primitive). Nothing about it is blocked — the PNG-rasterization blocker noted earlier is resolved by the developer's decision to use a checked-in dependency-free Node script.
+Push `design/icon-system-replacement` and open its PR (8 commits, in-app icon set). Then the app-icon assets as a separate work item: a dependency-free Node rasterizer emitting `assets/icon.png`/`favicon.png` in the ink colorway, plus deleting the unreferenced `assets/splash-icon.png`. Neither is blocked. The icon set also wants a real-device look — tests can't judge whether the glyphs read correctly at size.
 
 Other open options, unchanged: the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
 
