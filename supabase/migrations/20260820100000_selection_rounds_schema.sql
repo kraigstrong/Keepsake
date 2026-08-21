@@ -111,12 +111,17 @@ create table if not exists public.selection_round_candidates (
   unique (round_id, recipe_id)
 );
 
--- Never mutated once written (ADR-0027 decision 1): a recipe's
--- availability (archived/deleted) is re-checked live at read and apply
--- time instead of an "excluded" flag here, so the historical deck stays
--- stable for consensus math even if a recipe is archived mid-round. No
--- UPDATE grant exists for this table (next migration) — this comment
--- records the intent, the grants enforce it.
+-- Never mutated once written (ADR-0027 decision 1): availability is
+-- re-checked live at read and apply time rather than flagged here, so
+-- the deck stays stable for consensus math when a recipe is archived.
+--
+-- Permanent deletion is the deliberate exception: recipe_id cascades,
+-- so purging a recipe also drops its candidate and decision rows.
+-- That matches planning_entries.recipe_id, which already behaves this
+-- way for This Week, and the alternatives are worse — `restrict` would
+-- block a member from purging their own recipe because some round
+-- references it, and preserving the row means keeping a title snapshot
+-- of content the user asked to have destroyed.
 comment on table public.selection_round_candidates is
   'Append-only: a candidate row is never updated after insert. Availability is re-checked live, not tracked here.';
 
