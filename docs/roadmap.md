@@ -10,7 +10,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ## 1. MVP Validation
 
-**What done looks like:** the six required product journeys (website success, manual/offline, shared household, lifecycle, security, credential validation) are confirmed working against current reality, including at least one physical-device pass, with no known data-loss or household-isolation defect remaining. **Exception, stated explicitly so this milestone doesn't quietly depend on milestone 4:** credential validation's compiled-artifact and build-log scan (source-level and generated-native-project scans are separate and already in scope here) is intentionally deferred to Friends & Family Preview's real device build — see that milestone's backlog for why. This milestone's own bar for credential validation is the source/native-project-level scanning already achievable without one.
+**What done looks like:** the six required product journeys (website success, manual/offline, shared household, lifecycle, security, credential validation) are confirmed working against current reality, including at least one physical-device pass, with no known data-loss or household-isolation defect remaining. **Exception, stated explicitly so this milestone doesn't quietly depend on milestone 5:** credential validation's compiled-artifact and build-log scan (source-level and generated-native-project scans are separate and already in scope here) is intentionally deferred to Friends & Family Preview's real device build — see that milestone's backlog for why. This milestone's own bar for credential validation is the source/native-project-level scanning already achievable without one.
 
 **Status:** Refresh done, 2026-08-18. Five of six journeys now confirmed against current code/CI: (2) offline — OFF-01/02/03/05 individually `Done (tested)`, `record_cooking_event`'s idempotency proves no duplicate event on reconnect; (4) lifecycle — confirmed live in Simulator previously, full Jest + CI pgTAP suite re-confirmed passing; (5) security — the best-covered journey, dedicated pgTAP isolation tests plus per-RPC cross-household-rejection cases green in CI; (6) credential validation — native-project scans (`expo prebuild` + `gitleaks`) clean, compiled-artifact/build-log scan deferred to Friends & Family Preview by design (see this milestone's exception note above); (1) website success — closed live 2026-08-19 (real device, developer driving, agent watching logs): URL import, grocery generation/export, and Cooking Mode (unit scaling, checklist, Done Cooking, notes) all walked live and worked end to end. Four non-blocking bugs found and logged, not fixed blind — none are data-loss or household-isolation defects, so none block this journey's own bar: a grocery-merge unit-selection bug, a period-abbreviated-unit parsing gap, a Cooking Mode double-tap UX bug, and a reinforced cold-launch onboarding flash (see this milestone's own bullet below and `docs/roadmap.md`'s Reliability/Not-yet-triaged backlogs for each). One remains open: (3) shared household — needs an actual two-actor session, which pgTAP's single-transaction model can't substitute for.
 
@@ -51,7 +51,33 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ---
 
-## 4. Friends & Family Preview
+## 4. Smart Meal Selection ("Help Me Choose")
+
+**What done looks like:** a household member can start a selection round, swipe through a deck of their own recipes, and land the ones they picked into This Week — without ever typing into a search box. Sequenced **ahead of Friends & Family Preview** (developer decision, 2026-08-20): the beta ships with this feature in it, not as a follow-up.
+
+**Architecture:** [`docs/proposals/smart-meal-selection-architecture.md`](proposals/smart-meal-selection-architecture.md) is the codebase-grounded design — domain model, lifecycle, server operations, the deterministic non-LLM ranking heuristic, concurrency/security. [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) records the decisions from it that clear the ADR bar. Design handoff: [`docs/design/help-me-choose-handoff/`](design/help-me-choose-handoff/).
+
+**Build order — solo flow first, walkable skeleton first** (developer decisions, 2026-08-20). Two deliberate departures from the proposal's own M1–M8 sequence, both recorded here so a reviewer doesn't have to reconstruct why:
+
+1. **Solo before group.** Solo exercises the entire spine (round → deck → swipe → review → apply) and is verifiable by one person, so it doesn't inherit MVP Validation's blocked two-actor session. The **full four-table schema still ships up front**, including `mode`, `closes_at`, and `selection_round_participants`, and the blind-ballot RLS is written correctly from day one — a solo round is a one-participant group round as far as Postgres is concerned, so scoping down the schema would only buy a migration rewrite later. Only the RPC surface and the UI are scoped down.
+2. **Walkable skeleton before smart ranking.** The client lands on a deliberately filter-only deck, so the solo path is walkable on a real device before the ranking heuristic exists; scoring is wired in after. The proposal has the client last (M6), but `docs/architecture.md`'s "vertical slices, not layers" points the other way, and deck *quality* is a judgment call that needs a developer looking at real decks — which is impossible until something walks.
+
+**Backlog:**
+- ~~Place this as a real milestone (roadmap entry + ADR).~~ **Done, 2026-08-20** — this entry and ADR-0027.
+- **Extract `ServingsConfirmationStep`.** The proposal's §8/M6 assume the review step can reuse "the existing servings-confirmation component." It doesn't exist — it's a `step === 'servings'` branch inside `src/thisWeek/AddToThisWeekScreen.tsx`. Extract it as a real shared component with that screen's existing tests kept green. Independent of all server work.
+- **Schema + RLS + grants**, four tables per the proposal's §2, with the pgTAP isolation suite modeled on `weekly_plan_rpcs.test.sql`. Two details from ADR-0027 that Codex review caught before any SQL existed, and that need explicit pgTAP cases rather than trusting review: the `selection_decisions` reveal predicate is an **allowlist** (`status IN ('ready_for_review','applied')`), because the obvious `!= 'active'` phrasing turns open-access `cancel_selection_round` into a ballot-disclosure path around the creator-only close gate; and rounds are born `pending_candidates` with the singleton index covering **every** non-terminal status (`pending_candidates`, `active`, `ready_for_review` — a review-stage round isn't terminal, since a refill reopens it), paired with claim-fenced adoption, so a half-finished creation is resumable without letting a delayed finalize activate a stale round later.
+- **Round lifecycle RPCs + `select-candidates` Edge Function**, filter-only deck (proposal §5's filter step, no scoring), plus the client `api.ts`. The lazy-deadline transition goes in **one helper every round-scoped RPC calls**, not a hand-maintained list of which RPCs check it — a test should assert that a post-deadline `clear_selection_decision` or `finish_selection_participation` cannot mutate a round that should already have closed. `finalize_selection_round_candidates` must **re-derive and validate every candidate `recipe_id` against the caller's own household**, not just the round's ownership: the Edge Function calls it with the caller's ordinary JWT, so any client can call it directly with a hand-written array. Needs a pgTAP case that invokes it directly, bypassing the Edge Function entirely. Creation is fenced as a claim (`claim_token` + atomic status-guarded transition), so a delayed finalize from a superseded attempt can't activate a stale round.
+- **Decision RPCs + close + results** — `record`/`clear`/`finish`, `close_selection_round`, `get_selection_round_results`, including the required cases that results *raise* rather than return anything during an active round, and that a **cancelled** round never reveals ballots to anyone but their owner.
+- **`apply_selection_round`** — the highest-risk item in this milestone. Transactional, revalidating, idempotent on replay, locking the round *and* the target weekly plan before any duplicate filtering. Gets independent verification from someone who didn't write it.
+- **Client solo flow** — This Week entry point, swipe screen (real gesture physics), review screen, behind `FLAGS.smartMealSelection`. Then a live solo walkthrough on a real device: no test can judge whether the swipe *feels* right.
+- **Smart Selection v1 heuristic** — the pure `server/selection/scoreCandidates.ts` module wired into the Edge Function, plus `reason_codes` and the "why this recipe" copy. Then a second live walkthrough, judging whether the deck actually surfaces interesting recipes.
+- **Observability + rollout** — the `AnalyticsEvent` additions from the proposal's §11, `docs/prd-traceability.md`, and the flag flip.
+- **Group flow — separate work item, not scoped here.** Participant picker, group waiting screen, results-bucket UI, `refill_selection_round` ("suggest a few more"), the Remind affordance. Carries one requirement from ADR-0027 decision 2a: a refill must not un-blind the round, so decisions on already-revealed candidates are frozen and only refill-added candidates stay swipeable. Without it, a participant can read the results screen, hit "suggest a few more," and flip an earlier vote knowing everyone else's. **Open question to settle before the flag flip:** whether the beta ships solo-only or waits for group, given that group is arguably the point of the feature for friends and family.
+- **Push notifications are out of scope for this milestone entirely** — no push infrastructure exists anywhere in the codebase (no `expo-notifications`, no device tokens, no APNs config). The design's copy assumes it; v1 substitutes in-app awareness. Real push would be its own separately-scoped work item.
+
+---
+
+## 5. Friends & Family Preview
 
 **What done looks like:** real households outside the dev process are using Keepsake, and you can see how.
 
@@ -63,7 +89,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ---
 
-## 5. Preview Learning & Iteration
+## 6. Preview Learning & Iteration
 
 **What done looks like:** you know what's actually working and what isn't, from real usage — not from guessing.
 
@@ -73,7 +99,7 @@ Work items are listed here as short entries — objective and why it matters. Fu
 
 ## Unplaced
 
-- **Swipe-style meal planning ("Help Me Choose" / "Smart Meal Selection").** A major feature you want to build, not yet scoped. A codebase-grounded architecture proposal now exists — [`docs/proposals/smart-meal-selection-architecture.md`](proposals/smart-meal-selection-architecture.md) (2026-08-19) — covering domain model, lifecycle, server operations, a deterministic non-LLM ranking heuristic, concurrency/security, and a dependency-ordered milestone sequence. It's reconciled against the Claude Design Studio wireframe handoff (same date) and has no remaining open decisions — the two that came up (vote history never feeding future scoring; no push notifications in v1) were confirmed directly with the developer and are recorded as settled in the proposal's own "Decisions made in this pass" section. It is explicitly not implementation. Do not sequence or start implementation work against this until it's placed for real as a milestone.
+- ~~**Swipe-style meal planning ("Help Me Choose" / "Smart Meal Selection").**~~ **Placed as milestone 4, 2026-08-20** — sequenced ahead of Friends & Family Preview, with solo flow built first. See that milestone for the build order and its two recorded departures from the proposal's own sequence.
 
 ---
 

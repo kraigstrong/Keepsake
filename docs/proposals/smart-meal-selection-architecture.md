@@ -2,6 +2,18 @@
 
 **Status:** Proposed, not yet reviewed or scheduled. **Not an ADR** — this is a pre-work-item architecture pass; specific consequential decisions inside it (marked below) will still need their own ADR once accepted, per `docs/adr/TEMPLATE.md`'s bar. Corresponds to `docs/roadmap.md`'s Unplaced item "Swipe-style meal planning."
 
+> [!IMPORTANT]
+> **Superseded in part by [ADR-0027](../adr/0027-smart-meal-selection-round-model.md) (2026-08-20).** This proposal remains the design of record for everything not listed below — domain model shape, the ranking heuristic, testing strategy, the milestone rationale. But six specific points here are now **wrong**, and this document is repeatedly cited as the thing to implement against, so read the ADR first on any of them:
+>
+> | Where | This document says | ADR-0027 requires |
+> |---|---|---|
+> | §7, §4 (results) | Votes readable when `status != 'active'` | Allowlist: `status IN ('ready_for_review','applied')`. The `!=` form makes open-access `cancel_selection_round` a ballot-disclosure path around the creator-only close gate. Cancelled ballots stay private permanently. |
+> | §3, §12 (M1) | A round is created `active`; singleton index on `status = 'active'` | Rounds are born `pending_candidates`; the index covers **every** non-terminal status (`pending_candidates`, `active`, `ready_for_review`), with claim-fenced adoption so a dead creation neither strands the household nor lets a delayed finalize activate a stale round. |
+> | §4, §5 | `finalize_selection_round_candidates` validates round/household ownership | It must also **re-derive and validate every candidate `recipe_id`** against the caller's household. The Edge Function calls it with the caller's ordinary JWT, so any client can call it directly with a hand-written array. |
+> | §3 (auto-close) | Deadline checked in `close_selection_round`, `record_selection_decision`, `get_selection_round` | One helper, called by **every** round-scoped RPC. The three-RPC list leaves `clear_selection_decision` and `finish_selection_participation` able to mutate a round that should already have closed. |
+> | §3, §4 (refill) | A refill reopens the round; completing doesn't lock the ballot | Decisions on already-revealed candidates are frozen. Otherwise a participant reads the results screen, hits "suggest a few more," and re-votes knowing everyone else's ballots. |
+> | §6 | Every write is safe to replay | True except creation, which spans two commits around out-of-Postgres scoring and is made safe by the claim fence, not by atomicity. |
+
 **Naming:** the design package's user-facing name is "Help Me Choose." Backend identifiers (tables, RPCs, event names) keep the `selection_*` prefix used throughout this document — the two names refer to the same feature.
 
 **Reconciled against the design handoff, 2026-08-19.** The Claude Design Studio package — preserved in full at [`docs/design/help-me-choose-handoff/`](../design/help-me-choose-handoff/) (`Keepsake Visual Directions.dc.html`, `Help Me Choose.dc.html` with its live drag prototype, `HELP-ME-CHOOSE.md`, `README.md`, plus that package's own copy of the PRD and design-tool support scripts) — arrived after the first draft of this proposal and is treated as guidance, not a rigid spec — exact copy and the deadline default below are the design's illustrative example, not a hard requirement. It resolved some open questions and changed a few real decisions, called out inline where they apply and summarized here:
