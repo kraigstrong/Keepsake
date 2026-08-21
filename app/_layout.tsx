@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
-import { ChevronLeftIcon } from '../src/components/icons/ChevronLeftIcon';
+import { BackIcon } from '../src/components/icons/BackIcon';
 import { OfflineState } from '../src/components/OfflineState';
 import { StartupScreen } from '../src/components/StartupScreen';
 import { ToastProvider, useToast } from '../src/components/Toast';
@@ -389,7 +389,7 @@ function AuthenticatedRouteBoundary() {
                 hitSlop={10}
                 testID="archived-recipes-back-button"
               >
-                <ChevronLeftIcon color={colors.textPrimary} size={26} />
+                <BackIcon color={colors.textPrimary} size={26} />
               </Pressable>
             ),
           }}
@@ -410,7 +410,7 @@ function AuthenticatedRouteBoundary() {
                 hitSlop={10}
                 testID="recently-deleted-back-button"
               >
-                <ChevronLeftIcon color={colors.textPrimary} size={26} />
+                <BackIcon color={colors.textPrimary} size={26} />
               </Pressable>
             ),
           }}
