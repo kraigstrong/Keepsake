@@ -202,14 +202,10 @@ function overlapCount(attrs: readonly string[], against: ReadonlySet<string>): n
   return count;
 }
 
-// Deck overlap is weighted by how many times an attribute has already been
-// picked, not merely whether it has appeared (Codex review, PR #94). With
-// set membership, the second Beef costs the same as the eighth: once every
-// category has appeared once, every remaining candidate carries an
-// identical penalty and the tie-break hash silently decides the rest of the
-// deck. A balanced 10-Beef/10-Seafood pool produced a 2/10 deck that way.
-// Counting occurrences makes each repeat progressively more expensive, so
-// the greedy pass actually rotates instead of degenerating after one lap.
+// Weighted by how many times an attribute was already picked, not merely
+// whether it appeared: set membership makes the second Beef cost what the
+// eighth does, and the greedy pass stops rotating. See the round-robin
+// tests in scoreCandidates.test.ts.
 function weightedOverlap(attrs: readonly string[], against: ReadonlyMap<string, number>): number {
   let total = 0;
   for (const attr of attrs) total += against.get(attr) ?? 0;
