@@ -202,6 +202,24 @@ function overlapCount(attrs: readonly string[], against: ReadonlySet<string>): n
   return count;
 }
 
+// Deck overlap is weighted by how many times an attribute has already been
+// picked, not merely whether it has appeared (Codex review, PR #94). With
+// set membership, the second Beef costs the same as the eighth: once every
+// category has appeared once, every remaining candidate carries an
+// identical penalty and the tie-break hash silently decides the rest of the
+// deck. A balanced 10-Beef/10-Seafood pool produced a 2/10 deck that way.
+// Counting occurrences makes each repeat progressively more expensive, so
+// the greedy pass actually rotates instead of degenerating after one lap.
+function weightedOverlap(attrs: readonly string[], against: ReadonlyMap<string, number>): number {
+  let total = 0;
+  for (const attr of attrs) total += against.get(attr) ?? 0;
+  return total;
+}
+
+function recordPicked(attrs: readonly string[], into: Map<string, number>): void {
+  for (const attr of attrs) into.set(attr, (into.get(attr) ?? 0) + 1);
+}
+
 // Recipes with no tags and no categories get neither bonus nor penalty
 // here by construction: an empty `attrs` array can never overlap with
 // anything, so this returns 0 regardless of what's already chosen or
@@ -257,8 +275,9 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
     };
   });
 
-  const chosenTags = new Set<string>();
-  const chosenCategoryKeys = new Set<string>();
+  // Occurrence counts, not membership — see weightedOverlap.
+  const chosenTags = new Map<string, number>();
+  const chosenCategoryKeys = new Map<string, number>();
   const result: RankedCandidate[] = [];
 
   while (remaining.length > 0 && result.length < deckSize) {
@@ -268,8 +287,8 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
 
     for (const entry of remaining) {
       const deckOverlap =
-        overlapCount(entry.candidate.tags, chosenTags) +
-        overlapCount(entry.candidate.categoryKeys, chosenCategoryKeys);
+        weightedOverlap(entry.candidate.tags, chosenTags) +
+        weightedOverlap(entry.candidate.categoryKeys, chosenCategoryKeys);
       const adjusted = entry.base - DIVERSITY_OVERLAP_PENALTY * deckOverlap;
 
       if (
@@ -292,8 +311,8 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
     // are folded in below, so a deck seeded entirely by sparse-metadata
     // picks doesn't retroactively credit the next pick with diversity.
     const deckHadContent = chosenTags.size > 0 || chosenCategoryKeys.size > 0;
-    for (const tag of picked.candidate.tags) chosenTags.add(tag);
-    for (const key of picked.candidate.categoryKeys) chosenCategoryKeys.add(key);
+    recordPicked(picked.candidate.tags, chosenTags);
+    recordPicked(picked.candidate.categoryKeys, chosenCategoryKeys);
 
     const addsDiversity = deckHadContent && hasMetadata(picked.candidate) && bestDeckOverlap === 0;
 

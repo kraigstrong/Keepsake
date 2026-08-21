@@ -260,6 +260,49 @@ describe('category diversification', () => {
     expect(result.find((r) => r.recipeId === 'fish')?.reasonCodes).toContain('diversity');
   });
 
+  // Regression (Codex review, PR #94, second pass): deck overlap was
+  // set membership, so the second Beef cost exactly what the eighth did.
+  // Once every category had appeared once the penalties equalised and the
+  // tie-break hash chose the rest — a balanced 10/10 pool produced a 2/10
+  // deck. Occurrence counts make each repeat progressively dearer.
+  it('round-robins a balanced pool instead of letting one category dominate', () => {
+    const candidates = [
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeCandidate({ recipeId: `beef${i}`, categoryKeys: ['protein:Beef'] }),
+      ),
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeCandidate({ recipeId: `fish${i}`, categoryKeys: ['protein:Seafood'] }),
+      ),
+    ];
+    const deck = scoreCandidates(makeInput({ candidates }));
+    const beef = deck.filter((d) => d.recipeId.startsWith('beef')).length;
+    const fish = deck.filter((d) => d.recipeId.startsWith('fish')).length;
+
+    expect(beef + fish).toBe(12);
+    // Neither category may run away with the deck. Under set membership
+    // this was 2/10; the split is even now, but assert the property
+    // (balance) rather than the exact numbers.
+    expect(Math.abs(beef - fish)).toBeLessThanOrEqual(2);
+  });
+
+  it('spreads across three categories rather than exhausting one', () => {
+    const candidates = [
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeCandidate({ recipeId: `chicken${i}`, categoryKeys: ['protein:Chicken'] }),
+      ),
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeCandidate({ recipeId: `beef${i}`, categoryKeys: ['protein:Beef'] }),
+      ),
+      ...Array.from({ length: 8 }, (_, i) =>
+        makeCandidate({ recipeId: `soup${i}`, categoryKeys: ['dish_type:Soup'] }),
+      ),
+    ];
+    const deck = scoreCandidates(makeInput({ candidates }));
+    for (const prefix of ['chicken', 'beef', 'soup']) {
+      expect(deck.filter((d) => d.recipeId.startsWith(prefix)).length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('still treats the same value on the same axis as overlapping', () => {
     const seed = makeCandidate({ recipeId: 'beef-1', categoryKeys: ['protein:Beef'] });
     const alsoBeef = makeCandidate({ recipeId: 'beef-2', categoryKeys: ['protein:Beef'] });
