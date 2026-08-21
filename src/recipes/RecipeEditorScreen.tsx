@@ -669,7 +669,11 @@ function SectionsEditor({
                   // for a screen reader to fall back on — hence an
                   // explicit label, and one worded per section type.
                   accessibilityLabel={removeLineLabel}
-                  hitSlop={10}
+                  // Asymmetric: a symmetric 10px slop would reach 4px
+                  // past the 6px lineRow gap into the TextInput's own
+                  // touch area, so a tap near the input's right edge to
+                  // place the cursor could hit this button instead.
+                  hitSlop={{ top: 10, bottom: 10, left: 4, right: 10 }}
                   style={styles.removeLineButton}
                   testID={`${testIDPrefix}-remove-line-${sectionIndex}-${lineIndex}`}
                 >

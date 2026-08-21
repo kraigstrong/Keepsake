@@ -34,11 +34,8 @@ import { colors, radii, spacing } from '../../src/theme/tokens';
 // and every screen renders its own 28px title in-body regardless
 // (ADR-0009).
 const TAB_BAR_BASE_HEIGHT = 64;
-// The design handoff's icon scale is context-specific — 32 cooking, 24
-// tab bar, 20 rows, 16 inline. These had been rendering at the frame's
-// 22px default, which read visibly small against the 64px bar. The FAB
-// isn't a step on that scale, but 24 in a 56px circle is the standard
-// ratio and keeps the whole footer on one size.
+// Design handoff's "tab bar" scale step; see docs/roadmap.md's
+// iconography entry for the full size scale and why the FAB matches it.
 const TAB_BAR_ICON_SIZE = 24;
 const FAB_SIZE = 56;
 export default function TabsLayout() {
