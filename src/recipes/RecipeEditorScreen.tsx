@@ -30,6 +30,7 @@ import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
+import { CloseIcon } from '../components/icons/CloseIcon';
 import { useHousehold } from '../household/HouseholdProvider';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -455,6 +456,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         onChange={setIngredientSections}
         linePlaceholder="1 cup flour"
         addLineLabel="Add ingredient"
+        removeLineLabel="Remove ingredient"
         addSectionLabel="Add section"
         testIDPrefix="recipe-ingredients"
       />
@@ -465,6 +467,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         onChange={setInstructionSections}
         linePlaceholder="Preheat the oven…"
         addLineLabel="Add step"
+        removeLineLabel="Remove step"
         addSectionLabel="Add section"
         testIDPrefix="recipe-instructions"
       />
@@ -581,6 +584,7 @@ function SectionsEditor({
   onChange,
   linePlaceholder,
   addLineLabel,
+  removeLineLabel,
   addSectionLabel,
   testIDPrefix,
 }: {
@@ -588,6 +592,7 @@ function SectionsEditor({
   onChange: (sections: RecipeSection[]) => void;
   linePlaceholder: string;
   addLineLabel: string;
+  removeLineLabel: string;
   addSectionLabel: string;
   testIDPrefix: string;
 }) {
@@ -657,12 +662,19 @@ function SectionsEditor({
                 onChangeText={(value) => updateLine(sectionIndex, lineIndex, value)}
               />
               {section.lines.length > 1 && (
-                <Button
-                  title="✕"
-                  variant="secondary"
+                <Pressable
                   onPress={() => removeLine(sectionIndex, lineIndex)}
+                  accessibilityRole="button"
+                  // The control is the glyph alone, so it carries no text
+                  // for a screen reader to fall back on — hence an
+                  // explicit label, and one worded per section type.
+                  accessibilityLabel={removeLineLabel}
+                  hitSlop={10}
+                  style={styles.removeLineButton}
                   testID={`${testIDPrefix}-remove-line-${sectionIndex}-${lineIndex}`}
-                />
+                >
+                  <CloseIcon color={colors.textSecondary} size={20} />
+                </Pressable>
               )}
             </View>
           ))}
@@ -777,6 +789,10 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     gap: spacing.xs,
+  },
+  removeLineButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   lineRow: {
     flexDirection: 'row',
