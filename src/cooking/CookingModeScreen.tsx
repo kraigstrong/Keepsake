@@ -8,6 +8,7 @@ import { enqueueCookingEvent } from './outbox';
 import { submitPendingCookingEvents } from './outboxEngine';
 import { useCookingSession } from './useCookingSession';
 import { Button } from '../components/Button';
+import { Checkbox } from '../components/Checkbox';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
@@ -18,7 +19,7 @@ import { useHousehold } from '../household/HouseholdProvider';
 import { useCookingModeAwake } from '../keepAwake/useCookingModeAwake';
 import { logError } from '../observability';
 import { SCALE_PRESETS, scaledIngredientSections } from '../recipes/scaling';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { colors, spacing, typography } from '../theme/tokens';
 import { fetchCurrentWeeklyPlan, removeConfirmedEntryFromThisWeek } from '../thisWeek/api';
 
 export interface CookingModeScreenProps {
@@ -50,9 +51,7 @@ function CheckableRow({
       accessibilityState={{ checked }}
       testID={testID}
     >
-      <View style={[styles.checkbox, checked && styles.checkboxSelected]}>
-        {checked && <Text style={styles.checkmark}>{'✓'}</Text>}
-      </View>
+      <Checkbox checked={checked} />
       <Text style={[styles.rowLabel, checked && styles.rowLabelChecked]}>{label}</Text>
     </Pressable>
   );
@@ -409,24 +408,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.sm,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
   rowLabel: {
     ...typography.body,
