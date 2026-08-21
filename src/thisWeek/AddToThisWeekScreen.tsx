@@ -4,12 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
-import { SCALE_PRESETS } from '../recipes/scaling';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
-import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
+import { ServingsConfirmationStep } from '../components/ServingsConfirmationStep';
 import { useToast } from '../components/Toast';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { addRecipesToThisWeek } from './api';
@@ -34,14 +33,6 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // ADR-0026 amendment (developer decision, 2026-08-14): every recipe
-  // gets the same scale-multiplier chips here, regardless of whether
-  // recipe.servingsCount is known — a servings-based stepper existed
-  // for that case (decision 3) but its per-recipe row didn't fit
-  // compactly next to a long title, and the two different control
-  // types read as inconsistent across a mixed selection. servingsCount
-  // is still shown on Recipe Detail; it just no longer picks the
-  // control type on this screen.
   const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -186,34 +177,14 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
         </>
       ) : (
         <>
-          <ScrollView style={styles.list}>
-            {selectedRecipes.map((recipe) => (
-              <View
-                key={recipe.id}
-                style={styles.chipsRow}
-                testID={`add-to-this-week-servings-${recipe.id}`}
-              >
-                <Text style={styles.rowTitle} numberOfLines={1}>
-                  {recipe.title}
-                </Text>
-                <View style={styles.chipGroup}>
-                  {SCALE_PRESETS.map((preset) => (
-                    <Chip
-                      key={preset.label}
-                      label={preset.label}
-                      selected={
-                        (multiplierById[recipe.id] ?? DEFAULT_MULTIPLIER) === preset.multiplier
-                      }
-                      onPress={() =>
-                        setMultiplierById((prev) => ({ ...prev, [recipe.id]: preset.multiplier }))
-                      }
-                      testID={`add-to-this-week-scale-preset-${recipe.id}-${preset.multiplier}`}
-                    />
-                  ))}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
+          <ServingsConfirmationStep
+            items={selectedRecipes.map((recipe) => ({ id: recipe.id, title: recipe.title }))}
+            multiplierById={multiplierById}
+            onSelectMultiplier={(id, multiplier) =>
+              setMultiplierById((prev) => ({ ...prev, [id]: multiplier }))
+            }
+            testIDPrefix="add-to-this-week"
+          />
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title="Add to This Week"
@@ -284,18 +255,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.16,
     color: colors.textPrimary,
     flex: 1,
-  },
-  chipsRow: {
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  chipGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
   },
   footer: {
     padding: spacing.lg,
