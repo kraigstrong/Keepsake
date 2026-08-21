@@ -28,7 +28,9 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Next action
 
-Land the placement branch, then start milestone 4's build. Two lanes can open immediately and independently of everything else: extracting `ServingsConfirmationStep` out of `src/thisWeek/AddToThisWeekScreen.tsx` (the proposal assumes this component already exists; it doesn't — it's a `step === 'servings'` branch inside a 303-line screen), and the pure `server/selection/scoreCandidates.ts` module. The spine starts with the four-table schema + RLS + pgTAP isolation suite.
+Milestone 4's spine schema is done and awaiting review: branch `feature/selection-schema` (three commits — schema, RLS policies, pgTAP suite) adds `selection_rounds`, `selection_round_participants`, `selection_round_candidates`, `selection_decisions` per ADR-0027, with `is_household_member(household_id)` RLS on all four and select-only grants (no RPCs yet — that's the next PR). pgTAP suite (`supabase/tests/database/selection_rounds_schema.test.sql`, 34 assertions) is written and independently reviewed line-by-line but not executed — no container runtime in this environment; needs a real `npm run db:reset && npm run db:test` pass in CI. Not yet pushed or opened as a PR.
+
+Two lanes can still open independently of the RPC PR: extracting `ServingsConfirmationStep` out of `src/thisWeek/AddToThisWeekScreen.tsx` (the proposal assumes this component already exists; it doesn't — it's a `step === 'servings'` branch inside a 303-line screen), and the pure `server/selection/scoreCandidates.ts` module. The RPC surface (`create_selection_round`, `finalize_selection_round_candidates`, `record_selection_decision`, etc., per ADR-0027 decisions 1a/4/5/6) is the next concrete step on the schema's own thread.
 
 Two things to settle later, deliberately not blocking: whether the beta ships solo-only or waits for the group flow (before the flag flip), and the staging `supabase db push` once the first migration lands — a staging write needing explicit developer go-ahead.
 
