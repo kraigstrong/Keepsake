@@ -19,8 +19,21 @@ export interface CandidateRecipeSnapshot {
   recipeId: string;
   /** Free-form `recipes.tags`. */
   tags: string[];
-  /** Structured `categories.group_name` values joined via `recipe_categories`. */
-  categoryGroupNames: string[];
+  /**
+   * Group-qualified category keys — `"protein:Beef"`, `"dish_type:Soup"` —
+   * built by the caller from `categories.group_name` and `categories.value`.
+   *
+   * Must be qualified, not the bare `group_name`. `group_name` is
+   * constrained to exactly three values (`protein`/`dish_type`/
+   * `preparation`, see `20260803100000_recipe_schema.sql`), so ranking on
+   * it alone makes a beef dish and a fish dish look identical, applies the
+   * overlap penalty near-uniformly across every candidate, and makes a
+   * reason like "the only fish in the deck" unrepresentable. Qualifying
+   * with `value` is what gives category diversification any signal at all.
+   * Including the group keeps two identically-named values on different
+   * axes from colliding.
+   */
+  categoryKeys: string[];
   /** True iff no `planning_entries` row has ever existed for this recipe. */
   neverPlanned: boolean;
   /**
@@ -52,8 +65,8 @@ export interface ScoreCandidatesInput {
   candidates: CandidateRecipeSnapshot[];
   /** Tags present on recipes already in the household's current This Week plan. */
   thisWeekTags: string[];
-  /** Category group_name values already in the household's current This Week plan. */
-  thisWeekCategoryGroupNames: string[];
+  /** Group-qualified category keys already in the household's current This Week plan, same form as above. */
+  thisWeekCategoryKeys: string[];
 }
 
 /**
@@ -194,7 +207,7 @@ function overlapCount(attrs: readonly string[], against: ReadonlySet<string>): n
 // anything, so this returns 0 regardless of what's already chosen or
 // already in This Week — never exclude something for sparse metadata.
 function hasMetadata(candidate: CandidateRecipeSnapshot): boolean {
-  return candidate.tags.length > 0 || candidate.categoryGroupNames.length > 0;
+  return candidate.tags.length > 0 || candidate.categoryKeys.length > 0;
 }
 
 interface ScoredCandidate {
@@ -223,15 +236,15 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
   const nowDate = typeof input.now === 'string' ? new Date(input.now) : input.now;
   const deckSize = computeDeckSize(input.targetCount);
   const thisWeekTagSet = new Set(input.thisWeekTags);
-  const thisWeekGroupSet = new Set(input.thisWeekCategoryGroupNames);
+  const thisWeekCategoryKeySet = new Set(input.thisWeekCategoryKeys);
   // If This Week is currently empty there's nothing to have varied from —
   // avoid awarding a vacuous "this_week_variety" to every candidate.
-  const thisWeekHasContent = thisWeekTagSet.size > 0 || thisWeekGroupSet.size > 0;
+  const thisWeekHasContent = thisWeekTagSet.size > 0 || thisWeekCategoryKeySet.size > 0;
 
   const remaining: ScoredCandidate[] = input.candidates.map((candidate) => {
     const thisWeekOverlap =
       overlapCount(candidate.tags, thisWeekTagSet) +
-      overlapCount(candidate.categoryGroupNames, thisWeekGroupSet);
+      overlapCount(candidate.categoryKeys, thisWeekCategoryKeySet);
     return {
       candidate,
       base:
@@ -245,7 +258,7 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
   });
 
   const chosenTags = new Set<string>();
-  const chosenGroupNames = new Set<string>();
+  const chosenCategoryKeys = new Set<string>();
   const result: RankedCandidate[] = [];
 
   while (remaining.length > 0 && result.length < deckSize) {
@@ -256,7 +269,7 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
     for (const entry of remaining) {
       const deckOverlap =
         overlapCount(entry.candidate.tags, chosenTags) +
-        overlapCount(entry.candidate.categoryGroupNames, chosenGroupNames);
+        overlapCount(entry.candidate.categoryKeys, chosenCategoryKeys);
       const adjusted = entry.base - DIVERSITY_OVERLAP_PENALTY * deckOverlap;
 
       if (
@@ -278,9 +291,9 @@ export function scoreCandidates(input: ScoreCandidatesInput): RankedCandidate[] 
     // applied to the deck itself: captured before this pick's own tags
     // are folded in below, so a deck seeded entirely by sparse-metadata
     // picks doesn't retroactively credit the next pick with diversity.
-    const deckHadContent = chosenTags.size > 0 || chosenGroupNames.size > 0;
+    const deckHadContent = chosenTags.size > 0 || chosenCategoryKeys.size > 0;
     for (const tag of picked.candidate.tags) chosenTags.add(tag);
-    for (const group of picked.candidate.categoryGroupNames) chosenGroupNames.add(group);
+    for (const key of picked.candidate.categoryKeys) chosenCategoryKeys.add(key);
 
     const addsDiversity = deckHadContent && hasMetadata(picked.candidate) && bestDeckOverlap === 0;
 

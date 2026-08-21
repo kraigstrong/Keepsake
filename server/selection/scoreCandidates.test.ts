@@ -11,7 +11,7 @@ function makeCandidate(overrides: Partial<CandidateRecipeSnapshot> = {}): Candid
   return {
     recipeId: 'recipe-default',
     tags: [],
-    categoryGroupNames: [],
+    categoryKeys: [],
     neverPlanned: false,
     lastActivityAt: null,
     plannedCount: 0,
@@ -27,7 +27,7 @@ function makeInput(overrides: Partial<ScoreCandidatesInput> = {}): ScoreCandidat
     targetCount: 4,
     candidates: [],
     thisWeekTags: [],
-    thisWeekCategoryGroupNames: [],
+    thisWeekCategoryKeys: [],
     ...overrides,
   };
 }
@@ -122,17 +122,17 @@ describe('never_planned bonus', () => {
 
 describe('sparse metadata', () => {
   it('never boosts or penalizes a recipe with no tags or categories', () => {
-    const sparse = makeCandidate({ recipeId: 'sparse', tags: [], categoryGroupNames: [] });
+    const sparse = makeCandidate({ recipeId: 'sparse', tags: [], categoryKeys: [] });
     const tagged = makeCandidate({
       recipeId: 'tagged',
       tags: ['soup'],
-      categoryGroupNames: ['dish_type'],
+      categoryKeys: ['dish_type:Soup'],
     });
     const result = scoreCandidates(
       makeInput({
         candidates: [sparse, tagged],
         thisWeekTags: ['soup'],
-        thisWeekCategoryGroupNames: ['dish_type'],
+        thisWeekCategoryKeys: ['dish_type'],
       }),
     );
     const sparseEntry = result.find((r) => r.recipeId === 'sparse');
@@ -241,6 +241,44 @@ describe('anti-staleness', () => {
   });
 });
 
+describe('category diversification', () => {
+  // Regression (Codex review, PR #94): an earlier version ranked on the
+  // bare `categories.group_name`, which the schema constrains to exactly
+  // three values — so every protein recipe carried the identical string
+  // "protein" and any two of them counted as fully overlapping. Category
+  // diversification carried no signal at all, and "the only fish in the
+  // deck" was unrepresentable. Keys are group-qualified now; these two
+  // cases fail against the bare-group_name version.
+  it('treats different values on the same axis as distinct, not overlapping', () => {
+    const seed = makeCandidate({ recipeId: 'beef', categoryKeys: ['protein:Beef'] });
+    const fish = makeCandidate({ recipeId: 'fish', categoryKeys: ['protein:Seafood'] });
+    const result = scoreCandidates(makeInput({ candidates: [seed, fish] }));
+
+    // The second pick shares no category key with the first, so it earns
+    // the diversity signal. Under bare group_name both are "protein",
+    // overlap is 1, and no diversity code is assigned.
+    expect(result.find((r) => r.recipeId === 'fish')?.reasonCodes).toContain('diversity');
+  });
+
+  it('still treats the same value on the same axis as overlapping', () => {
+    const seed = makeCandidate({ recipeId: 'beef-1', categoryKeys: ['protein:Beef'] });
+    const alsoBeef = makeCandidate({ recipeId: 'beef-2', categoryKeys: ['protein:Beef'] });
+    const result = scoreCandidates(makeInput({ candidates: [seed, alsoBeef] }));
+
+    expect(result.find((r) => r.recipeId === 'beef-2')?.reasonCodes).not.toContain('diversity');
+  });
+
+  it('does not treat the same value on different axes as overlapping', () => {
+    // Qualifying with the group is what keeps these apart.
+    const a = makeCandidate({ recipeId: 'a', categoryKeys: ['protein:Chicken'] });
+    const b = makeCandidate({ recipeId: 'b', categoryKeys: ['dish_type:Chicken'] });
+    const result = scoreCandidates(makeInput({ candidates: [a, b] }));
+
+    expect(result).toHaveLength(2);
+    expect(result[1]?.reasonCodes).toContain('diversity');
+  });
+});
+
 describe('reason codes', () => {
   it('orders never_planned before diversity before this_week_variety, capped at two', () => {
     // Seed goes first — its plannedCount bonus beats "all-signals" outright,
@@ -250,7 +288,7 @@ describe('reason codes', () => {
       neverPlanned: true,
       plannedCount: 10,
       tags: ['soup'],
-      categoryGroupNames: ['dish_type'],
+      categoryKeys: ['dish_type:Soup'],
     });
     // Never-planned, shares no tag/category with the seed (adds
     // diversity) and none with This Week either (varies from This Week
@@ -259,7 +297,7 @@ describe('reason codes', () => {
       recipeId: 'all-signals',
       neverPlanned: true,
       tags: ['stew'],
-      categoryGroupNames: ['protein'],
+      categoryKeys: ['protein:Beef'],
     });
     const result = scoreCandidates(
       makeInput({
@@ -311,7 +349,7 @@ describe('reason codes', () => {
     // vacuous this_week_variety to every candidate.
     const candidate = makeCandidate({ recipeId: 'a', tags: ['soup'] });
     const result = scoreCandidates(
-      makeInput({ candidates: [candidate], thisWeekTags: [], thisWeekCategoryGroupNames: [] }),
+      makeInput({ candidates: [candidate], thisWeekTags: [], thisWeekCategoryKeys: [] }),
     );
     expect(result[0]?.reasonCodes).not.toContain('this_week_variety');
   });
