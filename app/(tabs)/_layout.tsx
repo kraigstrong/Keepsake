@@ -34,6 +34,10 @@ import { colors, radii, spacing } from '../../src/theme/tokens';
 // and every screen renders its own 28px title in-body regardless
 // (ADR-0009).
 const TAB_BAR_BASE_HEIGHT = 64;
+// The design handoff's icon scale is context-specific — 32 cooking, 24
+// tab bar, 20 rows, 16 inline. These had been rendering at the frame's
+// 22px default, which read visibly small against the 64px bar.
+const TAB_BAR_ICON_SIZE = 24;
 const FAB_SIZE = 56;
 export default function TabsLayout() {
   return (
@@ -69,7 +73,7 @@ function TabsLayoutContent() {
           name="index"
           options={{
             title: 'This Week',
-            tabBarIcon: ({ color }) => <ThisWeekIcon color={color} />,
+            tabBarIcon: ({ color }) => <ThisWeekIcon color={color} size={TAB_BAR_ICON_SIZE} />,
             tabBarLabel: ({ focused, color }) => (
               <Text style={[styles.tabLabel, focused && styles.tabLabelActive, { color }]}>
                 This Week
@@ -81,7 +85,7 @@ function TabsLayoutContent() {
           name="library"
           options={{
             title: 'Library',
-            tabBarIcon: ({ color }) => <LibraryIcon color={color} />,
+            tabBarIcon: ({ color }) => <LibraryIcon color={color} size={TAB_BAR_ICON_SIZE} />,
             tabBarLabel: ({ focused, color }) => (
               <Text style={[styles.tabLabel, focused && styles.tabLabelActive, { color }]}>
                 Library
