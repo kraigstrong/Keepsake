@@ -36,7 +36,9 @@ import { colors, radii, spacing } from '../../src/theme/tokens';
 const TAB_BAR_BASE_HEIGHT = 64;
 // The design handoff's icon scale is context-specific — 32 cooking, 24
 // tab bar, 20 rows, 16 inline. These had been rendering at the frame's
-// 22px default, which read visibly small against the 64px bar.
+// 22px default, which read visibly small against the 64px bar. The FAB
+// isn't a step on that scale, but 24 in a 56px circle is the standard
+// ratio and keeps the whole footer on one size.
 const TAB_BAR_ICON_SIZE = 24;
 const FAB_SIZE = 56;
 export default function TabsLayout() {
@@ -145,7 +147,7 @@ function TabsLayoutContent() {
         hitSlop={8}
         style={[styles.fab, { bottom: TAB_BAR_BASE_HEIGHT + insets.bottom + spacing.md }]}
       >
-        <PlusIcon color="#FFFFFF" />
+        <PlusIcon color="#FFFFFF" size={TAB_BAR_ICON_SIZE} />
       </Pressable>
     </>
   );
