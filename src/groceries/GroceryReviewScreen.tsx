@@ -14,13 +14,14 @@ import {
   type GroceryReviewItem,
 } from './api';
 import { GroceryExportPanel } from './GroceryExportPanel';
+import { Checkbox } from '../components/Checkbox';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
 import { useToast } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { useHousehold } from '../household/HouseholdProvider';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { colors, spacing, typography } from '../theme/tokens';
 
 export interface GroceryReviewScreenProps {
   planId: string;
@@ -44,9 +45,7 @@ function GroceryRow({
       accessibilityState={{ checked: item.included, disabled: pending }}
       testID={`grocery-review-item-${item.itemHash}`}
     >
-      <View style={[styles.checkbox, item.included && styles.checkboxSelected]}>
-        {item.included && <Text style={styles.checkmark}>{'✓'}</Text>}
-      </View>
+      <Checkbox checked={item.included} />
       <View style={styles.rowText}>
         <Text
           style={[styles.rowTitle, !item.included && styles.rowTitleExcluded]}
@@ -326,24 +325,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
   rowText: {
     flex: 1,

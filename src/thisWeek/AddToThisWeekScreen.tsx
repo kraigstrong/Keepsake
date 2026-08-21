@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
 import { SCALE_PRESETS } from '../recipes/scaling';
 import { Button } from '../components/Button';
+import { Checkbox } from '../components/Checkbox';
 import { Chip } from '../components/Chip';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
@@ -164,9 +165,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
                       accessibilityState={{ checked: selected }}
                       testID={`add-to-this-week-recipe-${recipe.id}`}
                     >
-                      <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-                        {selected && <Text style={styles.checkmark}>{'✓'}</Text>}
-                      </View>
+                      <Checkbox checked={selected} />
                       <Text style={styles.rowTitle} numberOfLines={1}>
                         {recipe.title}
                       </Text>
@@ -278,24 +277,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
   rowTitle: {
     ...typography.body,

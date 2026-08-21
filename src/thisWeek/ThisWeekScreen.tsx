@@ -21,6 +21,7 @@ import { LoadingState } from '../components/LoadingState';
 import { OfflineState } from '../components/OfflineState';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
+import { ChevronIcon } from '../components/icons/ChevronIcon';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
@@ -326,7 +327,7 @@ export function ThisWeekScreen() {
           </Text>
           <Text style={styles.rowSubtitle}>{describeServings(item)}</Text>
         </View>
-        <Text style={styles.chevron}>{'›'}</Text>
+        <ChevronIcon color={colors.textTertiary} size={20} />
       </Pressable>
     );
   }
@@ -549,10 +550,6 @@ const styles = StyleSheet.create({
   moveButtonDisabled: {
     color: colors.textTertiary,
     opacity: 0.4,
-  },
-  chevron: {
-    fontSize: 20,
-    color: colors.textTertiary,
   },
   undoBanner: {
     position: 'absolute',

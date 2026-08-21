@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type GestureResponderEvent,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, type GestureResponderEvent } from 'react-native';
 
 import { Button } from '../components/Button';
+import { Checkbox } from '../components/Checkbox';
 import { Sheet } from '../components/Sheet';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -161,9 +155,7 @@ export function DoneCookingSheet({
           accessibilityState={{ checked: removeFromPlan }}
           testID="done-cooking-remove-from-plan-toggle"
         >
-          <View style={[styles.checkbox, removeFromPlan && styles.checkboxSelected]}>
-            {removeFromPlan && <Text style={styles.checkmark}>{'✓'}</Text>}
-          </View>
+          <Checkbox checked={removeFromPlan} />
           <Text style={styles.toggleLabel}>Remove from This Week</Text>
         </Pressable>
       )}
@@ -204,24 +196,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.lg,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
   toggleLabel: {
     ...typography.body,

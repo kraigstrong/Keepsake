@@ -4,7 +4,9 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **MVP Validation** milestone. Journey 1 (website success) closed live 2026-08-19; the remaining backlog item is the live two-actor session to close Journey 3 (shared household) (see Blocked, below).
+**Iconography replacement** — `docs/roadmap.md`'s Not-yet-triaged item, "Replace app iconography with the 'Keepsake · Ink & Paper' icon system". Branch `design/icon-system-replacement`, 8 commits, **in-app icon set done and ready for review**; local CI green (typecheck/lint/format:check/test/check:client-secrets). Built live with the developer over one session, with feedback between each slice. The app-icon PNG assets are deliberately split off as a separate work item — see that roadmap entry for what shipped, the decisions taken during the build, and what remains.
+
+Still open underneath it: `docs/roadmap.md`'s **MVP Validation** milestone. Journey 1 (website success) closed live 2026-08-19; the remaining backlog item is the live two-actor session to close Journey 3 (shared household) (see Blocked, below).
 
 ## Current state
 
@@ -24,7 +26,9 @@ Journey 3 (shared household — a two-actor walkthrough) needs a live developer 
 
 ## Next action
 
-The staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), the 22-icon UI-set replacement (branch `design/icon-system-replacement` has a plan recorded and approved, paused on usage limit — see that backlog entry), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
+Push `design/icon-system-replacement` and open its PR (8 commits, in-app icon set). Then the app-icon assets as a separate work item: a dependency-free Node rasterizer emitting `assets/icon.png`/`favicon.png` in the ink colorway, plus deleting the unreferenced `assets/splash-icon.png`. Neither is blocked. The icon set also wants a real-device look — tests can't judge whether the glyphs read correctly at size.
+
+Other open options, unchanged: the staging backfill for PR #83's affected recipe (needs explicit developer go-ahead), placing Smart Meal Selection as a real milestone, or scheduling the two-actor live session to close Journey 3.
 
 ## Recently shipped
 
