@@ -1,14 +1,14 @@
-import type { ColorValue } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
+import { Path } from 'react-native-svg';
 
-// Same two-rect-bar construction as ThisWeekIcon (viewBox 0 0 24 24,
-// 2.4pt-thick rounded bars) so the New Recipe FAB reads as part of the
-// same icon set rather than a mismatched glyph.
-export function PlusIcon({ color, size = 28 }: { color: ColorValue; size?: number }) {
+import { Icon, type IconProps } from './Icon';
+
+// The "add" glyph from the design handoff's UI set. Stroked rather than
+// the previous pair of filled rects, so it carries the same weight as
+// every other icon in the set.
+export function PlusIcon({ color, size }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x="4" y="10.8" width="16" height="2.4" rx="1.2" fill={color} />
-      <Rect x="10.8" y="4" width="2.4" height="16" rx="1.2" fill={color} />
-    </Svg>
+    <Icon color={color} size={size}>
+      <Path d="M12 5v14M5 12h14" />
+    </Icon>
   );
 }

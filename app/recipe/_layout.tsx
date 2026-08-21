@@ -1,7 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
 
-import { ChevronLeftIcon } from '../../src/components/icons/ChevronLeftIcon';
+import { BackIcon } from '../../src/components/icons/BackIcon';
 import { colors } from '../../src/theme/tokens';
 
 // Mirrors Settings' header styling (app/_layout.tsx) — these screens
@@ -27,7 +27,7 @@ export default function RecipeLayout() {
             hitSlop={10}
             testID="recipe-back-button"
           >
-            <ChevronLeftIcon color={colors.textPrimary} size={26} />
+            <BackIcon color={colors.textPrimary} size={26} />
           </Pressable>
         ),
       }}

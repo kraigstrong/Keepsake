@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Category, CategoryGroup } from './api';
+import { FilterIcon } from '../components/icons/FilterIcon';
 import {
   activeFilterCount,
   EMPTY_FILTERS,
@@ -219,6 +220,7 @@ export function LibraryScreen() {
               </View>
               <Chip
                 testID="library-filter-button"
+                icon={FilterIcon}
                 label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
                 selected={filterCount > 0}
                 onPress={() => setFilterSheetVisible(true)}
