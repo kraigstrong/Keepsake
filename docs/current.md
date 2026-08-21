@@ -4,11 +4,18 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — placed as a real milestone 2026-08-20 (developer decision), sequenced **ahead of Friends & Family Preview**, so the beta ships with it. Branch `docs/smart-meal-selection-milestone` holds the placement itself: the roadmap entry, [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md), and this update.
+`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — placed 2026-08-20 and sequenced **ahead of Friends & Family Preview**, so the beta ships with it. Build order: **solo flow first**, and **walkable skeleton before smart ranking** (see the roadmap entry for why each departs from the proposal's own M1–M8).
 
-Build order, both developer decisions the same day: **solo flow first** (full four-table schema still ships up front — only the RPC surface and UI are scoped down), and **walkable skeleton before smart ranking** (the client lands on a filter-only deck so the solo path is walkable on a device before the heuristic exists). The roadmap entry records why each departs from the proposal's own M1–M8 sequence.
+Three of the milestone's PRs are done; the fourth is built but unreviewed.
 
-Still open underneath it: `docs/roadmap.md`'s **MVP Validation** milestone. Journey 1 (website success) closed live 2026-08-19; the remaining backlog item is the live two-actor session to close Journey 3 (shared household) (see Blocked, below).
+- [PR #92](https://github.com/kraigstrong/Keepsake/pull/92) — milestone placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md). **Merged.**
+- [PR #93](https://github.com/kraigstrong/Keepsake/pull/93) — `ServingsConfirmationStep` extracted out of `AddToThisWeekScreen`. **Merged.** The proposal had assumed this component already existed; it didn't.
+- [PR #94](https://github.com/kraigstrong/Keepsake/pull/94) — `server/selection/scoreCandidates.ts`, the deterministic v1 ranking heuristic (24 tests, pure, DB-free).
+- Branch **`feature/selection-schema`** — four-table schema, RLS policies + select-only grants, and a pgTAP suite. Three commits, **not pushed, not reviewed, no PR.** See Next action.
+
+## Blocked
+
+Journey 3 (shared household — a two-actor walkthrough) still needs a live developer session that neither automated tests nor pgTAP's single-transaction model can substitute for.
 
 ## Current state
 
@@ -22,19 +29,31 @@ Still open underneath it: `docs/roadmap.md`'s **MVP Validation** milestone. Jour
 - Parallel, code-only reliability work picked up while blocked: transport-failure retry for recipe imports shipped ([PR #77](https://github.com/kraigstrong/Keepsake/pull/77), merged) — see `docs/roadmap.md`'s Reliability milestone. Category-mapping robustness (ORG-04/AI-06) also shipped ([PR #79](https://github.com/kraigstrong/Keepsake/pull/79), merged 2026-08-19) — see `docs/history/phase-08-url-import.md`. Structured server error logging shipped next ([PR #81](https://github.com/kraigstrong/Keepsake/pull/81), merged 2026-08-20) — live-verified as part of today's Journey 1 walkthrough. Period-abbreviated-unit parsing fix shipped ([PR #83](https://github.com/kraigstrong/Keepsake/pull/83), merged) — the one-time re-parse backfill for the affected staging recipe is still open pending developer go-ahead (staging write).
 - A codebase-grounded architecture proposal for "Help Me Choose" / Smart Meal Selection landed ([PR #84](https://github.com/kraigstrong/Keepsake/pull/84), merged) — [`docs/proposals/smart-meal-selection-architecture.md`](proposals/smart-meal-selection-architecture.md), reconciled against the Claude Design Studio wireframe handoff. It's a proposal only, still parked under `docs/roadmap.md`'s Unplaced section — not sequenced or started as implementation.
 
-## Blocked
-
-Journey 3 (shared household — a two-actor walkthrough) needs a live developer session that neither automated tests nor pgTAP's single-transaction model can substitute for.
-
 ## Next action
 
-Milestone 4's spine schema is done and awaiting review: branch `feature/selection-schema` (three commits — schema, RLS policies, pgTAP suite) adds `selection_rounds`, `selection_round_participants`, `selection_round_candidates`, `selection_decisions` per ADR-0027, with `is_household_member(household_id)` RLS on all four and select-only grants (no RPCs yet — that's the next PR). pgTAP suite (`supabase/tests/database/selection_rounds_schema.test.sql`, 34 assertions) is written and independently reviewed line-by-line but not executed — no container runtime in this environment; needs a real `npm run db:reset && npm run db:test` pass in CI. Not yet pushed or opened as a PR.
+**Review and land `feature/selection-schema`** (local branch, 3 commits, never pushed). This is milestone 4's security boundary and was deliberately *not* rushed at the end of the 2026-08-20 session. It needs the full treatment before it goes near a PR:
 
-Two lanes can still open independently of the RPC PR: extracting `ServingsConfirmationStep` out of `src/thisWeek/AddToThisWeekScreen.tsx` (the proposal assumes this component already exists; it doesn't — it's a `step === 'servings'` branch inside a 303-line screen), and the pure `server/selection/scoreCandidates.ts` module. The RPC surface (`create_selection_round`, `finalize_selection_round_candidates`, `record_selection_decision`, etc., per ADR-0027 decisions 1a/4/5/6) is the next concrete step on the schema's own thread.
+1. `npm run db:test` — the implementing agent could not run pgTAP (no container runtime existed at the time). **Colima + docker are now installed**, so `npm run db:start && npm run db:test` works locally; don't rely on CI for the first pass.
+2. `.claude/skills/security-check` — this touches RLS and a household boundary, so it is triggered, not optional.
+3. An independent look from an agent that didn't write it, or `/code-review`, per the lifecycle's step 6.
 
-Two things to settle later, deliberately not blocking: whether the beta ships solo-only or waits for the group flow (before the flag flip), and the staging `supabase db push` once the first migration lands — a staging write needing explicit developer go-ahead.
+Four things in that branch came out of Codex's review of ADR-0027 and are the specific places to check hardest, because following the *proposal* instead of the ADR reintroduces each one:
 
-Still open from earlier work, unrelated: the staging backfill for PR #83's affected recipe (needs developer go-ahead), placing Smart Meal Selection's group flow as its own work item, and scheduling the two-actor live session to close Journey 3.
+- The `selection_decisions` SELECT policy must be the **allowlist** (`status IN ('ready_for_review','applied')`), never `!= 'active'` — the latter makes open-access `cancel_selection_round` a ballot-disclosure path around the creator-only close gate.
+- The singleton unique index must span **all three** non-terminal statuses (`pending_candidates`, `active`, `ready_for_review`).
+- `claim_token` and `revealed_at` columns must exist for later slices to fence on.
+- No INSERT/UPDATE/DELETE grants to `authenticated` on any of the four tables.
+
+Then the rest of milestone 4's spine, in order: lifecycle RPCs + `select-candidates` Edge Function (filter-only deck) → decision RPCs + close + results → `apply_selection_round` (highest risk) → client solo flow → **first live solo walkthrough** → wire in PR #94's heuristic → second walkthrough to judge deck quality.
+
+Two decisions deliberately deferred, neither blocking: whether the beta ships **solo-only** or waits for the group flow (settle before the flag flip), and the staging `supabase db push` once the first migration merges (a staging write needing explicit developer go-ahead).
+
+**Two findings recorded 2026-08-20, both open:**
+
+- **[PR #94](https://github.com/kraigstrong/Keepsake/pull/94) is deliberately unmerged.** Codex found that `scoreCandidates.ts` diversifies on `categories.group_name`, which is constrained to just three values (`protein`/`dish_type`/`preparation`) — `value` holds the distinguishing label. So a beef dish and a fish dish read as identical, the penalty lands uniformly, and "the only fish in the deck" is unrepresentable. Category diversification carries no signal; only tags work. Fix is two parts: a group-qualified category key in the module, **and** a correction to the proposal's §5, which says "round-robining across `tags` and category `group_name` values" and is what the implementation faithfully followed. Add it to that document's supersession banner.
+- **The main checkout's `node_modules` is in a bad state.** `src/thisWeek/ThisWeekScreen.test.tsx` fails there at the `react-native-gesture-handler/ReanimatedSwipeable` require, and an agent reported this as "pre-existing on `main`" — it is not. The same suite passes in a clean worktree against current `main` (1140 passed) and in CI on #93/#94. Run `npm ci` in the main checkout before trusting a local `npm test` there.
+
+Unrelated and still open: the staging backfill for PR #83's affected recipe, and scheduling the two-actor session to close Journey 3.
 
 ## Recently shipped
 
