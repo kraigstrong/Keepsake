@@ -11,7 +11,7 @@
 
 begin;
 
-select plan(43);
+select plan(46);
 
 insert into auth.users (id, email)
 values
@@ -161,8 +161,11 @@ select throws_ok(
 
 -- Once stale, a different creator may take it over.
 reset role;
+-- Age updated_at, not just created_at: staleness is measured from the
+-- last touch, so that a renewed claim isn't instantly stale again.
 update public.selection_rounds
-set created_at = now() - interval '10 minutes'
+set created_at = now() - interval '10 minutes',
+    updated_at = now() - interval '10 minutes'
 where id = (select round_id from round_resume);
 set local role authenticated;
 select set_config(
@@ -459,6 +462,53 @@ select throws_ok(
   $$ select public.resolve_selection_round_deadline(gen_random_uuid()) $$,
   'permission denied for function resolve_selection_round_deadline',
   'resolve_selection_round_deadline: not exposed to authenticated clients'
+);
+
+-- ===== Review fixes (Codex, PR #96) =====
+
+-- A group round must carry a future deadline. Early close is
+-- creator-only, so without closes_at an absent creator leaves the other
+-- participants unable to reach review at all.
+select throws_ok(
+  $$ select public.create_selection_round('group', array[]::uuid[], 4, null) $$,
+  'a group round requires a future closes_at',
+  'create_selection_round: a group round with no closes_at is rejected'
+);
+select throws_ok(
+  $$ select public.create_selection_round('group', array[]::uuid[], 4, now() - interval '1 hour') $$,
+  'a group round requires a future closes_at',
+  'create_selection_round: a group round with a past closes_at is rejected'
+);
+
+-- Renewing a claim resets the staleness clock. Measuring from created_at
+-- left a just-renewed attempt still looking stale, so another member
+-- could take it over and invalidate the fresh token mid-scoring.
+reset role;
+delete from public.selection_rounds where household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+create temporary table round_stale as select * from public.create_selection_round('solo');
+reset role;
+update public.selection_rounds
+set created_at = now() - interval '10 minutes',
+    updated_at = now() - interval '10 minutes'
+where id = (select round_id from round_stale);
+set local role authenticated;
+-- Same creator renews it, which bumps updated_at.
+create temporary table round_renewed as select * from public.create_selection_round('solo');
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '22222222-2222-2222-2222-222222222222', 'role', 'authenticated')::text,
+  true
+);
+select throws_ok(
+  $$ select public.create_selection_round('solo') $$,
+  'a round is already starting',
+  'create_selection_round: a just-renewed claim is not immediately stale to another member'
 );
 
 select * from finish();

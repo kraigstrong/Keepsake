@@ -82,6 +82,17 @@ begin
     final_participants := array[auth.uid()];
     effective_closes_at := null;
   else
+    -- A group round must carry a real future deadline (decision 3).
+    -- Early close is creator-only, so closes_at is the only thing that
+    -- lets the other participants reach review if the creator goes
+    -- quiet — without it their sole option is to cancel and lose the
+    -- round. This is the same reason refill is required to set a new
+    -- one rather than clear it.
+    if create_selection_round.closes_at is null
+       or create_selection_round.closes_at <= now() then
+      raise exception 'a group round requires a future closes_at' using errcode = 'P0001';
+    end if;
+
     if exists (
       select 1 from unnest(create_selection_round.participant_user_ids) as pid
       where not exists (
@@ -122,8 +133,13 @@ begin
     -- either way a fresh claim_token invalidates whatever attempt was
     -- in flight against the old one. A different, still-fresh creator
     -- is the one case that's a real conflict.
+    -- Staleness is measured from updated_at, not created_at: renewing a
+    -- claim below bumps updated_at, and measuring from created_at would
+    -- leave a just-renewed attempt still looking stale — letting another
+    -- member take it over and invalidate the fresh token while scoring
+    -- is in flight.
     if existing_round.created_by <> auth.uid()
-       and existing_round.created_at >= now() - pending_stale_after then
+       and existing_round.updated_at >= now() - pending_stale_after then
       raise exception 'a round is already starting' using errcode = 'P0001';
     end if;
 
