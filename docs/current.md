@@ -6,13 +6,14 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 `docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — placed 2026-08-20 and sequenced **ahead of Friends & Family Preview**, so the beta ships with it. Build order: **solo flow first**, and **walkable skeleton before smart ranking** (see the roadmap entry for why each departs from the proposal's own M1–M8).
 
-Six of the milestone's PRs are merged; the spine now has schema, RLS, lifecycle RPCs, and the candidate-generation Edge Function. Client solo-flow UI is next.
+Five of the milestone's PRs are merged; the spine now has schema, RLS, and lifecycle RPCs. The candidate-generation Edge Function is built and awaiting review, and client solo-flow UI is next.
 
 - [PR #92](https://github.com/kraigstrong/Keepsake/pull/92) — milestone placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md). **Merged.**
 - [PR #93](https://github.com/kraigstrong/Keepsake/pull/93) — `ServingsConfirmationStep` extracted out of `AddToThisWeekScreen`. **Merged.**
 - [PR #94](https://github.com/kraigstrong/Keepsake/pull/94) — `server/selection/scoreCandidates.ts`, the deterministic v1 ranking heuristic. **Merged**, including the group-qualified-category-key fix from Codex's review (see the now-resolved finding below).
 - [PR #95](https://github.com/kraigstrong/Keepsake/pull/95) — the four-table schema, RLS policies, select-only grants, pgTAP suite. **Merged.**
 - [PR #96](https://github.com/kraigstrong/Keepsake/pull/96) — `create_selection_round` / `finalize_selection_round_candidates` / `get_selection_round` / `cancel_selection_round`, plus the centralized auto-close helper. **Merged.**
+- [PR #97](https://github.com/kraigstrong/Keepsake/pull/97) — revokes EXECUTE on the internal `resolve_selection_round_deadline` helper from `anon`/`authenticated`. **Open, CI green.** Found by calling staging after #96's push: the helper executed for an anonymous caller (HTTP 204) even though its *local* ACL looked correctly locked down — Supabase's default privileges grant EXECUTE per-role, which a `revoke ... from public` leaves intact. Low impact (it only performs a transition already due) but the idiom is the real lesson. **Needs its own staging push once merged, since staging is where the exposure lives.**
 - Branch **`feature/selection-edge-function`** — `supabase/functions/select-candidates/` (orchestrates create → filter → finalize, caller's-JWT/no-service-role, filter-only deck per `docs/proposals/smart-meal-selection-architecture.md` §5) plus `src/smartSelection/api.ts` (+tests), the client wrapper. Two commits, **verification complete, not yet pushed, no PR.** See Next action.
 
 ## Blocked
