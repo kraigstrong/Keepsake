@@ -248,14 +248,18 @@ begin
     raise exception 'selection round not found, already finalized, or claim no longer held' using errcode = 'P0001';
   end if;
 
-  insert into public.selection_round_candidates (round_id, household_id, recipe_id, score, reason_codes)
+  -- with ordinality preserves the scorer's rank; the deck's order is the
+  -- diversification result, not an incidental detail of how it's stored.
+  insert into public.selection_round_candidates (round_id, household_id, recipe_id, score, reason_codes, position)
   select
     result_round.id,
     caller_household_id,
     (c ->> 'recipe_id')::uuid,
     (c ->> 'score')::numeric,
-    coalesce(array(select jsonb_array_elements_text(c -> 'reason_codes')), '{}')
-  from jsonb_array_elements(finalize_selection_round_candidates.candidates) as c;
+    coalesce(array(select jsonb_array_elements_text(c -> 'reason_codes')), '{}'),
+    (ord - 1)::integer
+  from jsonb_array_elements(finalize_selection_round_candidates.candidates)
+    with ordinality as t(c, ord);
 
   return result_round;
 end;
@@ -307,11 +311,14 @@ begin
   from public.selection_round_participants p
   where p.round_id = result_round.id;
 
+  -- Ordered by position, never by whatever the planner yields: the
+  -- scorer's round-robin order is the deck.
   select coalesce(jsonb_agg(jsonb_build_object(
     'recipe_id', c.recipe_id,
     'score', c.score,
-    'reason_codes', c.reason_codes
-  )), '[]'::jsonb)
+    'reason_codes', c.reason_codes,
+    'position', c.position
+  ) order by c.position), '[]'::jsonb)
   into candidates_json
   from public.selection_round_candidates c
   join public.recipes r on r.id = c.recipe_id

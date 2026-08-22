@@ -11,7 +11,7 @@
 
 begin;
 
-select plan(46);
+select plan(48);
 
 insert into auth.users (id, email)
 values
@@ -462,6 +462,56 @@ select throws_ok(
   $$ select public.resolve_selection_round_deadline(gen_random_uuid()) $$,
   'permission denied for function resolve_selection_round_deadline',
   'resolve_selection_round_deadline: not exposed to authenticated clients'
+);
+
+-- The deck must come back in the scorer's order, not the planner's.
+-- Deliberately finalized with recipe_ids in reverse-UUID order so heap
+-- or index order would produce a different sequence than positions do.
+reset role;
+delete from public.selection_rounds where household_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+-- An earlier case archived ...0001 to prove get filters it; this one is
+-- about ordering, so restore it and use both eligible recipes.
+update public.recipes set archived_at = null where id = '20000000-0000-0000-0000-000000000001';
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+create temporary table round_ord as select * from public.create_selection_round('solo');
+select public.finalize_selection_round_candidates(
+  (select round_id from round_ord),
+  (select claim_token from round_ord),
+  jsonb_build_array(
+    jsonb_build_object('recipe_id', '20000000-0000-0000-0000-000000000002', 'score', 10, 'reason_codes', jsonb_build_array()),
+    jsonb_build_object('recipe_id', '20000000-0000-0000-0000-000000000001', 'score', 90, 'reason_codes', jsonb_build_array())
+  ),
+  'heuristic-v1'
+);
+-- Assert the stored positions themselves, not just the readback order:
+-- with only two rows, an all-zero position column still happens to come
+-- back in insert order, so an order-only assertion passes against a
+-- broken implementation.
+select results_eq(
+  $$ select recipe_id::text || ':' || position::text
+     from public.selection_round_candidates
+     where round_id = (select round_id from round_ord) order by position $$,
+  array[
+    '20000000-0000-0000-0000-000000000002:0',
+    '20000000-0000-0000-0000-000000000001:1'
+  ],
+  'finalize_selection_round_candidates: persists the scorer''s rank as a distinct position per candidate'
+);
+select results_eq(
+  $$ select (c ->> 'recipe_id') || ':' || (c ->> 'position')
+     from jsonb_array_elements(
+       public.get_selection_round((select round_id from round_ord)) -> 'candidates'
+     ) as c $$,
+  array[
+    '20000000-0000-0000-0000-000000000002:0',
+    '20000000-0000-0000-0000-000000000001:1'
+  ],
+  'get_selection_round: returns the deck ordered by the scorer''s rank, with positions intact'
 );
 
 -- ===== Review fixes (Codex, PR #96) =====
