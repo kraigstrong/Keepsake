@@ -179,3 +179,21 @@ export async function cancelSelectionRound(roundId: string): Promise<void> {
   const { error } = await supabase.rpc('cancel_selection_round', { round_id: roundId });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * The household's current non-terminal round, or null. Backs recovery
+ * after a lost `startSelectionRound` response — the round exists but the
+ * client never received its id — and the "round in progress" entry point.
+ * A plain RLS-scoped read: the partial unique index guarantees at most
+ * one non-terminal round per household, so this cannot be ambiguous.
+ */
+export async function getActiveSelectionRound(): Promise<SelectionRound | null> {
+  const { data, error } = await supabase
+    .from('selection_rounds')
+    .select('id')
+    .in('status', ['pending_candidates', 'active', 'ready_for_review'])
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return getSelectionRound((data as { id: string }).id);
+}

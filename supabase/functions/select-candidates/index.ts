@@ -206,8 +206,22 @@ Deno.serve(async (req: Request) => {
     const isSingletonConflict =
       createError?.code === '23505' || /already (in progress|starting)/.test(message);
     if (isSingletonConflict) {
+      // Carry the existing round's id, so a retry after a lost 200 can
+      // resume the round it actually created instead of being stuck: the
+      // client knows a round exists but otherwise has no way to name it
+      // (get_selection_round needs the id it never received). Reading it
+      // is RLS-scoped like any other household read, and best-effort —
+      // the conflict itself is still reported if the lookup fails.
+      const { data: existing } = await supabase
+        .from('selection_rounds')
+        .select('id')
+        .in('status', ['pending_candidates', 'active', 'ready_for_review'])
+        .maybeSingle();
       return jsonResponse(
-        { error: 'a selection round is already in progress for this household' },
+        {
+          error: 'a selection round is already in progress for this household',
+          roundId: (existing as { id: string } | null)?.id ?? null,
+        },
         409,
       );
     }

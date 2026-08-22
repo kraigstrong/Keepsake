@@ -4,7 +4,12 @@ import {
   FunctionsRelayError,
 } from '@supabase/supabase-js';
 
-import { cancelSelectionRound, getSelectionRound, startSelectionRound } from './api';
+import {
+  cancelSelectionRound,
+  getActiveSelectionRound,
+  getSelectionRound,
+  startSelectionRound,
+} from './api';
 import { supabase } from '../supabase/instance';
 
 jest.mock('../supabase/instance', () => ({
@@ -13,11 +18,23 @@ jest.mock('../supabase/instance', () => ({
       invoke: jest.fn(),
     },
     rpc: jest.fn(),
+    from: jest.fn(),
   },
 }));
 
 const mockedInvoke = supabase.functions.invoke as jest.Mock;
 const mockedRpc = supabase.rpc as jest.Mock;
+const mockedFrom = supabase.from as jest.Mock;
+
+// Mirrors the postgrest builder chain getActiveSelectionRound uses:
+// .from(...).select(...).in(...).maybeSingle()
+function mockActiveRoundLookup(result: { data: unknown; error: unknown }) {
+  const maybeSingle = jest.fn().mockResolvedValue(result);
+  const inFn = jest.fn().mockReturnValue({ maybeSingle });
+  const select = jest.fn().mockReturnValue({ in: inFn });
+  mockedFrom.mockReturnValue({ select });
+  return { select, inFn, maybeSingle };
+}
 
 afterEach(() => jest.clearAllMocks());
 
@@ -207,5 +224,65 @@ describe('cancelSelectionRound', () => {
     await expect(cancelSelectionRound('round-1')).rejects.toThrow(
       'selection round not found or not cancellable',
     );
+  });
+});
+
+describe('getActiveSelectionRound', () => {
+  it('returns null when the household has no non-terminal round', async () => {
+    mockActiveRoundLookup({ data: null, error: null });
+
+    await expect(getActiveSelectionRound()).resolves.toBeNull();
+    expect(mockedRpc).not.toHaveBeenCalled();
+  });
+
+  it('queries only the three non-terminal statuses', async () => {
+    const { inFn } = mockActiveRoundLookup({ data: null, error: null });
+
+    await getActiveSelectionRound();
+
+    // A terminal round must never be resumable — including 'applied' or
+    // 'cancelled' here would hand back a finished round as if it were live.
+    expect(inFn).toHaveBeenCalledWith('status', [
+      'pending_candidates',
+      'active',
+      'ready_for_review',
+    ]);
+  });
+
+  it('resolves the full round when one is in progress', async () => {
+    mockActiveRoundLookup({ data: { id: 'round-9' }, error: null });
+    mockedRpc.mockResolvedValue({
+      data: {
+        id: 'round-9',
+        household_id: 'house-1',
+        created_by: 'user-1',
+        mode: 'solo',
+        status: 'active',
+        target_count: 4,
+        closes_at: null,
+        revealed_at: null,
+        candidate_strategy_version: 'filter-only-v1',
+        created_at: '2026-08-22T00:00:00.000Z',
+        updated_at: '2026-08-22T00:00:00.000Z',
+        closed_at: null,
+        applied_at: null,
+        applied_by: null,
+        applied_weekly_plan_id: null,
+        participants: [],
+        candidates: [],
+      },
+      error: null,
+    });
+
+    const round = await getActiveSelectionRound();
+
+    expect(mockedRpc).toHaveBeenCalledWith('get_selection_round', { round_id: 'round-9' });
+    expect(round?.id).toBe('round-9');
+  });
+
+  it('throws when the lookup itself fails', async () => {
+    mockActiveRoundLookup({ data: null, error: { message: 'boom' } });
+
+    await expect(getActiveSelectionRound()).rejects.toThrow('boom');
   });
 });
