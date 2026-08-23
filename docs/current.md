@@ -12,7 +12,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 **Staging state (2026-08-23):** migrations up to date; **both** Edge Functions deployed (`import-recipe` v14, `select-candidates` v1, `verify_jwt` on). Note that deploying a function is a separate step from pushing migrations — `select-candidates` existed in the repo for a while before it was deployed.
 
-**Still to build, in order:** decision RPCs (`record_selection_decision` / `clear_selection_decision` / `finish_selection_participation`) + `close_selection_round` + `get_selection_round_results` → `apply_selection_round` (highest risk) → the client solo flow. Only after the client lands is anything swipeable.
+**Still to build, in order:** `apply_selection_round` (highest risk) → the client solo flow. Only after the client lands is anything swipeable.
 
 ## Blocked
 
@@ -32,12 +32,7 @@ Journey 3 (shared household — a two-actor walkthrough) still needs a live deve
 
 ## Next action
 
-**The decision RPCs slice** — `record_selection_decision`, `clear_selection_decision`, `finish_selection_participation`, plus `close_selection_round` and `get_selection_round_results`. Pure SQL against merged schema, so it has no dependency on anything unlanded. Four things this slice must get right, each already settled in ADR-0027 and each with a plausible-looking wrong version:
-
-1. Every one of these RPCs calls the centralized deadline helper **first** (decision 4). The helper is not client-callable and must stay that way — see #97 for why `revoke ... from public` alone is insufficient on a real project.
-2. `get_selection_round_results` must **raise**, not return a partial, unless the round is `ready_for_review` or `applied` — the same allowlist as the RLS policy, enforced independently because `SECURITY DEFINER` bypasses RLS (decision 2).
-3. A decision on an already-revealed candidate is frozen (decision 2a) — this is what stops a refill being used to re-vote with knowledge of others' ballots.
-4. `record_selection_decision` must reject a `recipe_id` that was never a candidate of that round.
+**The decision RPCs slice is built and pgTAP-verified locally, not yet pushed/PR'd.** `record_selection_decision`, `clear_selection_decision`, `finish_selection_participation`, `close_selection_round`, `get_selection_round_results` — `supabase/migrations/20260823100000_selection_decision_rpcs.sql` + `supabase/tests/database/selection_decision_rpcs.test.sql` (55 assertions). All four things the slice had to get right were mutation-tested (guard removed, confirmed a real test fails, guard restored, working tree confirmed byte-identical): the centralized deadline helper called first by every RPC (decision 4); `get_selection_round_results` raising via the allowlist rather than `!= 'active'` (decision 2 — the cancelled-round case is the regression test); the decision-2a freeze on a pre-reveal candidate (simulated directly, since `refill_selection_round` doesn't exist yet to reach that state organically); and `record_selection_decision` rejecting a `recipe_id` that was never a candidate. On branch `feature/selection-decision-rpcs`. Next: `apply_selection_round` (highest risk — see ADR-0027 decision 6 for the lock-ordering requirement), then the client solo flow.
 
 **Open decisions for the developer** (none block the next slice):
 
