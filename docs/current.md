@@ -41,8 +41,8 @@ Journey 3 (shared household — a two-actor walkthrough) still needs a live deve
 
 **Open decisions for the developer** (none block the next slice):
 
-- **Does the beta ship solo-only, or wait for the group flow?** Raised at #92 and still unsettled. Group is arguably the point of the feature for friends and family, but solo is what's being built. Needs an answer before the feature flag flips, not before then.
-- **Backlog triage.** Six entries logged 2026-08-22/23 sit in Not-yet-triaged with no milestone: the hero-image log noise, Add Recipes sort/filter, share-to-Keepsake (Photos half and social half), the latent TRUNCATE grant, and the `"1 cup (2 sticks)"` scaling bug. Worth deciding whether any get pulled ahead of milestone 4's remaining slices.
+- ~~Does the beta ship solo-only, or wait for the group flow?~~ **Settled 2026-08-23: solo-only is acceptable for the beta, group preferred if achievable.** Group is therefore not a beta gate but is genuinely wanted — finish solo through its live walkthrough, then reassess group against the time left. See milestone 4's entry.
+- ~~Backlog triage.~~ **Partly settled 2026-08-23:** the `"1 cup (2 sticks)"` scaling bug is now a **Friends & Family Preview gate** — it must not ship, but does not need fixing now. The other five entries remain untriaged in Not-yet-triaged (hero-image log noise, Add Recipes sort/filter, share-to-Keepsake's two halves, the latent TRUNCATE grant).
 
 ## Recently shipped
 
