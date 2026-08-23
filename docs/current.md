@@ -6,12 +6,15 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 `docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — placed 2026-08-20 and sequenced **ahead of Friends & Family Preview**, so the beta ships with it. Build order: **solo flow first**, and **walkable skeleton before smart ranking** (see the roadmap entry for why each departs from the proposal's own M1–M8).
 
-Three of the milestone's PRs are done; the fourth is built but unreviewed.
+Five of the milestone's PRs are merged; the spine now has schema, RLS, and lifecycle RPCs. The candidate-generation Edge Function is built and awaiting review, and client solo-flow UI is next.
 
 - [PR #92](https://github.com/kraigstrong/Keepsake/pull/92) — milestone placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md). **Merged.**
-- [PR #93](https://github.com/kraigstrong/Keepsake/pull/93) — `ServingsConfirmationStep` extracted out of `AddToThisWeekScreen`. **Merged.** The proposal had assumed this component already existed; it didn't.
-- [PR #94](https://github.com/kraigstrong/Keepsake/pull/94) — `server/selection/scoreCandidates.ts`, the deterministic v1 ranking heuristic (24 tests, pure, DB-free).
-- Branch **`feature/selection-schema`** — four-table schema, RLS policies + select-only grants, and a pgTAP suite. Three commits, **not pushed, not reviewed, no PR.** See Next action.
+- [PR #93](https://github.com/kraigstrong/Keepsake/pull/93) — `ServingsConfirmationStep` extracted out of `AddToThisWeekScreen`. **Merged.**
+- [PR #94](https://github.com/kraigstrong/Keepsake/pull/94) — `server/selection/scoreCandidates.ts`, the deterministic v1 ranking heuristic. **Merged**, including the group-qualified-category-key fix from Codex's review (see the now-resolved finding below).
+- [PR #95](https://github.com/kraigstrong/Keepsake/pull/95) — the four-table schema, RLS policies, select-only grants, pgTAP suite. **Merged.**
+- [PR #96](https://github.com/kraigstrong/Keepsake/pull/96) — `create_selection_round` / `finalize_selection_round_candidates` / `get_selection_round` / `cancel_selection_round`, plus the centralized auto-close helper. **Merged.**
+- [PR #97](https://github.com/kraigstrong/Keepsake/pull/97) — revokes EXECUTE on the internal `resolve_selection_round_deadline` helper from `anon`/`authenticated`. **Open, CI green.** Found by calling staging after #96's push: the helper executed for an anonymous caller (HTTP 204) even though its *local* ACL looked correctly locked down — Supabase's default privileges grant EXECUTE per-role, which a `revoke ... from public` leaves intact. Low impact (it only performs a transition already due) but the idiom is the real lesson. **Needs its own staging push once merged, since staging is where the exposure lives.**
+- Branch **`feature/selection-edge-function`** — `supabase/functions/select-candidates/` (orchestrates create → filter → finalize, caller's-JWT/no-service-role, filter-only deck per `docs/proposals/smart-meal-selection-architecture.md` §5) plus `src/smartSelection/api.ts` (+tests), the client wrapper. Two commits, **verification complete, not yet pushed, no PR.** See Next action.
 
 ## Blocked
 
@@ -31,26 +34,20 @@ Journey 3 (shared household — a two-actor walkthrough) still needs a live deve
 
 ## Next action
 
-**Review and land `feature/selection-schema`** (local branch, 3 commits, never pushed). This is milestone 4's security boundary and was deliberately *not* rushed at the end of the 2026-08-20 session. It needs the full treatment before it goes near a PR:
+**Push and open a PR for `feature/selection-edge-function`** (local branch, 2 commits, never pushed). Verification already done on this branch: `npm run typecheck`/`lint`/`format:check`/`test` (125/125 suites) and `npm run db:reset && npm run db:test` (373/373 pgTAP, unaffected — this slice adds no migration) all pass; `.claude/skills/security-check` found no open issues (auth boundary, household isolation via RLS, and input validation all checked against the actual diff); an independent `/code-review` pass found three real issues, all fixed on this branch before commit: a concurrent-creation race that raw Postgres `23505` slipped past the RPC-message regex and got misclassified as 400 instead of 409, a dead `result.error` branch in `startSelectionRound` for a response shape the Edge Function can never actually produce (every failure path returns non-2xx), and a literal-JSON-non-object request body (e.g. `null`) throwing into a misleading "not valid JSON" error. Not yet reviewed by the developer or Codex.
 
-1. `npm run db:test` — the implementing agent could not run pgTAP (no container runtime existed at the time). **Colima + docker are now installed**, so `npm run db:start && npm run db:test` works locally; don't rely on CI for the first pass.
-2. `.claude/skills/security-check` — this touches RLS and a household boundary, so it is triggered, not optional.
-3. An independent look from an agent that didn't write it, or `/code-review`, per the lifecycle's step 6.
+Two things worth knowing before that review:
 
-Four things in that branch came out of Codex's review of ADR-0027 and are the specific places to check hardest, because following the *proposal* instead of the ADR reintroduces each one:
+- **`select-candidates` does not call `server/selection/scoreCandidates.ts` at all** (only its `computeDeckSize` export) — this milestone's "walkable skeleton before smart ranking" build order means the deck is ordered by recipe `id` and filtered (household, not archived/deleted, not in the current This Week plan), nothing more. `candidate_strategy_version` is `'filter-only-v1'`, not `'heuristic-v1'`, so this is visible in the data. Wiring in the real heuristic is a later slice.
+- **"Current This Week plan" is resolved by `ORDER BY week_key DESC LIMIT 1`, not by recomputing the ISO-week-from-now algorithm server-side.** `src/thisWeek/weekKey.ts`'s own docstring notes there's no stored household timezone to derive that authoritatively anywhere, client or server — `week_key`'s zero-padded `YYYY-Www` format sorts lexicographically the same as chronologically, so this avoids re-deriving that approximation a second, differently-wrong way. Documented inline in `fetchCurrentThisWeekRecipeIds`.
 
-- The `selection_decisions` SELECT policy must be the **allowlist** (`status IN ('ready_for_review','applied')`), never `!= 'active'` — the latter makes open-access `cancel_selection_round` a ballot-disclosure path around the creator-only close gate.
-- The singleton unique index must span **all three** non-terminal statuses (`pending_candidates`, `active`, `ready_for_review`).
-- `claim_token` and `revealed_at` columns must exist for later slices to fence on.
-- No INSERT/UPDATE/DELETE grants to `authenticated` on any of the four tables.
-
-Then the rest of milestone 4's spine, in order: lifecycle RPCs + `select-candidates` Edge Function (filter-only deck) → decision RPCs + close + results → `apply_selection_round` (highest risk) → client solo flow → **first live solo walkthrough** → wire in PR #94's heuristic → second walkthrough to judge deck quality.
+Then the rest of milestone 4's spine, in order: decision RPCs + close + results → `apply_selection_round` (highest risk) → client solo flow → **first live solo walkthrough** → wire in the real heuristic → second walkthrough to judge deck quality.
 
 Two decisions deliberately deferred, neither blocking: whether the beta ships **solo-only** or waits for the group flow (settle before the flag flip), and the staging `supabase db push` once the first migration merges (a staging write needing explicit developer go-ahead).
 
-**Two findings recorded 2026-08-20, both open:**
+**Both findings recorded 2026-08-20 are now resolved:**
 
-- **[PR #94](https://github.com/kraigstrong/Keepsake/pull/94) is deliberately unmerged.** Codex found that `scoreCandidates.ts` diversifies on `categories.group_name`, which is constrained to just three values (`protein`/`dish_type`/`preparation`) — `value` holds the distinguishing label. So a beef dish and a fish dish read as identical, the penalty lands uniformly, and "the only fish in the deck" is unrepresentable. Category diversification carries no signal; only tags work. Fix is two parts: a group-qualified category key in the module, **and** a correction to the proposal's §5, which says "round-robining across `tags` and category `group_name` values" and is what the implementation faithfully followed. Add it to that document's supersession banner.
+- **Resolved:** the `scoreCandidates.ts` category-diversification finding from PR #94's review (diversifying on bare `group_name` instead of a group-qualified key) shipped as part of PR #94 itself before it merged — see the PR list above. `docs/proposals/smart-meal-selection-architecture.md`'s supersession banner documents the correction.
 - **Resolved 2026-08-21: agent worktrees under `.claude/worktrees/` break the Jest run.** `src/thisWeek/ThisWeekScreen.test.tsx` failed to load in the main checkout, and two explanations were offered before the real one: an agent called it "pre-existing on `main`" (it wasn't) and this file previously blamed `node_modules` (also wrong — `npm ci` didn't fix it). Actual cause: a worktree created inside the repo is scanned by Jest's haste map, which then finds duplicate manual mocks for every file in `__mocks__/` and stops resolving the reanimated mock. **`git worktree remove` each lane's worktree once its branch is pushed** — with them gone the suite is 123 suites / 1116 passed / 0 failed, matching `main`. Worth knowing before spawning parallel worktree agents again.
 
 Unrelated and still open: the staging backfill for PR #83's affected recipe, and scheduling the two-actor session to close Journey 3.
