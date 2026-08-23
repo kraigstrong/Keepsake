@@ -324,7 +324,12 @@ begin
       when coalesce(y.yes_count, 0) * 2 > completed_count then 'majority'
       else 'mixed'
     end,
-    'chosen_by', coalesce(y.chosen_by, '[]'::jsonb)
+    'chosen_by', coalesce(y.chosen_by, '[]'::jsonb),
+    -- Explicit 'no' rows only, never absence (ADR-0027 decision 7): a
+    -- participant who never reached a card must not be reported as
+    -- having passed on it, so this cannot be derived by subtracting
+    -- chosen_by from the participant list.
+    'passed_by', coalesce(n.passed_by, '[]'::jsonb)
   ) order by c.position), '[]'::jsonb)
   into candidates_json
   from public.selection_round_candidates c
@@ -343,6 +348,18 @@ begin
       and d.decision = 'yes'
       and p.completed_at is not null
   ) y on true
+  left join lateral (
+    select jsonb_agg(jsonb_build_object('user_id', d.user_id, 'display_name', pr.display_name)
+                     order by pr.display_name) as passed_by
+    from public.selection_decisions d
+    join public.selection_round_participants p
+      on p.round_id = d.round_id and p.user_id = d.user_id
+    join public.profiles pr on pr.id = d.user_id
+    where d.round_id = c.round_id
+      and d.recipe_id = c.recipe_id
+      and d.decision = 'no'
+      and p.completed_at is not null
+  ) n on true
   where c.round_id = target_round.id
     and r.archived_at is null
     and r.deleted_at is null;

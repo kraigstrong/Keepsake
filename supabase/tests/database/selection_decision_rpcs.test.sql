@@ -21,7 +21,7 @@
 
 begin;
 
-select plan(55);
+select plan(58);
 
 insert into auth.users (id, email)
 values
@@ -310,6 +310,16 @@ select lives_ok(
   'clear_selection_decision: a completed participant can still clear a decision while active'
 );
 
+-- Recorded last, after the clear above (which also targets ...0002), so
+-- it survives to the results assertions: an explicit no must be
+-- distinguishable there from a card nobody ever reached.
+select is(
+  (select decision::text from public.record_selection_decision(
+    (select round_id from round_main), '20000000-0000-0000-0000-000000000002', 'no')),
+  'no',
+  'record_selection_decision: records an explicit no that survives to results'
+);
+
 -- --- close succeeds for the creator, and closing twice is rejected ---
 select is(
   (select status::text from public.close_selection_round((select round_id from round_main))),
@@ -351,6 +361,33 @@ select is(
   ),
   0,
   'get_selection_round_results: a participant who never decided is not listed as having chosen it'
+);
+
+-- The distinction the previous case can't make on its own: an explicit
+-- 'no' is nameable, absence is not. Without passed_by these two states
+-- are indistinguishable in the response, and "never reached it" would
+-- read as "passed on it" to anyone rendering the results (ADR-0027).
+select is(
+  (
+    select jsonb_array_length(c -> 'passed_by')
+    from jsonb_array_elements(
+      public.get_selection_round_results((select round_id from round_main)) -> 'candidates'
+    ) as c
+    where c ->> 'recipe_id' = '20000000-0000-0000-0000-000000000001'
+  ),
+  0,
+  'get_selection_round_results REGRESSION: a never-decided candidate lists nobody as having passed'
+);
+select is(
+  (
+    select jsonb_array_length(c -> 'passed_by')
+    from jsonb_array_elements(
+      public.get_selection_round_results((select round_id from round_main)) -> 'candidates'
+    ) as c
+    where c ->> 'recipe_id' = '20000000-0000-0000-0000-000000000002'
+  ),
+  1,
+  'get_selection_round_results: an explicit no from a completed participant is named in passed_by'
 );
 
 select lives_ok(
