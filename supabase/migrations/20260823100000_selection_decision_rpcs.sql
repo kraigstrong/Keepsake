@@ -32,10 +32,16 @@ begin
     raise exception 'caller does not belong to a household' using errcode = 'P0001';
   end if;
 
+  -- for update, not a plain read: the status check and the ballot write
+  -- that follows it must be atomic against close_selection_round. Without
+  -- the lock a close can commit in between, so a vote lands after
+  -- revealed_at is set and ballots have become household-readable —
+  -- defeating decision 2a's freeze at exactly the moment it matters.
   select * into target_round
   from public.selection_rounds
   where id = assert_selection_decision_writable.round_id
-    and household_id = caller_household_id;
+    and household_id = caller_household_id
+  for update;
 
   if target_round.id is null then
     raise exception 'selection round not found' using errcode = 'P0001';
@@ -170,10 +176,14 @@ begin
     raise exception 'caller does not belong to a household' using errcode = 'P0001';
   end if;
 
+  -- for update, same reason as the decision helper: completing after a
+  -- concurrent close would move completed_participant_count, and that is
+  -- the denominator of results someone may already have read.
   select * into target_round
   from public.selection_rounds
   where id = finish_selection_participation.round_id
-    and household_id = caller_household_id;
+    and household_id = caller_household_id
+  for update;
 
   if target_round.id is null then
     raise exception 'selection round not found' using errcode = 'P0001';
