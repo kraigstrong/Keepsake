@@ -21,7 +21,7 @@
 
 begin;
 
-select plan(58);
+select plan(59);
 
 insert into auth.users (id, email)
 values
@@ -318,6 +318,18 @@ select is(
     (select round_id from round_main), '20000000-0000-0000-0000-000000000002', 'no')),
   'no',
   'record_selection_decision: records an explicit no that survives to results'
+);
+
+-- ADR-0027 decision 2 names this case as required, and it is the one the
+-- suite was missing: a legitimate in-household *participant* asking for
+-- results while the round is still active. The pending_candidates and
+-- cross-household cases both pass against an implementation that admits
+-- 'active', so without this a change opening that door leaks live ballot
+-- aggregates mid-round without failing a single test.
+select throws_ok(
+  format($$ select public.get_selection_round_results(%L) $$, (select round_id from round_main)),
+  'selection round results are not available yet',
+  'get_selection_round_results REGRESSION: raises for a participant during an ACTIVE round'
 );
 
 -- --- close succeeds for the creator, and closing twice is rejected ---
