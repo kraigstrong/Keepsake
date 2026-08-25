@@ -21,7 +21,7 @@
 
 begin;
 
-select plan(20);
+select plan(21);
 
 insert into auth.users (id, email)
 values
@@ -341,6 +341,47 @@ select is(
    where weekly_plan_id = (select id from plan_a) and recipe_id = '20000000-0000-0000-0000-000000000007'),
   1,
   'apply_selection_round: the pre-existing R7 entry is not duplicated when every selection is already in the plan'
+);
+
+-- ===== Phase 6: the same recipe_id twice in ONE selections array =====
+-- Distinct from every duplicate case above, which are all "already in the
+-- plan". An intra-call repeat passes candidate membership for both copies
+-- and neither is in the plan yet, so nothing else rejects it: without the
+-- dedup in the RPC this inserts the same recipe twice and puts a real
+-- duplicate in This Week. Uses a purpose-made recipe because every fixture
+-- recipe is archived, deleted, cross-household or already planned by now.
+reset role;
+insert into public.recipes (id, household_id, title, created_by)
+values ('20000000-0000-0000-0000-0000000000d1',
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Dedup Probe',
+        '11111111-1111-1111-1111-111111111111');
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
+  true
+);
+
+create temporary table round_dup as
+select * from public.create_selection_round('solo');
+select public.finalize_selection_round_candidates(
+  (select round_id from round_dup), (select claim_token from round_dup),
+  '[{"recipe_id":"20000000-0000-0000-0000-0000000000d1","score":0.9,"reason_codes":[]}]'::jsonb,
+  'v1'
+);
+select public.close_selection_round((select round_id from round_dup));
+select public.apply_selection_round(
+  (select round_id from round_dup),
+  (select id from plan_a),
+  '[{"recipe_id":"20000000-0000-0000-0000-0000000000d1","multiplier":1.0},
+    {"recipe_id":"20000000-0000-0000-0000-0000000000d1","multiplier":2.0}]'::jsonb
+);
+select is(
+  (select count(*)::int from public.planning_entries
+   where weekly_plan_id = (select id from plan_a)
+     and recipe_id = '20000000-0000-0000-0000-0000000000d1'),
+  1,
+  'apply_selection_round: the same recipe_id twice in one call lands exactly once'
 );
 
 select * from finish();
