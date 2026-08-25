@@ -4,23 +4,23 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — sequenced ahead of Friends & Family Preview. Build order: **solo flow first**, **walkable skeleton before smart ranking**.
+`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — ahead of Friends & Family Preview. Build order: **solo flow first**, **walkable skeleton before smart ranking**.
 
-**The backend spine's candidate-generation half is complete and live on staging.** Seven PRs merged:
+**The backend spine is code-complete. Nothing is swipeable yet — no client UI exists.**
 
-- [#92](https://github.com/kraigstrong/Keepsake/pull/92) milestone placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS/pgTAP · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API.
+Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs.
 
-**Staging state (2026-08-23):** migrations up to date; **both** Edge Functions deployed (`import-recipe` v14, `select-candidates` v1, `verify_jwt` on). Note that deploying a function is a separate step from pushing migrations — `select-candidates` existed in the repo for a while before it was deployed.
+**Open: [PR #101](https://github.com/kraigstrong/Keepsake/pull/101), `apply_selection_round`.** CI green, 453 pgTAP assertions across 28 files, deliberately **not merged** — see Blocked.
 
-The decision-recording RPC slice (`record_selection_decision`, `clear_selection_decision`, `finish_selection_participation`, `close_selection_round`, `get_selection_round_results`) shipped as [PR #100](https://github.com/kraigstrong/Keepsake/pull/100), merged.
-
-**`apply_selection_round` (highest risk — ADR-0027 decision 6) is built and pgTAP-verified locally, not yet pushed/PR'd.** `supabase/migrations/20260824100000_apply_selection_round.sql` + `supabase/tests/database/apply_selection_round.test.sql` (20 assertions). On branch `feature/selection-apply`. All four guards mutation-tested (each removed, confirmed a named test fails, restored, working tree confirmed byte-identical): the already-in-plan duplicate filter, the candidate-membership check, the archived/deleted revalidation, and the `status = 'ready_for_review'` guard. Decision 6's actual lock-ordering property (locking the target weekly plan before reading its entries) is **not** verifiable by pgTAP's single-transaction model — flagged in the test file's own header, same acknowledged limitation ADR-0020 states for the invitation race — so it stays a live-review item, not something CI can catch a regression in.
-
-**Still to build:** the client solo flow. Only after it lands is anything swipeable.
+**Staging (2026-08-24):** migrations current through #100; both Edge Functions deployed (`import-recipe` v14, `select-candidates` v1). #101's migration is **not** pushed. Deploying a function is a separate step from pushing migrations.
 
 ## Blocked
 
-Journey 3 (shared household — a two-actor walkthrough) still needs a live developer session that neither automated tests nor pgTAP's single-transaction model can substitute for.
+**PR #101 is open, not merged, pending a developer decision.** Codex found a real P1 that is larger than that PR: `apply_selection_round` locks the target plan correctly, but `confirm_weekly_plan` and `remove_planning_entry` never take that lock, so apply is serialised against the adders and not against those two. Verified against the source. Worst case is silent: a confirm interleaving with an apply leaves a confirmed plan holding `counted = false` entries whose `planned_count` was never incremented — permanent drift in the number the ranking heuristic reads, with nothing surfacing it to a user who would report it.
+
+Pre-existing (those RPCs shipped this way in Phase 12; apply is just the first caller depending on them), now a Friends & Family Preview gate. **The decision is whether to fix the locking family first or merge #101 and fix after** — #101 was left open rather than merged over an unaddressed P1.
+
+Journey 3 (shared household, two-actor walkthrough) also still needs a live developer session.
 
 ## Current state
 
@@ -36,12 +36,18 @@ Journey 3 (shared household — a two-actor walkthrough) still needs a live deve
 
 ## Next action
 
-**`apply_selection_round` (ADR-0027 decision 6, the highest-risk RPC in this milestone — the only one writing to data the user already owns) is built and pgTAP-verified locally, not yet pushed/PR'd.** See the Active work item section above for detail. On branch `feature/selection-apply`. Next: the client solo flow — only after it lands is anything swipeable.
+**First, decide on #101** (see Blocked): fix the weekly-plan locking family first, or merge and fix after. Either is defensible; the gate is recorded either way.
 
-**Open decisions for the developer** (none block the next slice):
+Then, in order:
 
-- ~~Does the beta ship solo-only, or wait for the group flow?~~ **Settled 2026-08-23: solo-only is acceptable for the beta, group preferred if achievable.** Group is therefore not a beta gate but is genuinely wanted — finish solo through its live walkthrough, then reassess group against the time left. See milestone 4's entry.
-- ~~Backlog triage.~~ **Partly settled 2026-08-23:** the `"1 cup (2 sticks)"` scaling bug is now a **Friends & Family Preview gate** — it must not ship, but does not need fixing now. The other five entries remain untriaged in Not-yet-triaged (hero-image log noise, Add Recipes sort/filter, share-to-Keepsake's two halves, the latent TRUNCATE grant).
+1. **Wire the scoring heuristic into `select-candidates`** — small: `server/selection/scoreCandidates.ts` is merged and tested, this connects it and swaps `candidate_strategy_version` from `filter-only-v1` to `heuristic-v1`. Do this **before** any client work: with the filter-only deck the pool is ordered by recipe `id` and sliced, so a library returns **the same cards every round** — invisible at three recipes, obvious at fifty.
+2. **Client deck PR** — This Week entry point (1a), start sheet (1b), swipe screen (1d/1e) behind `FLAGS.smartMealSelection`. Gesture physics are already proven in this codebase: `ThisWeekScreen` ships a `ReanimatedSwipeable` row with passing RTL tests and `jest.config.js` wires `gesture-handler/jestSetup`.
+3. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
+4. **Live solo walkthrough**, then reassess the group flow.
+
+**Working method that has been earning its keep:** delegate a slice to a Sonnet subagent with the ADR as spec and *named required mutations*, then review the real diff and re-run the mutations independently. **Four times on this milestone a guard was correct while no test pinned it** — most starkly, admitting `'active'` to a results allowlist left all 431 tests passing while leaking live ballots. A green suite is not evidence of coverage. Always mutate before believing a test list.
+
+Also queued, unrelated: five untriaged backlog entries, and the `"1 cup (2 sticks)"` scaling bug (a Friends & Family Preview gate, not urgent).
 
 ## Recently shipped
 
