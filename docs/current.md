@@ -12,7 +12,11 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 **Staging state (2026-08-23):** migrations up to date; **both** Edge Functions deployed (`import-recipe` v14, `select-candidates` v1, `verify_jwt` on). Note that deploying a function is a separate step from pushing migrations — `select-candidates` existed in the repo for a while before it was deployed.
 
-**Still to build, in order:** `apply_selection_round` (highest risk) → the client solo flow. Only after the client lands is anything swipeable.
+The decision-recording RPC slice (`record_selection_decision`, `clear_selection_decision`, `finish_selection_participation`, `close_selection_round`, `get_selection_round_results`) shipped as [PR #100](https://github.com/kraigstrong/Keepsake/pull/100), merged.
+
+**`apply_selection_round` (highest risk — ADR-0027 decision 6) is built and pgTAP-verified locally, not yet pushed/PR'd.** `supabase/migrations/20260824100000_apply_selection_round.sql` + `supabase/tests/database/apply_selection_round.test.sql` (20 assertions). On branch `feature/selection-apply`. All four guards mutation-tested (each removed, confirmed a named test fails, restored, working tree confirmed byte-identical): the already-in-plan duplicate filter, the candidate-membership check, the archived/deleted revalidation, and the `status = 'ready_for_review'` guard. Decision 6's actual lock-ordering property (locking the target weekly plan before reading its entries) is **not** verifiable by pgTAP's single-transaction model — flagged in the test file's own header, same acknowledged limitation ADR-0020 states for the invitation race — so it stays a live-review item, not something CI can catch a regression in.
+
+**Still to build:** the client solo flow. Only after it lands is anything swipeable.
 
 ## Blocked
 
@@ -32,7 +36,7 @@ Journey 3 (shared household — a two-actor walkthrough) still needs a live deve
 
 ## Next action
 
-**The decision RPCs slice is built and pgTAP-verified locally, not yet pushed/PR'd.** `record_selection_decision`, `clear_selection_decision`, `finish_selection_participation`, `close_selection_round`, `get_selection_round_results` — `supabase/migrations/20260823100000_selection_decision_rpcs.sql` + `supabase/tests/database/selection_decision_rpcs.test.sql` (55 assertions). All four things the slice had to get right were mutation-tested (guard removed, confirmed a real test fails, guard restored, working tree confirmed byte-identical): the centralized deadline helper called first by every RPC (decision 4); `get_selection_round_results` raising via the allowlist rather than `!= 'active'` (decision 2 — the cancelled-round case is the regression test); the decision-2a freeze on a pre-reveal candidate (simulated directly, since `refill_selection_round` doesn't exist yet to reach that state organically); and `record_selection_decision` rejecting a `recipe_id` that was never a candidate. On branch `feature/selection-decision-rpcs`. Next: `apply_selection_round` (highest risk — see ADR-0027 decision 6 for the lock-ordering requirement), then the client solo flow.
+**`apply_selection_round` (ADR-0027 decision 6, the highest-risk RPC in this milestone — the only one writing to data the user already owns) is built and pgTAP-verified locally, not yet pushed/PR'd.** See the Active work item section above for detail. On branch `feature/selection-apply`. Next: the client solo flow — only after it lands is anything swipeable.
 
 **Open decisions for the developer** (none block the next slice):
 
