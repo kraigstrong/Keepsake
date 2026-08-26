@@ -197,3 +197,59 @@ export async function getActiveSelectionRound(): Promise<SelectionRound | null> 
   if (!data) return null;
   return getSelectionRound((data as { id: string }).id);
 }
+
+export type SelectionDecisionValue = 'yes' | 'no';
+
+/** Backs the deck's Yes/Not-this-week controls and the swipe gesture's commit. */
+export async function recordSelectionDecision(
+  roundId: string,
+  recipeId: string,
+  decision: SelectionDecisionValue,
+): Promise<void> {
+  const { error } = await supabase.rpc('record_selection_decision', {
+    round_id: roundId,
+    recipe_id: recipeId,
+    decision,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Backs "undo" — reverts a decision to unseen (ADR-0027: absence, not a third stored value). */
+export async function clearSelectionDecision(roundId: string, recipeId: string): Promise<void> {
+  const { error } = await supabase.rpc('clear_selection_decision', {
+    round_id: roundId,
+    recipe_id: recipeId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+interface SelectionDecisionRow {
+  recipe_id: string;
+  decision: SelectionDecisionValue;
+}
+
+/**
+ * The caller's own decisions for a round, keyed by recipe id — what
+ * makes resuming an in-progress round correct. `selection_decisions`'
+ * RLS SELECT policy is `user_id = auth.uid() OR round revealed`
+ * (ADR-0027 decision 2), so a participant's own decisions are always
+ * readable here, even mid-round, well before the household-wide reveal
+ * that policy's second clause covers.
+ */
+export async function getMyDecisionsForRound(
+  roundId: string,
+  userId: string,
+): Promise<Map<string, SelectionDecisionValue>> {
+  const { data, error } = await supabase
+    .from('selection_decisions')
+    .select('recipe_id, decision')
+    .eq('round_id', roundId)
+    .eq('user_id', userId);
+  if (error) throw new Error(error.message);
+
+  const decisions = new Map<string, SelectionDecisionValue>();
+  ((data ?? []) as SelectionDecisionRow[]).forEach((row) => {
+    decisions.set(row.recipe_id, row.decision);
+  });
+  return decisions;
+}

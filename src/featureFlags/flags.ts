@@ -14,4 +14,6 @@
  *
  *   someNewFeature: false, // remove once REC-01 ships in Phase 4
  */
-export const FLAGS: Record<string, boolean> = {};
+export const FLAGS: Record<string, boolean> = {
+  smartMealSelection: false, // remove once the swipe deck + shortlist/apply flow both ship and are validated live
+};

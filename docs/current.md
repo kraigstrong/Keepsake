@@ -6,7 +6,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 `docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — ahead of Friends & Family Preview. Build order: **solo flow first**, **walkable skeleton before smart ranking**.
 
-**The backend spine is code-complete, and the deck is now really ranked. Nothing is swipeable yet — no client UI exists.**
+**The backend spine is code-complete, the deck is really ranked and deployed, and the swipe deck client UI is now built (not yet pushed) — see Open below.**
 
 Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs · [#101](https://github.com/kraigstrong/Keepsake/pull/101) `apply_selection_round` (merged 2026-08-25 — decision: merge now, fix the locking gap below as a fast-follow before Friends & Family Preview) · [#102](https://github.com/kraigstrong/Keepsake/pull/102) heuristic wiring into `select-candidates` (merged 2026-08-25; Codex P2 on `api.max_rows` truncation risk in the history reads, fixed same PR by ordering newest-first — see `server/selection/fetchCandidateScoringInput.ts`).
 
@@ -34,11 +34,19 @@ Journey 3 (shared household, two-actor walkthrough) also still needs a live deve
 
 ## Next action
 
+<<<<<<< HEAD
 1. **Client deck PR** — This Week entry point (1a), start sheet (1b), swipe screen (1d/1e) behind `FLAGS.smartMealSelection`. Gesture physics are already proven in this codebase: `ThisWeekScreen` ships a `ReanimatedSwipeable` row with passing RTL tests and `jest.config.js` wires `gesture-handler/jestSetup`. Both prior blockers (locking-gap decision, heuristic wiring + staging deploy) are cleared — this is next.
 2. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
 3. **Live solo walkthrough**, then reassess the group flow.
 
 Separately, still outstanding: push #101's migration to staging (`supabase db push`) — not done yet, tracked above under Staging.
+=======
+1. **Push and PR the client swipe-deck branch** (`feature/smart-selection-swipe-deck`) — see Open above. Ready for `pr-ready` packaging; flag stays off until this and the finish PR below have both had a live pass.
+2. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
+3. **Live solo walkthrough**, then reassess the group flow.
+
+Separately, still outstanding: push #101's migration to staging (`supabase db push`) — tracked above under Staging, not yet done.
+>>>>>>> 2037caf (Build the Smart Selection swipe deck client (1a/1b/1d/1e))
 
 **Working method that has been earning its keep:** delegate a slice to a Sonnet subagent with the ADR as spec and *named required mutations*, then review the real diff and re-run the mutations independently. **Four times on this milestone a guard was correct while no test pinned it** — most starkly, admitting `'active'` to a results allowlist left all 431 tests passing while leaking live ballots. A green suite is not evidence of coverage. Always mutate before believing a test list.
 

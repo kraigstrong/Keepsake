@@ -23,8 +23,11 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { useToast } from '../components/Toast';
 import { ChevronIcon } from '../components/icons/ChevronIcon';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
+import { FLAGS } from '../featureFlags/flags';
 import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
+import { getActiveSelectionRound } from '../smartSelection/api';
+import { StartRoundSheet } from '../smartSelection/StartRoundSheet';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 // How long the "Removed — Undo" banner stays up (ADR-0021: client-side
@@ -90,6 +93,8 @@ export function ThisWeekScreen() {
   const [isMutating, setIsMutating] = useState(false);
   const [removed, setRemoved] = useState<RemovedEntryState | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [startRoundSheetVisible, setStartRoundSheetVisible] = useState(false);
+  const [isCheckingActiveRound, setIsCheckingActiveRound] = useState(false);
   // Closes a swiped-open row once its Remove action has been tapped —
   // Swipeable doesn't do this itself, and the row disappearing from
   // `plan.entries` right after (the optimistic update below) isn't
@@ -138,6 +143,32 @@ export function ThisWeekScreen() {
   function goToAddRecipes() {
     if (!plan) return;
     router.push(`/this-week/add?planId=${plan.id}`);
+  }
+
+  // 1a's entry point: a round already mid-flight (pending_candidates —
+  // ADR-0027 decision 1a — or active) is resumed straight into the deck,
+  // skipping the start sheet, which is what makes leaving mid-round safe
+  // without building 1g's persistent "round in progress" card (out of
+  // scope for this slice, see the work item's Non-goals). A
+  // ready_for_review round, or none at all, is treated the same here —
+  // reviewing/closing a round is the next PR's scope, not this one.
+  async function handleHelpMeChoose() {
+    setIsCheckingActiveRound(true);
+    try {
+      const activeRound = await getActiveSelectionRound();
+      if (
+        activeRound &&
+        (activeRound.status === 'pending_candidates' || activeRound.status === 'active')
+      ) {
+        router.push(`/smart-selection/${activeRound.id}`);
+        return;
+      }
+      setStartRoundSheetVisible(true);
+    } catch {
+      showToast("Couldn't check for an in-progress round");
+    } finally {
+      setIsCheckingActiveRound(false);
+    }
   }
 
   // Tap-based reorder, not drag-and-drop (developer decision, 2026-08-07):
@@ -453,6 +484,21 @@ export function ThisWeekScreen() {
         )}
       </View>
 
+      {FLAGS.smartMealSelection && (
+        <View style={styles.helpMeChooseSection}>
+          <Button
+            title="Help me choose"
+            variant="outlineAccent"
+            onPress={handleHelpMeChoose}
+            disabled={isCheckingActiveRound}
+            testID="this-week-help-me-choose"
+          />
+          <Text style={styles.helpMeChooseCaption}>
+            {"A quick swipe-through to help pick this week's meals."}
+          </Text>
+        </View>
+      )}
+
       {removed && (
         <View style={styles.undoBanner} testID="this-week-undo-banner" role="alert" accessible>
           <Text style={styles.undoText} numberOfLines={1}>
@@ -462,6 +508,13 @@ export function ThisWeekScreen() {
             <Text style={styles.undoAction}>Undo</Text>
           </Pressable>
         </View>
+      )}
+
+      {FLAGS.smartMealSelection && (
+        <StartRoundSheet
+          visible={startRoundSheetVisible}
+          onDismiss={() => setStartRoundSheetVisible(false)}
+        />
       )}
     </View>
   );
@@ -550,6 +603,16 @@ const styles = StyleSheet.create({
   moveButtonDisabled: {
     color: colors.textTertiary,
     opacity: 0.4,
+  },
+  helpMeChooseSection: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  helpMeChooseCaption: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   undoBanner: {
     position: 'absolute',

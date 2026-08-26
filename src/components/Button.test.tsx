@@ -52,4 +52,16 @@ describe('Button', () => {
     const { toJSON } = await render(<Button title="Save" onPress={() => {}} />);
     expect(toJSON()).toMatchSnapshot();
   });
+
+  // outlineAccent (1a's "Help me choose" entry point): bordered rust,
+  // deliberately not filled — distinct from both primary (filled rust)
+  // and secondary (neutral hairline border).
+  it('renders the outlineAccent variant with an accent border and label', async () => {
+    await render(<Button title="Help me choose" onPress={() => {}} variant="outlineAccent" />);
+
+    const button = screen.getByRole('button', { name: 'Help me choose' });
+    expect(button.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ borderColor: '#B5502E', borderWidth: 1 })]),
+    );
+  });
 });

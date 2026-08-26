@@ -1,0 +1,234 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { useRouter } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+import * as api from './api';
+import type { SelectionRound } from './api';
+import * as deckCards from './deckCards';
+import { SwipeDeckScreen } from './SwipeDeckScreen';
+import { useReducedMotion } from '../accessibility/useReducedMotion';
+import { ToastProvider } from '../components/Toast';
+import * as heroImage from '../recipes/heroImage';
+import { useSession } from '../session/SessionProvider';
+
+jest.mock('./api');
+jest.mock('./deckCards');
+jest.mock('../recipes/heroImage');
+jest.mock('../accessibility/useReducedMotion');
+// Mirrors ThisWeekScreen.test.tsx's own useFocusEffect mock: only
+// re-invokes on a genuinely new callback identity, so re-renders that
+// don't change `load`'s identity (SwipeDeckScreen.tsx's useCallback deps
+// are just [roundId, userId]) don't refire the load and clobber
+// in-flight local state changes made by a test's button presses.
+let mockLastFocusEffect: (() => void) | null = null;
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+  useFocusEffect: jest.fn((effect: () => void) => {
+    if (effect !== mockLastFocusEffect) {
+      mockLastFocusEffect = effect;
+      effect();
+    }
+  }),
+}));
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
+jest.mock('../supabase/instance', () => ({ supabase: {} }));
+jest.mock(
+  'react-native-safe-area-context',
+  () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
+);
+
+function renderDeck(roundId = 'round-1') {
+  return render(
+    <GestureHandlerRootView>
+      <ToastProvider>
+        <SwipeDeckScreen roundId={roundId} />
+      </ToastProvider>
+    </GestureHandlerRootView>,
+  );
+}
+
+const mockedApi = api as jest.Mocked<typeof api>;
+const mockedDeckCards = deckCards as jest.Mocked<typeof deckCards>;
+const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
+const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseSession = useSession as jest.Mock;
+const mockedUseReducedMotion = useReducedMotion as jest.Mock;
+
+const back = jest.fn();
+const push = jest.fn();
+
+function testRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
+  return {
+    id: 'round-1',
+    householdId: 'household-1',
+    createdBy: 'user-1',
+    mode: 'solo',
+    status: 'active',
+    targetCount: 2,
+    closesAt: null,
+    candidateStrategyVersion: 'heuristic-v1',
+    revealedAt: null,
+    createdAt: '2026-08-25T00:00:00.000Z',
+    updatedAt: '2026-08-25T00:00:00.000Z',
+    closedAt: null,
+    appliedAt: null,
+    appliedBy: null,
+    appliedWeeklyPlanId: null,
+    participants: [],
+    candidates: [
+      { recipeId: 'r1', score: 10, reasonCodes: ['never_planned'], position: 0 },
+      { recipeId: 'r2', score: 8, reasonCodes: [], position: 1 },
+      { recipeId: 'r3', score: 5, reasonCodes: ['diversity'], position: 2 },
+    ],
+    ...overrides,
+  };
+}
+
+const deckCardDetails = new Map([
+  ['r1', { title: 'Herb Roast Chicken', heroImagePath: null, totalTimeMinutes: 45 }],
+  ['r2', { title: 'Tacos', heroImagePath: null, totalTimeMinutes: 30 }],
+  ['r3', { title: 'Sourdough Loaf', heroImagePath: null, totalTimeMinutes: null }],
+]);
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockLastFocusEffect = null;
+  mockedUseRouter.mockReturnValue({ back, push });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
+  mockedUseReducedMotion.mockReturnValue(false);
+  mockedApi.getSelectionRound.mockResolvedValue(testRound());
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map());
+  mockedApi.recordSelectionDecision.mockResolvedValue(undefined);
+  mockedApi.clearSelectionDecision.mockResolvedValue(undefined);
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(deckCardDetails);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue({});
+  mockedHeroImage.getCachedHeroImageUrl.mockReturnValue(null);
+});
+
+it('shows a loading state, then an error state with retry on failure', async () => {
+  mockedApi.getSelectionRound.mockRejectedValue(new Error('boom'));
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-load-error')).toBeTruthy());
+
+  mockedApi.getSelectionRound.mockResolvedValue(testRound());
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+});
+
+it('starts at the first card with a 0 yes count when nothing has been decided yet', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.getByText('1 of 3')).toBeTruthy();
+  expect(screen.getByText('0 yes')).toBeTruthy();
+  expect(screen.getByTestId('swipe-deck-undo').props.accessibilityState.disabled).toBe(true);
+});
+
+it('Yes advances the card, updates the running yes count, and records the decision', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+
+  expect(mockedApi.recordSelectionDecision).toHaveBeenCalledWith('round-1', 'r1', 'yes');
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.getByText('1 yes')).toBeTruthy();
+  expect(screen.getByText('2 of 3')).toBeTruthy();
+  // Per 1e, the "Passed on {title}" banner is 'no'-only — a 'yes' isn't
+  // something a user typically wants undone with the same urgency (see
+  // SwipeDeckScreen.tsx's decide()). Pinned here since a mutation
+  // removing that gate entirely (always show the banner) passed every
+  // other test in this file unnoticed.
+  expect(screen.queryByTestId('swipe-deck-passed-banner')).toBeNull();
+});
+
+it("Not this week advances the card, records a 'no' decision, and shows the passed banner", async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  expect(mockedApi.recordSelectionDecision).toHaveBeenCalledWith('round-1', 'r1', 'no');
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.getByText('0 yes')).toBeTruthy();
+  expect(screen.getByText('Passed on Herb Roast Chicken')).toBeTruthy();
+});
+
+it('Undo reverses the last decision, calls clearSelectionDecision, and restores the yes count', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.getByText('1 yes')).toBeTruthy();
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+
+  expect(mockedApi.clearSelectionDecision).toHaveBeenCalledWith('round-1', 'r1');
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.getByText('0 yes')).toBeTruthy();
+  expect(screen.getByText('1 of 3')).toBeTruthy();
+});
+
+it('shows the Review bar once the running yes count reaches the target, and tapping it reaches the terminal state', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.queryByTestId('swipe-deck-review-bar')).toBeNull();
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-review-bar')).toBeTruthy());
+  expect(screen.getByText('Review 2 picks')).toBeTruthy();
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-review-action'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  // '2 yes' also appears in the header's own running count — scope to
+  // the terminal state's own summary line specifically.
+  expect(within(screen.getByTestId('swipe-deck-terminal')).getByText('2 yes')).toBeTruthy();
+});
+
+it('shows the terminal state once the deck is exhausted, and Done for now returns to This Week', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  expect(screen.getByText("That's the deck")).toBeTruthy();
+  expect(within(screen.getByTestId('swipe-deck-terminal')).getByText('0 yes')).toBeTruthy();
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-done'));
+  expect(back).toHaveBeenCalled();
+});
+
+it('Pause navigates back to This Week', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-pause'));
+
+  expect(back).toHaveBeenCalled();
+});
+
+it('resumes at the first undecided card with the yes count seeded from prior decisions', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map([['r1', 'yes']]));
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.queryByText('Herb Roast Chicken')).toBeNull();
+  expect(screen.getByText('1 yes')).toBeTruthy();
+  expect(screen.getByText('2 of 3')).toBeTruthy();
+});

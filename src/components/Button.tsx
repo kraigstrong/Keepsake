@@ -19,7 +19,7 @@ export interface ButtonProps {
   onTouchMove?: (event: GestureResponderEvent) => void;
   onTouchEnd?: () => void;
   onTouchCancel?: () => void;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'outlineAccent';
   disabled?: boolean;
   testID?: string;
 }
@@ -47,12 +47,14 @@ export function Button({
       testID={testID}
       style={({ pressed }) => [
         styles.base,
-        variant === 'primary' ? styles.primary : styles.secondary,
+        variantStyles[variant],
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
-      <Text style={[styles.label, variant === 'secondary' && styles.labelSecondary]}>{title}</Text>
+      <Text style={[styles.label, variant !== 'primary' && labelVariantStyles[variant]]}>
+        {title}
+      </Text>
     </Pressable>
   );
 }
@@ -73,6 +75,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // Bordered rust, deliberately not filled — for a secondary action that
+  // must not compete visually with a filled primary button on the same
+  // screen (e.g. This Week's "Help me choose" entry point vs. Review
+  // Groceries). Distinct from `secondary`, which uses the neutral
+  // hairline border/surface tint used everywhere else.
+  outlineAccent: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
   pressed: {
     opacity: 0.7,
   },
@@ -87,4 +99,18 @@ const styles = StyleSheet.create({
   labelSecondary: {
     color: colors.textPrimary,
   },
+  labelOutlineAccent: {
+    color: colors.accent,
+  },
 });
+
+const variantStyles = {
+  primary: styles.primary,
+  secondary: styles.secondary,
+  outlineAccent: styles.outlineAccent,
+} as const;
+
+const labelVariantStyles = {
+  secondary: styles.labelSecondary,
+  outlineAccent: styles.labelOutlineAccent,
+} as const;
