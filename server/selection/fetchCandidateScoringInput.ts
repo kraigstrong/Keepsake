@@ -90,6 +90,21 @@ async function fetchCategoryKeysByRecipe(
  * (any status/plan, not just `counted` — existence of planning history,
  * not FREQ-01's counted semantics). A recipe id absent from the returned
  * map has never been planned.
+ *
+ * Ordered newest-first (Codex, PR #102): unlike `fetchRecipeCore`/
+ * `fetchCategoryKeysByRecipe`, whose row count is bounded by
+ * `recipeIds.length` and a small per-recipe category count, this table's
+ * row count per recipe grows with the household's cumulative planning
+ * history and isn't bounded by deck size. PostgREST's `api.max_rows`
+ * (1000, `supabase/config.toml`) silently truncates past that — ordering
+ * newest-first means a truncation only ever drops older rows, so the
+ * true "last planned" timestamp is still captured for any recipe with at
+ * least one row in the kept page. A recipe whose *only* planning history
+ * is older than 1000 more-recent rows across the other candidates in
+ * this same deck would still be misread as never-planned; true full
+ * correctness needs per-recipe aggregation server-side, which is more
+ * than this app's friends-and-family scale (`docs/roadmap.md`) warrants
+ * today.
  */
 async function fetchLastPlannedAt(
   supabase: SupabaseClient,
@@ -101,7 +116,8 @@ async function fetchLastPlannedAt(
   const { data, error } = await supabase
     .from('planning_entries')
     .select('recipe_id, created_at')
-    .in('recipe_id', recipeIds);
+    .in('recipe_id', recipeIds)
+    .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
 
   for (const row of (data ?? []) as { recipe_id: string; created_at: string }[]) {
@@ -113,7 +129,11 @@ async function fetchLastPlannedAt(
   return map;
 }
 
-/** Last `cooked_at` per recipe with at least one `cooking_events` row. */
+/**
+ * Last `cooked_at` per recipe with at least one `cooking_events` row.
+ * Ordered newest-first for the same `api.max_rows` truncation reason as
+ * `fetchLastPlannedAt` above.
+ */
 async function fetchLastCookedAt(
   supabase: SupabaseClient,
   recipeIds: string[],
@@ -124,7 +144,8 @@ async function fetchLastCookedAt(
   const { data, error } = await supabase
     .from('cooking_events')
     .select('recipe_id, cooked_at')
-    .in('recipe_id', recipeIds);
+    .in('recipe_id', recipeIds)
+    .order('cooked_at', { ascending: false });
   if (error) throw new Error(error.message);
 
   for (const row of (data ?? []) as { recipe_id: string; cooked_at: string }[]) {
