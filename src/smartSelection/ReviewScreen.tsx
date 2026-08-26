@@ -1,0 +1,195 @@
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { applySelectionRound, closeSelectionRound, getSelectionRound } from './api';
+import { fetchDeckCardDetails } from './deckCards';
+import { Button } from '../components/Button';
+import { ErrorState } from '../components/ErrorState';
+import { LoadingState } from '../components/LoadingState';
+import { ServingsConfirmationStep } from '../components/ServingsConfirmationStep';
+import { useToast } from '../components/Toast';
+import { fetchCurrentWeeklyPlan } from '../thisWeek/api';
+import { colors, spacing, typography } from '../theme/tokens';
+
+// ADR-0018-style: presets are screen-local and reset every visit, same
+// default AddToThisWeekScreen uses for the same component.
+const DEFAULT_MULTIPLIER = 1;
+
+export interface ReviewScreenProps {
+  roundId: string;
+  /** Ordered, checked-only ids handed forward from the shortlist (1i). */
+  recipeIds: string[];
+}
+
+interface ReviewItem {
+  id: string;
+  title: string;
+}
+
+/**
+ * 1k — review before This Week. Reuses ServingsConfirmationStep exactly
+ * as AddToThisWeekScreen does, per the design's explicit "reuses the
+ * existing confirmation pattern" note.
+ *
+ * Add-to-This-Week re-fetches the round's live status right before
+ * closing it, rather than trusting whatever status this screen loaded
+ * with: a retry after applySelectionRound fails must not call
+ * close_selection_round a second time, since it requires 'active'
+ * (ADR-0027 decision 3) — and a first successful close already moved
+ * the round to 'ready_for_review' server-side, so the live re-check
+ * alone is enough to make a retry skip it. No local "did we already
+ * close" flag needed on top of that.
+ */
+export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+
+  const [items, setItems] = useState<ReviewItem[] | null>(null);
+  const [weeklyPlanId, setWeeklyPlanId] = useState<string | null>(null);
+  const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
+  const [loadError, setLoadError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [plan, details] = await Promise.all([
+        fetchCurrentWeeklyPlan(),
+        fetchDeckCardDetails(recipeIds),
+      ]);
+      setWeeklyPlanId(plan.id);
+      setItems(recipeIds.map((id) => ({ id, title: details.get(id)?.title ?? '' })));
+      setMultiplierById(Object.fromEntries(recipeIds.map((id) => [id, DEFAULT_MULTIPLIER])));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+    // recipeIds is a route-param snapshot, stable for this screen's whole
+    // lifetime (the review route memoizes it) — not a real reactive dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleSubmit() {
+    if (!weeklyPlanId) return;
+    setIsSubmitting(true);
+    try {
+      const round = await getSelectionRound(roundId);
+      if (round.status === 'active') {
+        await closeSelectionRound(roundId);
+      }
+      await applySelectionRound(
+        roundId,
+        weeklyPlanId,
+        recipeIds.map((id) => ({
+          recipeId: id,
+          multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER,
+        })),
+      );
+      showToast(
+        recipeIds.length === 1 ? 'Added 1 to This Week' : `Added ${recipeIds.length} to This Week`,
+      );
+      // Pops the whole smart-selection stack (deck/shortlist/review) back
+      // to This Week in one step, rather than a plain back() that would
+      // just land on the shortlist screen for an already-applied round.
+      router.dismissTo('/');
+    } catch {
+      showToast("Couldn't add those recipes");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.screen} testID="review-screen">
+        <ErrorState
+          title="Couldn't load your picks"
+          message="Check your connection and try again."
+          onRetry={load}
+          testID="review-load-error"
+        />
+      </View>
+    );
+  }
+
+  if (items === null || weeklyPlanId === null) {
+    return (
+      <View style={styles.screen} testID="review-screen">
+        <LoadingState label="Loading your picks…" testID="review-loading" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen} testID="review-screen">
+      {/* headerShown: false (app/smart-selection/[roundId]/review.tsx) —
+          same reasoning as AddToThisWeekScreen's own header. */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          testID="review-back"
+        >
+          <Text style={styles.headerAction}>Back</Text>
+        </Pressable>
+        <Text style={styles.title}>Review</Text>
+        <View style={styles.headerActionSpacer} />
+      </View>
+
+      <ServingsConfirmationStep
+        items={items}
+        multiplierById={multiplierById}
+        onSelectMultiplier={(id, multiplier) =>
+          setMultiplierById((prev) => ({ ...prev, [id]: multiplier }))
+        }
+        testIDPrefix="review"
+      />
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+        <Button
+          title={`Add ${recipeIds.length} to This Week`}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+          testID="review-submit"
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
+  headerAction: {
+    ...typography.body,
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  headerActionSpacer: {
+    minWidth: 50,
+  },
+  title: {
+    ...typography.heading,
+    color: colors.textPrimary,
+    flex: 1,
+    textAlign: 'center',
+  },
+  footer: {
+    padding: spacing.lg,
+  },
+});
