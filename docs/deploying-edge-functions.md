@@ -33,7 +33,15 @@ export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF%.supabase.co}"
 npx supabase functions deploy <function-name> --project-ref "$SUPABASE_PROJECT_REF"
 ```
 
-This bundles and deploys in one step — no separate build. Deno-only code (`supabase/functions/**`) is type-checked at deploy time, not by `npm run typecheck` (that command's `tsconfig.json` excludes the directory — see `AGENTS.md`'s Canonical commands note).
+This bundles and deploys in one step — no separate build. **Bundling is not type-checking**: `supabase functions deploy` will happily deploy a function with a real type error, since bundling only needs the code to transpile, not to typecheck cleanly. `npm run typecheck` doesn't cover this either — `tsconfig.json` excludes `supabase/functions/**` (Deno-only code, see `AGENTS.md`'s Canonical commands note).
+
+Type-check before deploying with [Deno's own `deno check`](https://supabase.com/docs/guides/functions/debugging-tools#type-checking):
+
+```bash
+deno check supabase/functions/<function-name>/index.ts
+```
+
+This requires the `deno` CLI installed locally — it is **not** currently installed in this dev environment (confirmed 2026-08-26: `which deno` finds nothing, and the Supabase CLI's own bundler doesn't expose an equivalent check flag). Until it is, a type error in Edge Function code can reach staging undetected by any automated step — treat a careful manual read of the diff as the only check standing in for `deno check` today, and install Deno before relying on this step for real.
 
 ## Verify
 
