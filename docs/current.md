@@ -6,19 +6,17 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 `docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — ahead of Friends & Family Preview. Build order: **solo flow first**, **walkable skeleton before smart ranking**.
 
-**The backend spine is code-complete. Nothing is swipeable yet — no client UI exists.**
+**The backend spine is code-complete, and the deck is now really ranked. Nothing is swipeable yet — no client UI exists.**
 
-Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs.
+Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs · [#101](https://github.com/kraigstrong/Keepsake/pull/101) `apply_selection_round` (merged 2026-08-25 — decision: merge now, fix the locking gap below as a fast-follow before Friends & Family Preview).
 
-**Open: [PR #101](https://github.com/kraigstrong/Keepsake/pull/101), `apply_selection_round`.** CI green, 453 pgTAP assertions across 28 files, deliberately **not merged** — see Blocked.
+**Open:** heuristic-wiring PR (branch `feature/heuristic-scoring`, not yet pushed) — `select-candidates` now calls `scoreCandidates()` with real household-scoped snapshots instead of the placeholder `score: 0`, and writes `candidate_strategy_version: 'heuristic-v1'` instead of `'filter-only-v1'`. New `server/selection/fetchCandidateScoringInput.ts` gathers the aggregates (tags, category keys, never-planned/last-activity, planned_count, recent-deck-appearance counts) via batched RLS-scoped reads. Typecheck/lint/format/tests/client-secrets all pass locally; security-check run (household isolation only touched, all pre-existing RLS, no new policies). Not yet through `pr-ready`/pushed.
 
-**Staging (2026-08-24):** migrations current through #100; both Edge Functions deployed (`import-recipe` v14, `select-candidates` v1). #101's migration is **not** pushed. Deploying a function is a separate step from pushing migrations.
+**Staging (2026-08-24):** migrations current through #100; both Edge Functions deployed (`import-recipe` v14, `select-candidates` v1 — v1 is still filter-only, `select-candidates` is not yet redeployed with the heuristic wiring). #101's migration **is now on `main`** but not yet pushed to staging. Deploying a function is a separate step from pushing migrations.
 
-## Blocked
+## Blocked / open follow-ups
 
-**PR #101 is open, not merged, pending a developer decision.** Codex found a real P1 that is larger than that PR: `apply_selection_round` locks the target plan correctly, but `confirm_weekly_plan` and `remove_planning_entry` never take that lock, so apply is serialised against the adders and not against those two. Verified against the source. Worst case is silent: a confirm interleaving with an apply leaves a confirmed plan holding `counted = false` entries whose `planned_count` was never incremented — permanent drift in the number the ranking heuristic reads, with nothing surfacing it to a user who would report it.
-
-Pre-existing (those RPCs shipped this way in Phase 12; apply is just the first caller depending on them), now a Friends & Family Preview gate. **The decision is whether to fix the locking family first or merge #101 and fix after** — #101 was left open rather than merged over an unaddressed P1.
+**Weekly-plan locking gap (fast-follow, Friends & Family Preview gate).** `apply_selection_round` locks the target plan correctly, but `confirm_weekly_plan` and `remove_planning_entry` never take that lock, so apply is serialised against the adders and not against those two (Codex finding on #101, verified against source). Worst case is silent: a confirm interleaving with an apply leaves a confirmed plan holding `counted = false` entries whose `planned_count` was never incremented — permanent drift in the number the ranking heuristic reads, with nothing surfacing it to a user who would report it. Pre-existing (those RPCs shipped this way in Phase 12; apply is just the first caller depending on them). Decision made 2026-08-25: merge #101 now, fix this next rather than block further — not yet scheduled as its own work item.
 
 Journey 3 (shared household, two-actor walkthrough) also still needs a live developer session.
 
@@ -36,11 +34,7 @@ Journey 3 (shared household, two-actor walkthrough) also still needs a live deve
 
 ## Next action
 
-**First, decide on #101** (see Blocked): fix the weekly-plan locking family first, or merge and fix after. Either is defensible; the gate is recorded either way.
-
-Then, in order:
-
-1. **Wire the scoring heuristic into `select-candidates`** — small: `server/selection/scoreCandidates.ts` is merged and tested, this connects it and swaps `candidate_strategy_version` from `filter-only-v1` to `heuristic-v1`. Do this **before** any client work: with the filter-only deck the pool is ordered by recipe `id` and sliced, so a library returns **the same cards every round** — invisible at three recipes, obvious at fifty.
+1. **Push and PR the heuristic-wiring branch** (`feature/heuristic-scoring`) — see Open above. Ready for `pr-ready` packaging.
 2. **Client deck PR** — This Week entry point (1a), start sheet (1b), swipe screen (1d/1e) behind `FLAGS.smartMealSelection`. Gesture physics are already proven in this codebase: `ThisWeekScreen` ships a `ReanimatedSwipeable` row with passing RTL tests and `jest.config.js` wires `gesture-handler/jestSetup`.
 3. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
 4. **Live solo walkthrough**, then reassess the group flow.
@@ -51,6 +45,7 @@ Also queued, unrelated: five untriaged backlog entries, and the `"1 cup (2 stick
 
 ## Recently shipped
 
+- `apply_selection_round` RPC — [PR #101](https://github.com/kraigstrong/Keepsake/pull/101), merged 2026-08-25. See `ADR-0027` decision 6. Merged with the weekly-plan locking gap (above) as an accepted, recorded fast-follow rather than a blocker.
 - Iconography replacement: the 22-icon in-app UI set — [PR #90](https://github.com/kraigstrong/Keepsake/pull/90), merged 2026-08-20 — and the generated app-icon assets — [PR #91](https://github.com/kraigstrong/Keepsake/pull/91), merged 2026-08-20. Both from the "Keepsake · Ink & Paper" design handoff. The icon set still wants a real-device look: tests can't judge whether the glyphs read correctly at size.
 - Compound parenthetical annotations fix in `parseQuantity()` (+ a Codex-caught whitespace follow-up) — [PR #89](https://github.com/kraigstrong/Keepsake/pull/89), merged 2026-08-20. See `docs/roadmap.md`'s Not-yet-triaged backlog.
 - `parseQuantity()` "N and X/Y unit" mixed-number fix + real-world ingredient corpus — [PR #88](https://github.com/kraigstrong/Keepsake/pull/88), merged 2026-08-20. See `docs/roadmap.md`'s Not-yet-triaged backlog.
