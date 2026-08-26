@@ -223,9 +223,16 @@ export async function clearSelectionDecision(roundId: string, recipeId: string):
   if (error) throw new Error(error.message);
 }
 
+export interface SelectionDecisionRecord {
+  decision: SelectionDecisionValue;
+  /** `selection_decisions.decided_at` — what lets a resumed session reconstruct undo order. */
+  decidedAt: string;
+}
+
 interface SelectionDecisionRow {
   recipe_id: string;
   decision: SelectionDecisionValue;
+  decided_at: string;
 }
 
 /**
@@ -234,22 +241,24 @@ interface SelectionDecisionRow {
  * RLS SELECT policy is `user_id = auth.uid() OR round revealed`
  * (ADR-0027 decision 2), so a participant's own decisions are always
  * readable here, even mid-round, well before the household-wide reveal
- * that policy's second clause covers.
+ * that policy's second clause covers. Carries `decidedAt` so a resumed
+ * screen can rebuild its undo stack in the actual order decisions were
+ * made, not just which recipes have one.
  */
 export async function getMyDecisionsForRound(
   roundId: string,
   userId: string,
-): Promise<Map<string, SelectionDecisionValue>> {
+): Promise<Map<string, SelectionDecisionRecord>> {
   const { data, error } = await supabase
     .from('selection_decisions')
-    .select('recipe_id, decision')
+    .select('recipe_id, decision, decided_at')
     .eq('round_id', roundId)
     .eq('user_id', userId);
   if (error) throw new Error(error.message);
 
-  const decisions = new Map<string, SelectionDecisionValue>();
+  const decisions = new Map<string, SelectionDecisionRecord>();
   ((data ?? []) as SelectionDecisionRow[]).forEach((row) => {
-    decisions.set(row.recipe_id, row.decision);
+    decisions.set(row.recipe_id, { decision: row.decision, decidedAt: row.decided_at });
   });
   return decisions;
 }

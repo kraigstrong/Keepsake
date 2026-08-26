@@ -63,7 +63,15 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
     <Sheet visible={visible} onDismiss={onDismiss} testID="start-round-sheet">
       <Text style={styles.heading}>Help me choose</Text>
       <Text style={styles.framing}>
-        {"A batch of recipes — nothing you've made lately, nothing already on this week's plan."}
+        {
+          // "Nothing already on this week's plan" is a real hard filter
+          // (select-candidates excludes it entirely). "Made lately" is
+          // NOT excluded — scoreCandidates.ts only applies a recency
+          // penalty, so a small library can still surface something
+          // recent. Keep this worded as prioritization, not a promise of
+          // exclusion (Codex, PR #104).
+          "A batch of recipes, prioritizing what you haven't made in a while — nothing already on this week's plan."
+        }
       </Text>
 
       <View style={styles.stepperSection}>

@@ -445,7 +445,14 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
     expect(screen.queryByTestId('mock-start-round-sheet')).toBeNull();
   });
 
-  it('navigates straight to the deck for a pending_candidates round too', async () => {
+  it('opens the start sheet for a pending_candidates round instead of an empty deck (Codex, PR #104)', async () => {
+    // A pending_candidates round has no deck yet — finalize_selection_
+    // round_candidates never ran (ADR-0027 decision 1a: the Edge
+    // Function died between create and finalize). Routing that straight
+    // to the swipe screen would show a permanently "terminal" empty
+    // deck with no way out, since the household's singleton-round index
+    // blocks starting fresh too. The recovery path is the start sheet:
+    // startSelectionRound adopts and retries the same stuck round.
     FLAGS.smartMealSelection = true;
     mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
     mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
@@ -457,7 +464,8 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
     await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/smart-selection/round-7'));
+    await waitFor(() => expect(screen.getByTestId('mock-start-round-sheet')).toBeTruthy());
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
   });
 
   it('shows an error toast rather than crashing when the active-round check throws', async () => {

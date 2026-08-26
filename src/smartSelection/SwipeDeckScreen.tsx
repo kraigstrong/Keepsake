@@ -16,6 +16,7 @@ import {
   getMyDecisionsForRound,
   getSelectionRound,
   recordSelectionDecision,
+  type SelectionDecisionRecord,
   type SelectionDecisionValue,
   type SelectionRound,
 } from './api';
@@ -56,9 +57,16 @@ const FLY_OUT_DURATION_MS = 220;
 
 const DEFAULT_TARGET_COUNT = 4;
 
-/** Up to two reason codes arrive per candidate, priority order; only the first is shown (1e). */
+/**
+ * Up to two reason codes arrive per candidate, priority order; only the
+ * first is shown (1e). `never_planned` means no `planning_entries` row
+ * has ever existed for this recipe — it says nothing about whether it's
+ * been cooked (a recipe can be cooked via `cooking_events` without ever
+ * being formally planned), so the copy must not claim "never made"
+ * (Codex, PR #104).
+ */
 const REASON_CODE_COPY: Partial<Record<ReasonCode, string>> = {
-  never_planned: "You haven't made this one yet",
+  never_planned: "You haven't planned this one yet",
   resurfaced: "Hasn't been on the menu in a while",
   diversity: 'Something different for the mix',
   this_week_variety: "Different from what's already planned",
@@ -108,6 +116,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [passed, setPassed] = useState<PassedBannerState | null>(null);
   const [reviewRequested, setReviewRequested] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Per-recipe in-flight recordSelectionDecision promise — handleUndo
+  // awaits the entry for the card it's reversing before issuing
+  // clearSelectionDecision, so an out-of-order network delivery can't
+  // land the clear (a no-op, since nothing's persisted yet) before the
+  // delayed record upserts the vote (Codex, PR #104; AGENTS.md's
+  // race-condition review priority: this repo's recurring defect class
+  // is exactly a partial failure between two async calls that should be
+  // ordered).
+  const pendingWritesRef = useRef<Map<string, Promise<void>>>(new Map());
 
   const translateX = useSharedValue(0);
 
@@ -117,7 +134,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         getSelectionRound(roundId),
         userId
           ? getMyDecisionsForRound(roundId, userId)
-          : Promise.resolve(new Map<string, SelectionDecisionValue>()),
+          : Promise.resolve(new Map<string, SelectionDecisionRecord>()),
       ]);
 
       // Defensive sort even though get_selection_round already orders by
@@ -144,13 +161,30 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       // terminal state shows immediately.
       let startIndex = sortedCandidates.findIndex((c) => !decisions.has(c.recipeId));
       if (startIndex === -1) startIndex = sortedCandidates.length;
-      const seededYesCount = [...decisions.values()].filter((d) => d === 'yes').length;
+
+      // Seed the undo stack from real decision history, oldest first, so
+      // Undo immediately after resuming reverses the most recently
+      // decided card — same as within a single live session (Codex, PR
+      // #104: the design requires Undo reachable for the whole round,
+      // not just what happened since the screen last mounted).
+      const decidedCandidates = sortedCandidates
+        .filter((c) => decisions.has(c.recipeId))
+        .map((c) => ({ recipeId: c.recipeId, record: decisions.get(c.recipeId)! }))
+        .sort(
+          (a, b) => new Date(a.record.decidedAt).getTime() - new Date(b.record.decidedAt).getTime(),
+        );
+      const seededUndoStack: UndoEntry[] = decidedCandidates.map((c) => ({
+        recipeId: c.recipeId,
+        decision: c.record.decision,
+      }));
+      const seededYesCount = seededUndoStack.filter((e) => e.decision === 'yes').length;
 
       setRound({ ...roundData, candidates: sortedCandidates });
       setCardDetails(details);
       setHeroUrls(urls);
       setPosition(startIndex);
       setYesCount(seededYesCount);
+      setUndoStack(seededUndoStack);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -184,10 +218,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     if (!round || !currentCandidate) return;
     const recipeId = currentCandidate.recipeId;
     const title = cardDetails.get(recipeId)?.title ?? 'that recipe';
+    const decidedAtPosition = position;
 
-    setPosition(position + 1);
-    if (decision === 'yes') setYesCount(yesCount + 1);
-    setUndoStack([...undoStack, { recipeId, decision }]);
+    // Functional updates throughout — a later card can be decided (or
+    // undone) while this write is still in flight, and a rollback below
+    // must correct only this card's contribution, not clobber whatever
+    // happened after it by reverting to a stale closed-over snapshot.
+    setPosition((p) => p + 1);
+    if (decision === 'yes') setYesCount((y) => y + 1);
+    setUndoStack((stack) => [...stack, { recipeId, decision }]);
 
     // Per 1e, only a 'no' gets the "Passed on {title} · Undo" toast — a
     // 'yes' isn't something a user typically wants undone with the same
@@ -199,27 +238,50 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       passedTimeoutRef.current = setTimeout(() => setPassed(null), PASSED_UNDO_WINDOW_MS);
     }
 
-    // Optimistic, matching ThisWeekScreen's convention: the UI has
-    // already advanced above; a background failure here surfaces a
-    // toast but never rolls back, same tolerance this app already has
-    // elsewhere for a plain idempotent upsert with no outbox.
-    recordSelectionDecision(round.id, recipeId, decision).catch(() => {
-      showToast("Couldn't save that decision");
+    // Optimistic — the UI has already advanced above — but rolled back
+    // on failure, matching this app's actual established convention
+    // (ThisWeekScreen.handleRemove awaits its write and restores prior
+    // state on rejection; an earlier version of this comment claimed
+    // the opposite and was wrong). Only position is exempted from a
+    // full revert, and only when nothing has advanced past it since:
+    // rewinding position unconditionally would undo real progress on
+    // later cards decided while this write was still pending. If a
+    // later card *has* since been decided, this card's gap is simply
+    // left for a future resume to reopen (`load()`'s "first candidate
+    // with no decision" already handles a gap anywhere in the deck, not
+    // just a contiguous prefix).
+    const writePromise = recordSelectionDecision(round.id, recipeId, decision).catch(() => {
+      setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
+      if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
+      setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
+      setPassed((current) => (current?.recipeId === recipeId ? null : current));
+      showToast("Couldn't save that decision — you'll need to redo it");
     });
+    pendingWritesRef.current.set(recipeId, writePromise);
   }
 
-  function handleUndo() {
+  async function handleUndo() {
     if (!round || undoStack.length === 0) return;
     const last = undoStack[undoStack.length - 1]!;
 
-    setUndoStack(undoStack.slice(0, -1));
-    setPosition(Math.max(0, position - 1));
-    if (last.decision === 'yes') setYesCount(Math.max(0, yesCount - 1));
+    setUndoStack((stack) => stack.slice(0, -1));
+    setPosition((p) => Math.max(0, p - 1));
+    if (last.decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
     setReviewRequested(false);
     if (passed?.recipeId === last.recipeId) {
       if (passedTimeoutRef.current) clearTimeout(passedTimeoutRef.current);
       setPassed(null);
     }
+
+    // Wait for this card's own recordSelectionDecision to actually
+    // settle before issuing the clear. Without this, an out-of-order
+    // network delivery can land the clear (a no-op — nothing persisted
+    // yet) before the delayed record upserts the vote, leaving the
+    // server with a decision the UI just told the user was undone
+    // (Codex, PR #104). A seeded (resumed) entry has no pending write
+    // to wait for, so this is a no-op in that case.
+    const pendingWrite = pendingWritesRef.current.get(last.recipeId);
+    if (pendingWrite) await pendingWrite.catch(() => {});
 
     clearSelectionDecision(round.id, last.recipeId).catch(() => {
       showToast("Couldn't undo that decision");
@@ -336,6 +398,17 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
           <View style={styles.terminal} testID="swipe-deck-terminal">
             <Text style={styles.terminalTitle}>{"That's the deck"}</Text>
             <Text style={styles.terminalSummary}>{yesCount} yes</Text>
+            {/* Per 1d, "controls still allow undo" at the end of the
+                deck — a mistaken final swipe (or reaching Review too
+                eagerly) must stay reversible, same as mid-deck (Codex,
+                PR #104). handleUndo already un-terminals correctly:
+                reviewRequested resets to false and, once position drops
+                back under deckSize, atEndOfDeck follows. */}
+            <UndoControl
+              onPress={handleUndo}
+              disabled={undoStack.length === 0}
+              testID="swipe-deck-terminal-undo"
+            />
             <Button title="Done for now" onPress={() => router.back()} testID="swipe-deck-done" />
           </View>
         ) : (
@@ -409,16 +482,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             )}
 
             <View style={styles.controlsRow}>
-              <Pressable
-                onPress={handleUndo}
-                disabled={undoStack.length === 0}
-                accessibilityRole="button"
-                accessibilityLabel="Undo last decision"
-                style={[styles.undoButton, undoStack.length === 0 && styles.undoButtonDisabled]}
-                testID="swipe-deck-undo"
-              >
-                <Text style={styles.undoButtonText}>Undo</Text>
-              </Pressable>
+              <UndoControl onPress={handleUndo} disabled={undoStack.length === 0} />
               <View style={styles.decisionButtons}>
                 <View style={styles.decisionButton}>
                   <Button
@@ -452,6 +516,28 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         </View>
       )}
     </View>
+  );
+}
+
+interface UndoControlProps {
+  onPress: () => void;
+  disabled: boolean;
+  testID?: string;
+}
+
+/** Shared between the deck's controls row and the terminal state (1d: undo reachable throughout). */
+function UndoControl({ onPress, disabled, testID = 'swipe-deck-undo' }: UndoControlProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel="Undo last decision"
+      style={[styles.undoButton, disabled && styles.undoButtonDisabled]}
+      testID={testID}
+    >
+      <Text style={styles.undoButtonText}>Undo</Text>
+    </Pressable>
   );
 }
 

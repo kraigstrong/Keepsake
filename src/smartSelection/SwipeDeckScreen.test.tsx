@@ -213,6 +213,28 @@ it('shows the terminal state once the deck is exhausted, and Done for now return
   expect(back).toHaveBeenCalled();
 });
 
+it('keeps Undo reachable in the terminal state, and using it returns to the deck', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  const terminalUndo = screen.getByTestId('swipe-deck-terminal-undo');
+  expect(terminalUndo.props.accessibilityState.disabled).toBe(false);
+
+  await fireEvent.press(terminalUndo);
+
+  expect(mockedApi.clearSelectionDecision).toHaveBeenCalledWith('round-1', 'r3');
+  await waitFor(() => expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull());
+  expect(screen.getByText('Sourdough Loaf')).toBeTruthy();
+});
+
 it('Pause navigates back to This Week', async () => {
   renderDeck();
 
@@ -223,7 +245,9 @@ it('Pause navigates back to This Week', async () => {
 });
 
 it('resumes at the first undecided card with the yes count seeded from prior decisions', async () => {
-  mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map([['r1', 'yes']]));
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([['r1', { decision: 'yes', decidedAt: '2026-08-25T00:00:00.000Z' }]]),
+  );
 
   renderDeck();
 
@@ -231,4 +255,109 @@ it('resumes at the first undecided card with the yes count seeded from prior dec
   expect(screen.queryByText('Herb Roast Chicken')).toBeNull();
   expect(screen.getByText('1 yes')).toBeTruthy();
   expect(screen.getByText('2 of 3')).toBeTruthy();
+});
+
+it('seeds the undo stack from resumed decisions, oldest first, so Undo reverses the most recent one', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'no', decidedAt: '2026-08-25T00:00:01.000Z' }],
+      ['r2', { decision: 'yes', decidedAt: '2026-08-25T00:00:02.000Z' }],
+    ]),
+  );
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  expect(screen.getByText('1 yes')).toBeTruthy();
+  expect(screen.getByTestId('swipe-deck-undo').props.accessibilityState.disabled).toBe(false);
+
+  // r2 (yes, decided later) reverses first, back to the card it belonged to.
+  await fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+
+  expect(mockedApi.clearSelectionDecision).toHaveBeenCalledWith('round-1', 'r2');
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.getByText('0 yes')).toBeTruthy();
+});
+
+it('rolls back the optimistic state when recordSelectionDecision fails', async () => {
+  let rejectRecord!: (error: Error) => void;
+  mockedApi.recordSelectionDecision.mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      rejectRecord = reject;
+    }),
+  );
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+
+  // Optimistic advance happens immediately, before the write has settled...
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  expect(screen.getByText('1 yes')).toBeTruthy();
+
+  // ...then the failed write rolls the count, undo entry, and (since
+  // nothing has advanced past it yet) the card itself back.
+  rejectRecord(new Error('offline'));
+  await waitFor(() =>
+    expect(screen.getByText("Couldn't save that decision — you'll need to redo it")).toBeTruthy(),
+  );
+  expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
+  expect(screen.getByText('0 yes')).toBeTruthy();
+  expect(screen.getByTestId('swipe-deck-undo').props.accessibilityState.disabled).toBe(true);
+});
+
+it('does not corrupt later progress when an earlier decision fails after the user has moved on', async () => {
+  let rejectR1!: (error: Error) => void;
+  mockedApi.recordSelectionDecision.mockImplementation((_roundId, recipeId) => {
+    if (recipeId === 'r1') {
+      return new Promise((_resolve, reject) => {
+        rejectR1 = reject;
+      });
+    }
+    return Promise.resolve(undefined);
+  });
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes')); // r1 — write left pending
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes')); // r2 — succeeds, moves on
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  expect(screen.getByText('2 yes')).toBeTruthy();
+
+  // r1's write now fails, after the user has already moved two cards past it.
+  rejectR1(new Error('offline'));
+
+  // r1's failure is reflected (only r2's yes counts)...
+  await waitFor(() => expect(screen.getByText('1 yes')).toBeTruthy());
+  // ...but r2's own advance is untouched: still on the third card, not
+  // reverted back to r1 by a rollback that isn't scoped to just r1.
+  expect(screen.getByText('3 of 3')).toBeTruthy();
+  expect(screen.getByText('Sourdough Loaf')).toBeTruthy();
+});
+
+it('waits for the in-flight decision write to settle before clearing it on Undo', async () => {
+  let resolveRecord!: () => void;
+  mockedApi.recordSelectionDecision.mockReturnValue(
+    new Promise((resolve) => {
+      resolveRecord = () => resolve(undefined);
+    }),
+  );
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+
+  const undoPromise = fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+  // clearSelectionDecision must not fire while the record call is still
+  // pending — otherwise an out-of-order delivery could have the clear
+  // (a no-op) land before the delayed record upserts the vote.
+  expect(mockedApi.clearSelectionDecision).not.toHaveBeenCalled();
+
+  resolveRecord();
+  await undoPromise;
+  await waitFor(() =>
+    expect(mockedApi.clearSelectionDecision).toHaveBeenCalledWith('round-1', 'r1'),
+  );
 });
