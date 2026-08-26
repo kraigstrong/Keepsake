@@ -8,11 +8,11 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 **The backend spine is code-complete, and the deck is now really ranked. Nothing is swipeable yet — no client UI exists.**
 
-Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs · [#101](https://github.com/kraigstrong/Keepsake/pull/101) `apply_selection_round` (merged 2026-08-25 — decision: merge now, fix the locking gap below as a fast-follow before Friends & Family Preview).
+Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR-0027`](adr/0027-smart-meal-selection-round-model.md) · [#93](https://github.com/kraigstrong/Keepsake/pull/93) `ServingsConfirmationStep` · [#94](https://github.com/kraigstrong/Keepsake/pull/94) ranking module · [#95](https://github.com/kraigstrong/Keepsake/pull/95) schema/RLS · [#96](https://github.com/kraigstrong/Keepsake/pull/96) lifecycle RPCs · [#97](https://github.com/kraigstrong/Keepsake/pull/97) internal-helper revoke · [#98](https://github.com/kraigstrong/Keepsake/pull/98) `select-candidates` Edge Function + client API · [#100](https://github.com/kraigstrong/Keepsake/pull/100) decision/close/results RPCs · [#101](https://github.com/kraigstrong/Keepsake/pull/101) `apply_selection_round` (merged 2026-08-25 — decision: merge now, fix the locking gap below as a fast-follow before Friends & Family Preview) · [#102](https://github.com/kraigstrong/Keepsake/pull/102) heuristic wiring into `select-candidates` (merged 2026-08-25; Codex P2 on `api.max_rows` truncation risk in the history reads, fixed same PR by ordering newest-first — see `server/selection/fetchCandidateScoringInput.ts`).
 
-**Open:** heuristic-wiring PR (branch `feature/heuristic-scoring`, not yet pushed) — `select-candidates` now calls `scoreCandidates()` with real household-scoped snapshots instead of the placeholder `score: 0`, and writes `candidate_strategy_version: 'heuristic-v1'` instead of `'filter-only-v1'`. New `server/selection/fetchCandidateScoringInput.ts` gathers the aggregates (tags, category keys, never-planned/last-activity, planned_count, recent-deck-appearance counts) via batched RLS-scoped reads. Typecheck/lint/format/tests/client-secrets all pass locally; security-check run (household isolation only touched, all pre-existing RLS, no new policies). Not yet through `pr-ready`/pushed.
+**Both blockers ahead of client work are now cleared.** `select-candidates` redeployed to staging same day (v1 → v2, confirmed `ACTIVE`) — see [`docs/deploying-edge-functions.md`](deploying-edge-functions.md) for the deploy procedure, written up after this session fumbled the credential-loading step.
 
-**Staging (2026-08-24):** migrations current through #100; both Edge Functions deployed (`import-recipe` v14, `select-candidates` v1 — v1 is still filter-only, `select-candidates` is not yet redeployed with the heuristic wiring). #101's migration **is now on `main`** but not yet pushed to staging. Deploying a function is a separate step from pushing migrations.
+**Staging (2026-08-25):** migrations current through #100 — **#101's migration is on `main` but not yet pushed to staging** (`supabase db push` still outstanding, distinct from the function deploy done above). Both Edge Functions deployed: `import-recipe` v14, `select-candidates` **v2** (heuristic-v1, matches `main`).
 
 ## Blocked / open follow-ups
 
@@ -34,10 +34,11 @@ Journey 3 (shared household, two-actor walkthrough) also still needs a live deve
 
 ## Next action
 
-1. **Push and PR the heuristic-wiring branch** (`feature/heuristic-scoring`) — see Open above. Ready for `pr-ready` packaging.
-2. **Client deck PR** — This Week entry point (1a), start sheet (1b), swipe screen (1d/1e) behind `FLAGS.smartMealSelection`. Gesture physics are already proven in this codebase: `ThisWeekScreen` ships a `ReanimatedSwipeable` row with passing RTL tests and `jest.config.js` wires `gesture-handler/jestSetup`.
-3. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
-4. **Live solo walkthrough**, then reassess the group flow.
+1. **Client deck PR** — This Week entry point (1a), start sheet (1b), swipe screen (1d/1e) behind `FLAGS.smartMealSelection`. Gesture physics are already proven in this codebase: `ThisWeekScreen` ships a `ReanimatedSwipeable` row with passing RTL tests and `jest.config.js` wires `gesture-handler/jestSetup`. Both prior blockers (locking-gap decision, heuristic wiring + staging deploy) are cleared — this is next.
+2. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
+3. **Live solo walkthrough**, then reassess the group flow.
+
+Separately, still outstanding: push #101's migration to staging (`supabase db push`) — not done yet, tracked above under Staging.
 
 **Working method that has been earning its keep:** delegate a slice to a Sonnet subagent with the ADR as spec and *named required mutations*, then review the real diff and re-run the mutations independently. **Four times on this milestone a guard was correct while no test pinned it** — most starkly, admitting `'active'` to a results allowlist left all 431 tests passing while leaking live ballots. A green suite is not evidence of coverage. Always mutate before believing a test list.
 
