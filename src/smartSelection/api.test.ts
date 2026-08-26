@@ -5,7 +5,9 @@ import {
 } from '@supabase/supabase-js';
 
 import {
+  applySelectionRound,
   cancelSelectionRound,
+  closeSelectionRound,
   getActiveSelectionRound,
   getSelectionRound,
   startSelectionRound,
@@ -224,6 +226,61 @@ describe('cancelSelectionRound', () => {
     await expect(cancelSelectionRound('round-1')).rejects.toThrow(
       'selection round not found or not cancellable',
     );
+  });
+});
+
+describe('closeSelectionRound', () => {
+  it('calls close_selection_round with the round id', async () => {
+    mockedRpc.mockResolvedValue({
+      data: { id: 'round-1', status: 'ready_for_review' },
+      error: null,
+    });
+
+    await closeSelectionRound('round-1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('close_selection_round', { round_id: 'round-1' });
+  });
+
+  it('throws on an RPC error (e.g. non-creator caller, or round not active)', async () => {
+    mockedRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'only the round creator can close it' },
+    });
+
+    await expect(closeSelectionRound('round-1')).rejects.toThrow(
+      'only the round creator can close it',
+    );
+  });
+});
+
+describe('applySelectionRound', () => {
+  it('maps selections to the recipe_id/multiplier jsonb shape', async () => {
+    mockedRpc.mockResolvedValue({ data: { id: 'round-1', status: 'applied' }, error: null });
+
+    await applySelectionRound('round-1', 'plan-1', [
+      { recipeId: 'r1', multiplier: 1 },
+      { recipeId: 'r2', multiplier: 2 },
+    ]);
+
+    expect(mockedRpc).toHaveBeenCalledWith('apply_selection_round', {
+      round_id: 'round-1',
+      weekly_plan_id: 'plan-1',
+      selections: [
+        { recipe_id: 'r1', multiplier: 1 },
+        { recipe_id: 'r2', multiplier: 2 },
+      ],
+    });
+  });
+
+  it('throws on an RPC error (e.g. a recipe_id that was never a candidate)', async () => {
+    mockedRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'recipe is not a candidate of this round' },
+    });
+
+    await expect(
+      applySelectionRound('round-1', 'plan-1', [{ recipeId: 'r1', multiplier: 1 }]),
+    ).rejects.toThrow('recipe is not a candidate of this round');
   });
 });
 

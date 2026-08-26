@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { SwipeDeckScreen } from '../../src/smartSelection/SwipeDeckScreen';
+import { SwipeDeckScreen } from '../../../src/smartSelection/SwipeDeckScreen';
 
 export default function SwipeDeckRoute() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();

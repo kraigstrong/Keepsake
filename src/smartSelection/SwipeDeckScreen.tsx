@@ -114,7 +114,6 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [yesCount, setYesCount] = useState(0);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [passed, setPassed] = useState<PassedBannerState | null>(null);
-  const [reviewRequested, setReviewRequested] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -209,7 +208,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const deckSize = candidates.length;
   const targetCount = round?.targetCount ?? DEFAULT_TARGET_COUNT;
   const atEndOfDeck = position >= deckSize;
-  const terminal = atEndOfDeck || reviewRequested;
+  const terminal = atEndOfDeck;
   const currentCandidate = !terminal ? candidates[position] : undefined;
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
@@ -267,7 +266,6 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     setUndoStack((stack) => stack.slice(0, -1));
     setPosition((p) => Math.max(0, p - 1));
     if (last.decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
-    setReviewRequested(false);
     if (passed?.recipeId === last.recipeId) {
       if (passedTimeoutRef.current) clearTimeout(passedTimeoutRef.current);
       setPassed(null);
@@ -399,17 +397,30 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             <Text style={styles.terminalTitle}>{"That's the deck"}</Text>
             <Text style={styles.terminalSummary}>{yesCount} yes</Text>
             {/* Per 1d, "controls still allow undo" at the end of the
-                deck — a mistaken final swipe (or reaching Review too
-                eagerly) must stay reversible, same as mid-deck (Codex,
-                PR #104). handleUndo already un-terminals correctly:
-                reviewRequested resets to false and, once position drops
-                back under deckSize, atEndOfDeck follows. */}
+                deck — a mistaken final swipe must stay reversible, same
+                as mid-deck (Codex, PR #104). handleUndo already
+                un-terminals correctly: once position drops back under
+                deckSize, atEndOfDeck follows. */}
             <UndoControl
               onPress={handleUndo}
               disabled={undoStack.length === 0}
               testID="swipe-deck-terminal-undo"
             />
-            <Button title="Done for now" onPress={() => router.back()} testID="swipe-deck-done" />
+            {/* Nothing to shortlist with zero yeses — only Undo/Done for
+                now show then (1i has nothing to build a shortlist from). */}
+            {yesCount > 0 && (
+              <Button
+                title={`Continue with ${yesCount} picks`}
+                onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
+                testID="swipe-deck-continue"
+              />
+            )}
+            <Button
+              title="Done for now"
+              onPress={() => router.back()}
+              variant="secondary"
+              testID="swipe-deck-done"
+            />
           </View>
         ) : (
           <>
@@ -472,7 +483,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                   {`You've got ${yesCount} — finish now or keep looking.`}
                 </Text>
                 <Pressable
-                  onPress={() => setReviewRequested(true)}
+                  onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
                   accessibilityRole="button"
                   testID="swipe-deck-review-action"
                 >

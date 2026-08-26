@@ -173,7 +173,7 @@ it('Undo reverses the last decision, calls clearSelectionDecision, and restores 
   expect(screen.getByText('1 of 3')).toBeTruthy();
 });
 
-it('shows the Review bar once the running yes count reaches the target, and tapping it reaches the terminal state', async () => {
+it('shows the Review bar once the running yes count reaches the target, and tapping it navigates to the shortlist route', async () => {
   renderDeck();
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
@@ -188,10 +188,11 @@ it('shows the Review bar once the running yes count reaches the target, and tapp
 
   await fireEvent.press(screen.getByTestId('swipe-deck-review-action'));
 
-  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
-  // '2 yes' also appears in the header's own running count — scope to
-  // the terminal state's own summary line specifically.
-  expect(within(screen.getByTestId('swipe-deck-terminal')).getByText('2 yes')).toBeTruthy();
+  // A real navigation, not a local terminal-state flip — the deck still
+  // has an undecided card ('Sourdough Loaf'), so this must not just
+  // flip a local flag that fakes reaching the end of the deck.
+  expect(push).toHaveBeenCalledWith('/smart-selection/round-1/shortlist');
+  expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull();
 });
 
 it('shows the terminal state once the deck is exhausted, and Done for now returns to This Week', async () => {
@@ -208,9 +209,30 @@ it('shows the terminal state once the deck is exhausted, and Done for now return
   await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
   expect(screen.getByText("That's the deck")).toBeTruthy();
   expect(within(screen.getByTestId('swipe-deck-terminal')).getByText('0 yes')).toBeTruthy();
+  // Nothing to shortlist with zero yeses — only Undo/Done for now show.
+  expect(screen.queryByTestId('swipe-deck-continue')).toBeNull();
 
   await fireEvent.press(screen.getByTestId('swipe-deck-done'));
   expect(back).toHaveBeenCalled();
+});
+
+it('shows a "Continue with N picks" button in the terminal state when there is at least one yes, and it navigates to the shortlist route', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  expect(screen.getByText('Continue with 1 picks')).toBeTruthy();
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-continue'));
+
+  expect(push).toHaveBeenCalledWith('/smart-selection/round-1/shortlist');
 });
 
 it('keeps Undo reachable in the terminal state, and using it returns to the deck', async () => {
