@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -71,9 +71,15 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // useFocusEffect, not a plain useEffect — same idiom as SwipeDeckScreen/
+  // ShortlistScreen's own load-on-mount-with-retry screens, and it also
+  // sidesteps the set-state-in-effect lint rule that a bare useEffect
+  // calling an async setState-ing function trips.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   async function handleSubmit() {
     if (!weeklyPlanId) return;

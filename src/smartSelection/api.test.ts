@@ -231,7 +231,10 @@ describe('cancelSelectionRound', () => {
 
 describe('closeSelectionRound', () => {
   it('calls close_selection_round with the round id', async () => {
-    mockedRpc.mockResolvedValue({ data: { id: 'round-1', status: 'ready_for_review' }, error: null });
+    mockedRpc.mockResolvedValue({
+      data: { id: 'round-1', status: 'ready_for_review' },
+      error: null,
+    });
 
     await closeSelectionRound('round-1');
 

@@ -11,7 +11,16 @@ import * as thisWeekApi from '../thisWeek/api';
 jest.mock('./api');
 jest.mock('./deckCards');
 jest.mock('../thisWeek/api');
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+let mockLastFocusEffect: (() => void) | null = null;
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+  useFocusEffect: jest.fn((effect: () => void) => {
+    if (effect !== mockLastFocusEffect) {
+      mockLastFocusEffect = effect;
+      effect();
+    }
+  }),
+}));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
 jest.mock(
   'react-native-safe-area-context',
@@ -67,6 +76,7 @@ const deckCardDetails = new Map([
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLastFocusEffect = null;
   mockedUseRouter.mockReturnValue({ back, dismissTo });
   mockedThisWeekApi.fetchCurrentWeeklyPlan.mockResolvedValue({
     id: 'plan-1',
@@ -135,9 +145,7 @@ it('an apply failure surfaces a retryable error and a retry does not re-call clo
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('review-submit'));
 
-  await waitFor(() =>
-    expect(screen.getByText("Couldn't add those recipes")).toBeTruthy(),
-  );
+  await waitFor(() => expect(screen.getByText("Couldn't add those recipes")).toBeTruthy());
   expect(mockedApi.closeSelectionRound).toHaveBeenCalledTimes(1);
   expect(dismissTo).not.toHaveBeenCalled();
 
