@@ -40,6 +40,8 @@ npm run db:reset && npm run db:test   # pgTAP, needs local Supabase/Docker
 
 A PR touching `supabase/migrations/` or `supabase/tests/database/` needs the last one run for real — CI runs it, but note that `supabase/functions/import-recipe` is currently excluded from `tsconfig.json`/`eslint.config.js` (Deno-only code, checked at deploy time, not by the commands above).
 
+Deploying an Edge Function to staging (`supabase functions deploy`) is a separate, credentialed operation — see [`docs/deploying-edge-functions.md`](docs/deploying-edge-functions.md) before attempting it. It is not one of the canonical commands above and is not part of a normal PR.
+
 Run the full sequence locally before every push, not a hand-picked subset — CI runs `typecheck`, `lint`, `format:check`, and `test` as four separate steps in that order, and any one of them failing burns a full CI run. Running only the test files you touched, or only `tsc`, is not a substitute for actually running `npm run lint` and `npm run format:check` too (found the hard way: a PR passed targeted tests and typecheck locally but failed CI on `format:check` alone).
 
 ## Current-state pointer
