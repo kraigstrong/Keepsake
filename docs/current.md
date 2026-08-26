@@ -34,9 +34,8 @@ Journey 3 (shared household, two-actor walkthrough) also still needs a live deve
 
 ## Next action
 
-1. **Get [PR #104](https://github.com/kraigstrong/Keepsake/pull/104) reviewed and merged** — see Open above. Flag stays off until this and the finish PR below have both had a live pass.
-2. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply.
-3. **Live solo walkthrough**, then reassess the group flow.
+1. **Client finish PR** — shortlist (1i), review (1k) reusing `ServingsConfirmationStep`, wired to apply. This is what turns the deck (merged, live-tested) into an actually completable flow — nothing downstream of the deck exists yet, so today's walkthrough only exercised swiping, not review/apply.
+2. **Full live solo walkthrough** once the finish PR lands — today's session covered the deck only (positive, one non-blocking finding logged above); the complete flow through review/apply still needs its own pass before flipping `FLAGS.smartMealSelection` on for real. Then reassess the group flow.
 
 Separately, still outstanding: push #101's migration to staging (`supabase db push`) — tracked above under Staging, not yet done.
 
