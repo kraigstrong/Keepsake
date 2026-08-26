@@ -7,11 +7,12 @@
  * boundary `import-recipe` uses (ADR-0015): every read here is RLS-
  * scoped exactly like an ordinary client call.
  *
- * This PR ships the filter only, not the ranking heuristic (roadmap:
- * walkable skeleton before smart ranking) — every candidate gets a
- * placeholder score and no reason codes, and candidate_strategy_version
- * is set to 'filter-only-v1' (never 'heuristic-v1') so a future reader
- * can tell which rounds were never actually scored.
+ * Candidate generation is the filter (proposal §5) plus the Smart
+ * Selection v1 heuristic (`server/selection/scoreCandidates.ts`,
+ * `candidate_strategy_version: 'heuristic-v1'`): this function gathers
+ * the household-scoped aggregates that module needs
+ * (`server/selection/fetchCandidateScoringInput.ts`) and hands them to
+ * it — the module itself stays database-free.
  *
  * finalize_selection_round_candidates is not a trust boundary (ADR-0027
  * decision 5) — it re-derives and validates every recipe_id itself, so
@@ -23,7 +24,11 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import { computeDeckSize } from '../../../server/selection/scoreCandidates.ts';
+import {
+  buildCandidateSnapshots,
+  fetchThisWeekTagsAndCategoryKeys,
+} from '../../../server/selection/fetchCandidateScoringInput.ts';
+import { scoreCandidates } from '../../../server/selection/scoreCandidates.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,7 +41,7 @@ const CORS_HEADERS = {
 // sane deck rather than computeDeckSize(null) blowing up.
 const DEFAULT_TARGET_COUNT = 4;
 
-const STRATEGY_VERSION = 'filter-only-v1';
+const STRATEGY_VERSION = 'heuristic-v1';
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -131,9 +136,10 @@ async function fetchCurrentThisWeekRecipeIds(supabase: SupabaseClient): Promise<
   return new Set((entries ?? []).map((e) => (e as { recipe_id: string }).recipe_id));
 }
 
-// Ordered by primary key (not created_at) for a deterministic pool with
-// no possible tie — this PR's whole "ranking" is this fixed order plus
-// the This Week exclusion below; real scoring lands in a later PR.
+// Ordered by primary key (not created_at) purely for a deterministic
+// pool with no possible tie going into scoreCandidates — that module's
+// own stableHash tie-break (over roundId + recipeId) is what actually
+// orders the deck; this order never reaches the client.
 async function fetchEligibleRecipeIds(supabase: SupabaseClient): Promise<string[]> {
   const { data, error } = await supabase
     .from('recipes')
@@ -233,18 +239,19 @@ Deno.serve(async (req: Request) => {
     claim_token: string;
   };
 
-  // Step 2: the candidate filter (proposal §5) — the only selection
-  // logic this PR ships. household scoping comes from RLS on both
-  // reads, not an explicit filter.
+  // Step 2: the candidate pool (proposal §5) — household scoping comes
+  // from RLS on every read here, not an explicit filter. Deliberately
+  // unsliced: scoreCandidates applies computeDeckSize internally, so
+  // slicing here too would double-apply it.
   let candidateRecipeIds: string[];
+  let thisWeekRecipeIds: Set<string>;
   try {
-    const [eligibleRecipeIds, thisWeekRecipeIds] = await Promise.all([
+    const [eligibleRecipeIds, fetchedThisWeekRecipeIds] = await Promise.all([
       fetchEligibleRecipeIds(supabase),
       fetchCurrentThisWeekRecipeIds(supabase),
     ]);
-    candidateRecipeIds = eligibleRecipeIds
-      .filter((id) => !thisWeekRecipeIds.has(id))
-      .slice(0, computeDeckSize(parsed.targetCount));
+    thisWeekRecipeIds = fetchedThisWeekRecipeIds;
+    candidateRecipeIds = eligibleRecipeIds.filter((id) => !thisWeekRecipeIds.has(id));
   } catch (error) {
     // The round stays pending_candidates — recoverable by retry
     // (decision 1a), never manually cleaned up here.
@@ -267,15 +274,43 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // score/reason_codes are non-null columns with no real content yet
-  // (file header) — a stable placeholder, not a claim about ranking.
-  const candidates = candidateRecipeIds.map((recipeId) => ({
-    recipe_id: recipeId,
-    score: 0,
-    reason_codes: [] as string[],
-  }));
+  // Step 3: Smart Selection v1 (ADR-0027 decision 5) — gather the
+  // aggregates scoreCandidates needs, then rank/diversify.
+  let candidates: { recipe_id: string; score: number; reason_codes: string[] }[];
+  try {
+    const [candidateSnapshots, thisWeekContext] = await Promise.all([
+      buildCandidateSnapshots(supabase, candidateRecipeIds, roundId),
+      fetchThisWeekTagsAndCategoryKeys(supabase, [...thisWeekRecipeIds]),
+    ]);
 
-  // Step 3: write the deck and activate the round, fenced by claimToken
+    const ranked = scoreCandidates({
+      roundId,
+      now: new Date(),
+      targetCount: parsed.targetCount,
+      candidates: candidateSnapshots,
+      thisWeekTags: thisWeekContext.tags,
+      thisWeekCategoryKeys: thisWeekContext.categoryKeys,
+    });
+
+    candidates = ranked.map((r) => ({
+      recipe_id: r.recipeId,
+      score: r.score,
+      reason_codes: r.reasonCodes,
+    }));
+  } catch (error) {
+    // Same recoverable-by-retry posture as the pool read above — scoring
+    // failing partway through leaves the round pending_candidates, not
+    // half-finalized.
+    return jsonResponse(
+      {
+        error: `Round ${roundId} was created but candidate scoring failed: ${errorMessage(error)}`,
+        roundId,
+      },
+      502,
+    );
+  }
+
+  // Step 4: write the deck and activate the round, fenced by claimToken
   // exactly like finalize_import_job (ADR-0020/ADR-0027 decision 1a).
   const { data: finalized, error: finalizeError } = await supabase
     .rpc('finalize_selection_round_candidates', {
