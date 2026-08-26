@@ -3,13 +3,19 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { applySelectionRound, closeSelectionRound, getSelectionRound } from './api';
+import {
+  applySelectionRound,
+  closeSelectionRound,
+  getMyDecisionsForRound,
+  getSelectionRound,
+} from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { ServingsConfirmationStep } from '../components/ServingsConfirmationStep';
 import { useToast } from '../components/Toast';
+import { useSession } from '../session/SessionProvider';
 import { fetchCurrentWeeklyPlan } from '../thisWeek/api';
 import { colors, spacing, typography } from '../theme/tokens';
 
@@ -46,8 +52,19 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { session } = useSession();
+  const userId = session?.user.id ?? null;
 
   const [items, setItems] = useState<ReviewItem[] | null>(null);
+  // Route-param ids re-derived against the caller's actual 'yes'
+  // decisions — null until loaded, distinct from an empty array (a
+  // route reached with no valid picks at all, e.g. a malformed deep
+  // link, a stale/foreign id, or nothing decided yet). Codex, PR #106:
+  // recipeIds is untrusted route input, and apply_selection_round only
+  // checks that an id was ever a *candidate* of this round, not that
+  // the caller actually swiped yes on it — this re-derivation is the
+  // check apply itself doesn't make.
+  const [validRecipeIds, setValidRecipeIds] = useState<string[] | null>(null);
   const [weeklyPlanId, setWeeklyPlanId] = useState<string | null>(null);
   const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
   const [loadError, setLoadError] = useState(false);
@@ -55,13 +72,17 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      const [plan, details] = await Promise.all([
+      const [plan, decisions] = await Promise.all([
         fetchCurrentWeeklyPlan(),
-        fetchDeckCardDetails(recipeIds),
+        userId ? getMyDecisionsForRound(roundId, userId) : Promise.resolve(new Map()),
       ]);
+      const validIds = recipeIds.filter((id) => decisions.get(id)?.decision === 'yes');
+      const details = await fetchDeckCardDetails(validIds);
+
       setWeeklyPlanId(plan.id);
-      setItems(recipeIds.map((id) => ({ id, title: details.get(id)?.title ?? '' })));
-      setMultiplierById(Object.fromEntries(recipeIds.map((id) => [id, DEFAULT_MULTIPLIER])));
+      setValidRecipeIds(validIds);
+      setItems(validIds.map((id) => ({ id, title: details.get(id)?.title ?? '' })));
+      setMultiplierById(Object.fromEntries(validIds.map((id) => [id, DEFAULT_MULTIPLIER])));
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -69,7 +90,7 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     // recipeIds is a route-param snapshot, stable for this screen's whole
     // lifetime (the review route memoizes it) — not a real reactive dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId]);
+  }, [roundId, userId]);
 
   // useFocusEffect, not a plain useEffect — same idiom as SwipeDeckScreen/
   // ShortlistScreen's own load-on-mount-with-retry screens, and it also
@@ -82,7 +103,7 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
   );
 
   async function handleSubmit() {
-    if (!weeklyPlanId) return;
+    if (!weeklyPlanId || !validRecipeIds || validRecipeIds.length === 0) return;
     setIsSubmitting(true);
     try {
       const round = await getSelectionRound(roundId);
@@ -92,13 +113,15 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
       await applySelectionRound(
         roundId,
         weeklyPlanId,
-        recipeIds.map((id) => ({
+        validRecipeIds.map((id) => ({
           recipeId: id,
           multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER,
         })),
       );
       showToast(
-        recipeIds.length === 1 ? 'Added 1 to This Week' : `Added ${recipeIds.length} to This Week`,
+        validRecipeIds.length === 1
+          ? 'Added 1 to This Week'
+          : `Added ${validRecipeIds.length} to This Week`,
       );
       // Pops the whole smart-selection stack (deck/shortlist/review) back
       // to This Week in one step, rather than a plain back() that would
@@ -124,10 +147,27 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     );
   }
 
-  if (items === null || weeklyPlanId === null) {
+  if (items === null || weeklyPlanId === null || validRecipeIds === null) {
     return (
       <View style={styles.screen} testID="review-screen">
         <LoadingState label="Loading your picks…" testID="review-loading" />
+      </View>
+    );
+  }
+
+  // Nothing survived re-deriving against actual 'yes' decisions — a
+  // malformed/stale route param, not a real state to offer the
+  // destructive apply action against (Codex, PR #106).
+  if (validRecipeIds.length === 0) {
+    return (
+      <View style={styles.screen} testID="review-screen">
+        <View style={styles.emptyState} testID="review-empty">
+          <Text style={styles.emptyStateTitle}>Nothing to review</Text>
+          <Text style={styles.emptyStateMessage}>
+            Go back to the shortlist and pick some recipes first.
+          </Text>
+          <Button title="Back" onPress={() => router.back()} testID="review-empty-back" />
+        </View>
       </View>
     );
   }
@@ -160,7 +200,7 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
         <Button
-          title={`Add ${recipeIds.length} to This Week`}
+          title={`Add ${validRecipeIds.length} to This Week`}
           onPress={handleSubmit}
           disabled={isSubmitting}
           testID="review-submit"
@@ -197,5 +237,22 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: spacing.lg,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  emptyStateTitle: {
+    ...typography.heading,
+    color: colors.textPrimary,
+  },
+  emptyStateMessage: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
 });

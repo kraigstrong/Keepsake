@@ -6,11 +6,13 @@ import type { SelectionRound } from './api';
 import * as deckCards from './deckCards';
 import { ReviewScreen } from './ReviewScreen';
 import { ToastProvider } from '../components/Toast';
+import { useSession } from '../session/SessionProvider';
 import * as thisWeekApi from '../thisWeek/api';
 
 jest.mock('./api');
 jest.mock('./deckCards');
 jest.mock('../thisWeek/api');
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 let mockLastFocusEffect: (() => void) | null = null;
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
@@ -39,6 +41,7 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const mockedDeckCards = deckCards as jest.Mocked<typeof deckCards>;
 const mockedThisWeekApi = thisWeekApi as jest.Mocked<typeof thisWeekApi>;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseSession = useSession as jest.Mock;
 
 const back = jest.fn();
 const dismissTo = jest.fn();
@@ -78,6 +81,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
   mockedUseRouter.mockReturnValue({ back, dismissTo });
+  mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedThisWeekApi.fetchCurrentWeeklyPlan.mockResolvedValue({
     id: 'plan-1',
     status: 'planning',
@@ -85,6 +89,14 @@ beforeEach(() => {
   });
   mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(deckCardDetails);
   mockedApi.getSelectionRound.mockResolvedValue(testRound());
+  // Both r1/r2 are genuine 'yes' decisions by default — the shape
+  // ReviewScreen re-derives recipeIds against (Codex, PR #106).
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+    ]),
+  );
   mockedApi.closeSelectionRound.mockResolvedValue(undefined);
   mockedApi.applySelectionRound.mockResolvedValue(undefined);
 });
@@ -167,6 +179,43 @@ it('on success, toasts the added count and dismisses back to This Week', async (
 
   await waitFor(() => expect(screen.getByText('Added 2 to This Week')).toBeTruthy());
   expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it("re-derives recipeIds against the caller's actual yes decisions, dropping anything else", async () => {
+  // r3 is in the route param but was never decided 'yes' (e.g. a
+  // malformed/stale deep link, or an id from someone else's decisions —
+  // Codex, PR #106: apply_selection_round only checks candidate
+  // membership, not that the caller actually chose it).
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+    ]),
+  );
+  renderScreen(['r1', 'r2', 'r3']);
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.queryByText('Tacos')).toBeNull();
+  expect(screen.getByText('Add 1 to This Week')).toBeTruthy();
+
+  await fireEvent.press(screen.getByTestId('review-submit'));
+  await waitFor(() => expect(mockedApi.applySelectionRound).toHaveBeenCalled());
+  expect(mockedApi.applySelectionRound).toHaveBeenCalledWith('round-1', 'plan-1', [
+    { recipeId: 'r1', multiplier: 1 },
+  ]);
+});
+
+it('shows an empty state and never calls close/apply when nothing survives re-derivation', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map());
+  renderScreen(['r1', 'r2']);
+
+  await waitFor(() => expect(screen.getByTestId('review-empty')).toBeTruthy());
+  expect(screen.getByText('Nothing to review')).toBeTruthy();
+  expect(mockedApi.closeSelectionRound).not.toHaveBeenCalled();
+  expect(mockedApi.applySelectionRound).not.toHaveBeenCalled();
+
+  await fireEvent.press(screen.getByTestId('review-empty-back'));
+  expect(back).toHaveBeenCalled();
 });
 
 it('uses singular phrasing for exactly one recipe', async () => {
