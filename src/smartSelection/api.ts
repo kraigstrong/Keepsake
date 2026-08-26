@@ -223,6 +223,36 @@ export async function clearSelectionDecision(roundId: string, recipeId: string):
   if (error) throw new Error(error.message);
 }
 
+/** Creator-only; requires 'active' (ADR-0027 decision 3). Backs 1k's Add-to-This-Week CTA. */
+export async function closeSelectionRound(roundId: string): Promise<void> {
+  const { error } = await supabase.rpc('close_selection_round', { round_id: roundId });
+  if (error) throw new Error(error.message);
+}
+
+export interface ApplySelectionRoundSelection {
+  recipeId: string;
+  multiplier: number;
+}
+
+/**
+ * Requires 'ready_for_review' — idempotent no-op if already 'applied'
+ * (ADR-0027 decision 6). Array order becomes insertion order into the
+ * plan; archived/deleted/already-in-plan recipes are silently dropped,
+ * a recipe_id that was never a candidate of this round is the one error.
+ */
+export async function applySelectionRound(
+  roundId: string,
+  weeklyPlanId: string,
+  selections: ApplySelectionRoundSelection[],
+): Promise<void> {
+  const { error } = await supabase.rpc('apply_selection_round', {
+    round_id: roundId,
+    weekly_plan_id: weeklyPlanId,
+    selections: selections.map((s) => ({ recipe_id: s.recipeId, multiplier: s.multiplier })),
+  });
+  if (error) throw new Error(error.message);
+}
+
 export interface SelectionDecisionRecord {
   decision: SelectionDecisionValue;
   /** `selection_decisions.decided_at` — what lets a resumed session reconstruct undo order. */
