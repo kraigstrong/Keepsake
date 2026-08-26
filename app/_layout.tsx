@@ -361,6 +361,7 @@ function AuthenticatedRouteBoundary() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="recipe" />
         <Stack.Screen name="this-week" />
+        <Stack.Screen name="smart-selection" />
         <Stack.Screen name="groceries" />
         <Stack.Screen
           name="settings"

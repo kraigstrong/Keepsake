@@ -12,13 +12,24 @@ import type { ThisWeekEntry, ThisWeekPlan } from './api';
 import { ThisWeekScreen } from './ThisWeekScreen';
 import { ToastProvider } from '../components/Toast';
 import { useConnectivity } from '../connectivity/ConnectivityProvider';
+import { FLAGS } from '../featureFlags/flags';
 import * as heroImage from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
+import * as smartSelectionApi from '../smartSelection/api';
+import type { SelectionRound } from '../smartSelection/api';
 
 jest.mock('./api');
 jest.mock('../recipes/heroImage');
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
+jest.mock('../smartSelection/api');
+// A stub, not the real sheet — StartRoundSheet has its own unit tests
+// (StartRoundSheet.test.tsx); here we only need to observe whether the
+// entry point opens it, not exercise its own internals.
+jest.mock('../smartSelection/StartRoundSheet', () => ({
+  StartRoundSheet: ({ visible }: { visible: boolean }) =>
+    visible ? <MockText testID="mock-start-round-sheet">Start Round Sheet</MockText> : null,
+}));
 // Real useFocusEffect only re-invokes its callback on a focus event, or
 // when the memoized callback's identity changes while still focused
 // (ThisWeekScreen.tsx relies on the latter for the isOnline -> load()
@@ -65,6 +76,30 @@ const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
 const mockedUseConnectivity = useConnectivity as jest.Mock;
 const mockedUseRouter = useRouter as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
+const mockedSmartSelectionApi = smartSelectionApi as jest.Mocked<typeof smartSelectionApi>;
+
+function selectionRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
+  return {
+    id: 'round-1',
+    householdId: 'household-1',
+    createdBy: 'user-1',
+    mode: 'solo',
+    status: 'active',
+    targetCount: 4,
+    closesAt: null,
+    candidateStrategyVersion: 'heuristic-v1',
+    revealedAt: null,
+    createdAt: '2026-08-25T00:00:00.000Z',
+    updatedAt: '2026-08-25T00:00:00.000Z',
+    closedAt: null,
+    appliedAt: null,
+    appliedBy: null,
+    appliedWeeklyPlanId: null,
+    participants: [],
+    candidates: [],
+    ...overrides,
+  };
+}
 
 const push = jest.fn();
 
@@ -91,6 +126,7 @@ function plan(overrides: Partial<ThisWeekPlan> = {}): ThisWeekPlan {
 beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
+  FLAGS.smartMealSelection = false;
   mockedUseRouter.mockReturnValue({ push });
   mockedUseConnectivity.mockReturnValue({ isOnline: true });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
@@ -101,6 +137,7 @@ beforeEach(() => {
   mockedApi.removeFromThisWeek.mockResolvedValue(undefined);
   mockedApi.reorderThisWeek.mockResolvedValue(undefined);
   mockedApi.addRecipeToThisWeek.mockResolvedValue(undefined);
+  mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(null);
 });
 
 it('shows an offline state and never fetches while offline', async () => {
@@ -351,4 +388,100 @@ it('reverts the optimistic reopen if the server call fails', async () => {
 
   await waitFor(() => expect(screen.getByTestId('this-week-edit-plan')).toBeTruthy());
   expect(screen.queryByTestId('this-week-confirm-plan')).toBeNull();
+});
+
+describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
+  it('renders nothing extra when the flag is off', async () => {
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-placeholder')).toBeTruthy());
+    expect(screen.queryByTestId('this-week-help-me-choose')).toBeNull();
+  });
+
+  it('opens the start sheet when there is no active round', async () => {
+    FLAGS.smartMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(null);
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    await waitFor(() => expect(screen.getByTestId('mock-start-round-sheet')).toBeTruthy());
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
+  });
+
+  it('opens the start sheet when the only round is ready_for_review (treated as no active round this slice)', async () => {
+    FLAGS.smartMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
+      selectionRound({ status: 'ready_for_review' }),
+    );
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    await waitFor(() => expect(screen.getByTestId('mock-start-round-sheet')).toBeTruthy());
+  });
+
+  it('navigates straight to the deck for an active round, skipping the start sheet', async () => {
+    FLAGS.smartMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
+      selectionRound({ id: 'round-42', status: 'active' }),
+    );
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/smart-selection/round-42'));
+    expect(screen.queryByTestId('mock-start-round-sheet')).toBeNull();
+  });
+
+  it('opens the start sheet for a pending_candidates round instead of an empty deck (Codex, PR #104)', async () => {
+    // A pending_candidates round has no deck yet — finalize_selection_
+    // round_candidates never ran (ADR-0027 decision 1a: the Edge
+    // Function died between create and finalize). Routing that straight
+    // to the swipe screen would show a permanently "terminal" empty
+    // deck with no way out, since the household's singleton-round index
+    // blocks starting fresh too. The recovery path is the start sheet:
+    // startSelectionRound adopts and retries the same stuck round.
+    FLAGS.smartMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
+      selectionRound({ id: 'round-7', status: 'pending_candidates' }),
+    );
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    await waitFor(() => expect(screen.getByTestId('mock-start-round-sheet')).toBeTruthy());
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
+  });
+
+  it('shows an error toast rather than crashing when the active-round check throws', async () => {
+    FLAGS.smartMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+    mockedSmartSelectionApi.getActiveSelectionRound.mockRejectedValue(new Error('offline'));
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't check for an in-progress round")).toBeTruthy(),
+    );
+    expect(screen.queryByTestId('mock-start-round-sheet')).toBeNull();
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
+  });
 });
