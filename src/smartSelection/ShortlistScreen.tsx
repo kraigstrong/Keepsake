@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getMyDecisionsForRound, getSelectionRound } from './api';
+import { getMyDecisionsForRound, getSelectionRound, type SelectionRoundStatus } from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
@@ -41,6 +41,7 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
   const [loadError, setLoadError] = useState(false);
   const [deckSize, setDeckSize] = useState(0);
   const [decidedCount, setDecidedCount] = useState(0);
+  const [roundStatus, setRoundStatus] = useState<SelectionRoundStatus | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +58,7 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
 
       setDeckSize(sortedCandidates.length);
       setDecidedCount(decisions.size);
+      setRoundStatus(round.status);
       setItems(
         yesCandidates.map((c) => ({
           recipeId: c.recipeId,
@@ -137,6 +139,12 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
 
   const includedCount = items.filter((item) => item.included).length;
   const remainingCount = deckSize - decidedCount;
+  // Once the round has left 'active' (Review's close-then-apply already
+  // ran, or is resumed after apply failed — Codex, PR #106), swiping
+  // more is impossible: record_selection_decision requires 'active'.
+  // Offering "keep browsing" into a deck that will silently reject every
+  // decision write would just be a second dead end.
+  const canKeepBrowsing = remainingCount > 0 && roundStatus === 'active';
 
   return (
     <View style={styles.screen} testID="shortlist-screen">
@@ -194,7 +202,7 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
-        {remainingCount > 0 && (
+        {canKeepBrowsing && (
           <Pressable
             onPress={handleKeepBrowsing}
             accessibilityRole="button"

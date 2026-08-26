@@ -414,11 +414,19 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
     expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
   });
 
-  it('opens the start sheet when the only round is ready_for_review (treated as no active round this slice)', async () => {
+  it('navigates straight to the shortlist for a ready_for_review round, not the start sheet (Codex, PR #106)', async () => {
+    // A ready_for_review round has already been closed by Review's
+    // close-then-apply sequence — create_selection_round rejects
+    // starting fresh while one is 'active'/'ready_for_review', so the
+    // start sheet is a dead end here, not a fallback. This is the
+    // recovery path for apply failing (or the app being killed) after a
+    // successful close: resuming must land back on the shortlist (1i),
+    // not the deck (whose decisions are already frozen) or a blocked
+    // "start a new round" sheet.
     FLAGS.smartMealSelection = true;
     mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
     mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
-      selectionRound({ status: 'ready_for_review' }),
+      selectionRound({ id: 'round-99', status: 'ready_for_review' }),
     );
 
     renderThisWeekScreen();
@@ -426,7 +434,8 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
     await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
 
-    await waitFor(() => expect(screen.getByTestId('mock-start-round-sheet')).toBeTruthy());
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/smart-selection/round-99/shortlist'));
+    expect(screen.queryByTestId('mock-start-round-sheet')).toBeNull();
   });
 
   it('navigates straight to the deck for an active round, skipping the start sheet', async () => {

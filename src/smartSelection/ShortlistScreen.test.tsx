@@ -162,6 +162,18 @@ it('hides "Keep browsing" once the whole deck has been decided', async () => {
   expect(screen.queryByTestId('shortlist-keep-browsing')).toBeNull();
 });
 
+it('hides "Keep browsing" once the round has left \'active\', even with undecided candidates remaining', async () => {
+  // A round resumed after Review's close succeeded but apply failed
+  // (Codex, PR #106) — closing moves status to 'ready_for_review', and
+  // record_selection_decision requires 'active', so offering to browse
+  // more would just be a second dead end.
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ status: 'ready_for_review' }));
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.queryByTestId('shortlist-keep-browsing')).toBeNull();
+});
+
 it('Continue navigates to the review route with the ordered, checked-only recipe ids', async () => {
   renderScreen();
 

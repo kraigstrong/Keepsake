@@ -164,14 +164,26 @@ export function ThisWeekScreen() {
   // (create_selection_round resumes it for the same creator) and retries
   // candidate generation, rather than treating it as swipeable.
   //
-  // ready_for_review, or no round at all, are treated the same as
-  // pending here — reviewing/closing a round is the next PR's scope.
+  // ready_for_review resumes into the shortlist (1i), not the deck — the
+  // round already closed (create_selection_round rejects starting fresh
+  // while one is 'active'/'ready_for_review', so there is no other way
+  // back in). This is the durable recovery path for a closed-but-not-yet-
+  // applied round: if Review's close-then-apply sequence closes the round
+  // and then apply fails or is interrupted (Codex, PR #106 — a confirmed
+  // weekly plan makes this deterministic, since fetchCurrentWeeklyPlan()
+  // permits one but add_recipes_to_weekly_plan rejects it), leaving
+  // without retrying used to strand the round with no way back to it.
+  // No round at all is the only other case that reaches the start sheet.
   async function handleHelpMeChoose() {
     setIsCheckingActiveRound(true);
     try {
       const activeRound = await getActiveSelectionRound();
-      if (activeRound && activeRound.status === 'active') {
+      if (activeRound?.status === 'active') {
         router.push(`/smart-selection/${activeRound.id}`);
+        return;
+      }
+      if (activeRound?.status === 'ready_for_review') {
+        router.push(`/smart-selection/${activeRound.id}/shortlist`);
         return;
       }
       setStartRoundSheetVisible(true);
