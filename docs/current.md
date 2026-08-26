@@ -12,7 +12,7 @@ Merged: [#92](https://github.com/kraigstrong/Keepsake/pull/92) placement + [`ADR
 
 **Live device walkthrough, 2026-08-26 (flag manually flipped `true` locally for the session, per `docs/deploying-edge-functions.md`-style local-only testing — never committed).** Developer feedback: "looks really great." One real finding, logged rather than fixed inline per developer request — see `docs/roadmap.md`'s Not-yet-triaged: the swipe deck's hero image lags a beat behind the card title on advance (stale previous-card photo visible for ~0.5s), because signed URLs are fetched up front but the actual image bytes aren't warmed into the native cache before a card becomes current. Fix is well-scoped: extend the existing `src/thisWeek/prefetch.ts` `Image.prefetch()` technique to the deck's hero URLs during `SwipeDeckScreen.tsx`'s `load()`.
 
-**Staging (2026-08-25):** migrations current through #100 — **#101's migration is on `main` but not yet pushed to staging** (`supabase db push` still outstanding). Both Edge Functions deployed: `import-recipe` v14, `select-candidates` **v2** (heuristic-v1, matches `main`).
+**Staging (2026-08-26):** migrations current through #101 — `apply_selection_round` pushed for real (`supabase db push`, confirmed via dry-run before and after). Both Edge Functions deployed: `import-recipe` v14, `select-candidates` **v2** (heuristic-v1, matches `main`).
 
 ## Blocked / open follow-ups
 
@@ -36,8 +36,6 @@ Journey 3 (shared household, two-actor walkthrough) also still needs a live deve
 
 1. **Push and open the client-finish PR** — `smart-selection/shortlist-review-apply` has `ShortlistScreen` (1i) and `ReviewScreen` (1k, reusing `ServingsConfirmationStep` exactly as `AddToThisWeekScreen` does), wired to `closeSelectionRound`/`applySelectionRound`; the deck's Review bar and terminal state now navigate there for real instead of flipping a local flag. `app/smart-selection/[roundId].tsx` was restructured into `[roundId]/index.tsx` + `shortlist.tsx` + `review.tsx` (same convention as `app/recipe/[id]/`). Full local CI green (typecheck/lint/format/1219 tests/client-secrets); the four close/apply and visibility guards were independently mutation-tested (not just left to a green suite), per this doc's own note below. This is what turns the deck (merged, live-tested) into an actually completable flow — nothing downstream of the deck existed until now.
 2. **Full live solo walkthrough** once the finish PR lands — today's session covered the deck only (positive, one non-blocking finding logged above); the complete flow through review/apply still needs its own pass before flipping `FLAGS.smartMealSelection` on for real. Then reassess the group flow.
-
-Separately, still outstanding: push #101's migration to staging (`supabase db push`) — tracked above under Staging, not yet done.
 
 **Working method that has been earning its keep:** delegate a slice to a Sonnet subagent with the ADR as spec and *named required mutations*, then review the real diff and re-run the mutations independently. **Four times on this milestone a guard was correct while no test pinned it** — most starkly, admitting `'active'` to a results allowlist left all 431 tests passing while leaking live ballots. A green suite is not evidence of coverage. Always mutate before believing a test list.
 
