@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -213,6 +213,24 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
 
+  // Exhausting the deck with at least one yes jumps straight to the
+  // shortlist ("Your picks") — no separate "That's the deck" / "Continue
+  // with N picks" step in between (developer live-walkthrough feedback,
+  // 2026-08-26: the terminal screen's design-placeholder copy read as
+  // unfinished, and "Continue" vs. "Done for now" was unclear given both
+  // just meant "leave the deck"). `replace`, not `push`: this deck
+  // screen has nothing further to offer once the whole thing is decided,
+  // so it shouldn't linger in the stack for a back-gesture to land on —
+  // unlike the mid-deck "Review N picks" bar below, which still uses
+  // `push` because the deck is genuinely resumable from there. A zero-
+  // yes exhaustion has nothing to hand off to the shortlist, so it keeps
+  // the lightweight terminal state below instead.
+  useEffect(() => {
+    if (atEndOfDeck && yesCount > 0) {
+      router.replace(`/smart-selection/${roundId}/shortlist`);
+    }
+  }, [atEndOfDeck, yesCount, roundId, router]);
+
   function decide(decision: SelectionDecisionValue) {
     if (!round || !currentCandidate) return;
     const recipeId = currentCandidate.recipeId;
@@ -393,35 +411,31 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
 
       <View style={styles.content}>
         {terminal ? (
-          <View style={styles.terminal} testID="swipe-deck-terminal">
-            <Text style={styles.terminalTitle}>{"That's the deck"}</Text>
-            <Text style={styles.terminalSummary}>{yesCount} yes</Text>
-            {/* Per 1d, "controls still allow undo" at the end of the
-                deck — a mistaken final swipe must stay reversible, same
-                as mid-deck (Codex, PR #104). handleUndo already
-                un-terminals correctly: once position drops back under
-                deckSize, atEndOfDeck follows. */}
-            <UndoControl
-              onPress={handleUndo}
-              disabled={undoStack.length === 0}
-              testID="swipe-deck-terminal-undo"
-            />
-            {/* Nothing to shortlist with zero yeses — only Undo/Done for
-                now show then (1i has nothing to build a shortlist from). */}
-            {yesCount > 0 && (
-              <Button
-                title={`Continue with ${yesCount} picks`}
-                onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
-                testID="swipe-deck-continue"
+          yesCount > 0 ? (
+            // Mid-flight to the shortlist (the effect above fires on the
+            // same render this becomes true) — a brief loading state
+            // here beats a flash of stale deck copy the user is already
+            // leaving.
+            <LoadingState label="Finishing up…" testID="swipe-deck-advancing" />
+          ) : (
+            <View style={styles.terminal} testID="swipe-deck-terminal">
+              <Text style={styles.terminalTitle}>No picks this round</Text>
+              {/* A mistaken last 'no' must stay reversible (1d, Codex PR
+                  #104) — handleUndo un-terminals correctly (position
+                  drops back under deckSize, atEndOfDeck follows). */}
+              <UndoControl
+                onPress={handleUndo}
+                disabled={undoStack.length === 0}
+                testID="swipe-deck-terminal-undo"
               />
-            )}
-            <Button
-              title="Done for now"
-              onPress={() => router.back()}
-              variant="secondary"
-              testID="swipe-deck-done"
-            />
-          </View>
+              <Button
+                title="Done for now"
+                onPress={() => router.back()}
+                variant="secondary"
+                testID="swipe-deck-done"
+              />
+            </View>
+          )
         ) : (
           <>
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
@@ -734,11 +748,6 @@ const styles = StyleSheet.create({
   terminalTitle: {
     ...typography.heading,
     color: colors.textPrimary,
-  },
-  terminalSummary: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
   },
   passedBanner: {
     position: 'absolute',

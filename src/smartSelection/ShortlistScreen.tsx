@@ -149,7 +149,11 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
   return (
     <View style={styles.screen} testID="shortlist-screen">
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={styles.title}>Shortlist</Text>
+        {/* User-visible copy only — component/route/testID names stay
+            "shortlist", matching the design doc's 1i numbering (developer
+            live-walkthrough feedback, 2026-08-26: "Shortlist" read as an
+            internal/design-doc term, not something a user would parse). */}
+        <Text style={styles.title}>Your picks</Text>
       </View>
 
       <ScrollView style={styles.list} testID="shortlist-list">

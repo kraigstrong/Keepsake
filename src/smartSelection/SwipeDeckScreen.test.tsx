@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -56,6 +56,7 @@ const mockedUseReducedMotion = useReducedMotion as jest.Mock;
 
 const back = jest.fn();
 const push = jest.fn();
+const replace = jest.fn();
 
 function testRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
   return {
@@ -93,7 +94,7 @@ const deckCardDetails = new Map([
 beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
-  mockedUseRouter.mockReturnValue({ back, push });
+  mockedUseRouter.mockReturnValue({ back, push, replace });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedUseReducedMotion.mockReturnValue(false);
   mockedApi.getSelectionRound.mockResolvedValue(testRound());
@@ -195,7 +196,7 @@ it('shows the Review bar once the running yes count reaches the target, and tapp
   expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull();
 });
 
-it('shows the terminal state once the deck is exhausted, and Done for now returns to This Week', async () => {
+it('shows a minimal terminal state with zero yeses, and Done for now returns to This Week', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
   renderDeck();
 
@@ -207,16 +208,16 @@ it('shows the terminal state once the deck is exhausted, and Done for now return
   await fireEvent.press(screen.getByTestId('swipe-deck-no'));
 
   await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
-  expect(screen.getByText("That's the deck")).toBeTruthy();
-  expect(within(screen.getByTestId('swipe-deck-terminal')).getByText('0 yes')).toBeTruthy();
-  // Nothing to shortlist with zero yeses — only Undo/Done for now show.
-  expect(screen.queryByTestId('swipe-deck-continue')).toBeNull();
+  expect(screen.getByText('No picks this round')).toBeTruthy();
+  // Nothing to shortlist with zero yeses — no auto-navigation, no
+  // "Continue" — only Undo/Done for now.
+  expect(replace).not.toHaveBeenCalled();
 
   await fireEvent.press(screen.getByTestId('swipe-deck-done'));
   expect(back).toHaveBeenCalled();
 });
 
-it('shows a "Continue with N picks" button in the terminal state when there is at least one yes, and it navigates to the shortlist route', async () => {
+it('exhausting the deck with at least one yes navigates straight to the shortlist, replacing the deck in the stack', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
   renderDeck();
 
@@ -227,12 +228,16 @@ it('shows a "Continue with N picks" button in the terminal state when there is a
   await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('swipe-deck-no'));
 
-  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
-  expect(screen.getByText('Continue with 1 picks')).toBeTruthy();
-
-  await fireEvent.press(screen.getByTestId('swipe-deck-continue'));
-
-  expect(push).toHaveBeenCalledWith('/smart-selection/round-1/shortlist');
+  // No terminal "That's the deck" step, no "Continue" click needed —
+  // exhausting the deck with a yes navigates immediately (developer
+  // live-walkthrough feedback, 2026-08-26: the intermediate terminal
+  // screen's placeholder-feeling copy and unclear Continue-vs-Done
+  // choice were the "too many clicks" complaint).
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/shortlist'),
+  );
+  // replace, not push — this deck has nothing left to resume.
+  expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/shortlist'));
 });
 
 it('keeps Undo reachable in the terminal state, and using it returns to the deck', async () => {
