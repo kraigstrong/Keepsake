@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -114,6 +114,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [yesCount, setYesCount] = useState(0);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [passed, setPassed] = useState<PassedBannerState | null>(null);
+  // Count of in-flight recordSelectionDecision calls — gates the
+  // auto-navigate-to-shortlist effect below so it can't fire while the
+  // very decision that reached the end of the deck (or an earlier one)
+  // is still unconfirmed server-side (Codex, PR #107).
+  const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -213,6 +218,20 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
 
+  // Exhausted deck with a pick jumps straight to the shortlist, replacing
+  // (not pushing) this now-unresumable screen; a still-resumable deck
+  // (the "Review N picks" bar below) pushes instead. Gated on
+  // pendingWriteCount === 0 so this can't fire — and strand the user on
+  // an unresumable shortlist — while the very decision that reached the
+  // end of the deck is still unconfirmed server-side (Codex, PR #107):
+  // a rejected write's own rollback in decide() below will have already
+  // pulled position back under deckSize by the time this re-evaluates.
+  useEffect(() => {
+    if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
+      router.replace(`/smart-selection/${roundId}/shortlist`);
+    }
+  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
+
   function decide(decision: SelectionDecisionValue) {
     if (!round || !currentCandidate) return;
     const recipeId = currentCandidate.recipeId;
@@ -249,13 +268,16 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // left for a future resume to reopen (`load()`'s "first candidate
     // with no decision" already handles a gap anywhere in the deck, not
     // just a contiguous prefix).
-    const writePromise = recordSelectionDecision(round.id, recipeId, decision).catch(() => {
-      setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
-      if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
-      setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
-      setPassed((current) => (current?.recipeId === recipeId ? null : current));
-      showToast("Couldn't save that decision — you'll need to redo it");
-    });
+    setPendingWriteCount((c) => c + 1);
+    const writePromise = recordSelectionDecision(round.id, recipeId, decision)
+      .catch(() => {
+        setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
+        if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
+        setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
+        setPassed((current) => (current?.recipeId === recipeId ? null : current));
+        showToast("Couldn't save that decision — you'll need to redo it");
+      })
+      .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
   }
 
@@ -393,35 +415,31 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
 
       <View style={styles.content}>
         {terminal ? (
-          <View style={styles.terminal} testID="swipe-deck-terminal">
-            <Text style={styles.terminalTitle}>{"That's the deck"}</Text>
-            <Text style={styles.terminalSummary}>{yesCount} yes</Text>
-            {/* Per 1d, "controls still allow undo" at the end of the
-                deck — a mistaken final swipe must stay reversible, same
-                as mid-deck (Codex, PR #104). handleUndo already
-                un-terminals correctly: once position drops back under
-                deckSize, atEndOfDeck follows. */}
-            <UndoControl
-              onPress={handleUndo}
-              disabled={undoStack.length === 0}
-              testID="swipe-deck-terminal-undo"
-            />
-            {/* Nothing to shortlist with zero yeses — only Undo/Done for
-                now show then (1i has nothing to build a shortlist from). */}
-            {yesCount > 0 && (
-              <Button
-                title={`Continue with ${yesCount} picks`}
-                onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
-                testID="swipe-deck-continue"
+          yesCount > 0 ? (
+            // Mid-flight to the shortlist (the effect above fires on the
+            // same render this becomes true) — a brief loading state
+            // here beats a flash of stale deck copy the user is already
+            // leaving.
+            <LoadingState label="Finishing up…" testID="swipe-deck-advancing" />
+          ) : (
+            <View style={styles.terminal} testID="swipe-deck-terminal">
+              <Text style={styles.terminalTitle}>No picks this round</Text>
+              {/* A mistaken last 'no' must stay reversible (1d, Codex PR
+                  #104) — handleUndo un-terminals correctly (position
+                  drops back under deckSize, atEndOfDeck follows). */}
+              <UndoControl
+                onPress={handleUndo}
+                disabled={undoStack.length === 0}
+                testID="swipe-deck-terminal-undo"
               />
-            )}
-            <Button
-              title="Done for now"
-              onPress={() => router.back()}
-              variant="secondary"
-              testID="swipe-deck-done"
-            />
-          </View>
+              <Button
+                title="Done for now"
+                onPress={() => router.back()}
+                variant="secondary"
+                testID="swipe-deck-done"
+              />
+            </View>
+          )
         ) : (
           <>
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
@@ -734,11 +752,6 @@ const styles = StyleSheet.create({
   terminalTitle: {
     ...typography.heading,
     color: colors.textPrimary,
-  },
-  terminalSummary: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
   },
   passedBanner: {
     position: 'absolute',

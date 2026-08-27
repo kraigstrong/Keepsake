@@ -426,6 +426,20 @@ export function ThisWeekScreen() {
   }
 
   const isConfirmed = plan.status === 'confirmed';
+  const helpMeChoose = FLAGS.smartMealSelection && (
+    <View style={styles.helpMeChooseSection}>
+      <Button
+        title="Help me choose"
+        variant="outlineAccent"
+        onPress={handleHelpMeChoose}
+        disabled={isCheckingActiveRound}
+        testID="this-week-help-me-choose"
+      />
+      <Text style={styles.helpMeChooseCaption}>
+        {"A quick swipe-through to help pick this week's meals."}
+      </Text>
+    </View>
+  );
 
   return (
     <View style={styles.screen} testID="this-week-screen">
@@ -485,6 +499,16 @@ export function ThisWeekScreen() {
         )
       )}
 
+      {/* Positioned right below Add recipes/Edit Plan, not below the meal
+          list — the design handoff's own 1a placement ("below the meal
+          list") put this at the bottom of the screen, where it overlapped
+          the global add FAB (absolutely positioned, app/(tabs)/_layout.tsx)
+          on a real device (developer live-walkthrough feedback,
+          2026-08-26). Only for plans with entries; the empty-plan case
+          keeps the design's original placement below the empty state's own
+          Add recipes action, which never had this problem. */}
+      {plan.entries.length > 0 && helpMeChoose}
+
       <View style={styles.content}>
         {plan.entries.length === 0 ? (
           <EmptyState
@@ -507,20 +531,7 @@ export function ThisWeekScreen() {
         )}
       </View>
 
-      {FLAGS.smartMealSelection && (
-        <View style={styles.helpMeChooseSection}>
-          <Button
-            title="Help me choose"
-            variant="outlineAccent"
-            onPress={handleHelpMeChoose}
-            disabled={isCheckingActiveRound}
-            testID="this-week-help-me-choose"
-          />
-          <Text style={styles.helpMeChooseCaption}>
-            {"A quick swipe-through to help pick this week's meals."}
-          </Text>
-        </View>
-      )}
+      {plan.entries.length === 0 && helpMeChoose}
 
       {removed && (
         <View style={styles.undoBanner} testID="this-week-undo-banner" role="alert" accessible>
