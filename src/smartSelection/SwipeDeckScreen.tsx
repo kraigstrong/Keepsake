@@ -17,6 +17,7 @@ import {
   getMyDecisionsForRound,
   getSelectionRound,
   recordSelectionDecision,
+  refillSelectionRound,
   type SelectionDecisionRecord,
   type SelectionDecisionValue,
   type SelectionRound,
@@ -121,6 +122,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // is still unconfirmed server-side (Codex, PR #107).
   const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const [isStartingOver, setIsStartingOver] = useState(false);
+  const [isSelectingMore, setIsSelectingMore] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -331,6 +333,29 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     }
   }
 
+  // "Select more" (ADR-0027 decision 2b, developer live-walkthrough
+  // feedback: a small library or unlucky heuristic can exhaust the deck
+  // before target_count yeses). Re-runs load() in place rather than
+  // navigating — load()'s existing "first undecided candidate" resume
+  // logic naturally lands past the old end once round.candidates is
+  // longer, so a fresh append falls out of `terminal` with no new logic
+  // needed there.
+  async function handleSelectMore() {
+    setIsSelectingMore(true);
+    try {
+      const { addedCount } = await refillSelectionRound(roundId);
+      if (addedCount === 0) {
+        showToast('No more recipes to suggest right now');
+      } else {
+        await load();
+      }
+    } catch {
+      showToast("Couldn't get more suggestions — try again");
+    } finally {
+      setIsSelectingMore(false);
+    }
+  }
+
   function finishAnimatedCommit(decision: SelectionDecisionValue) {
     'worklet';
     translateX.value = 0;
@@ -462,15 +487,27 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                 variant="secondary"
                 testID="swipe-deck-terminal-undo"
               />
+              {/* New primary action (developer live-walkthrough feedback,
+                  2026-08-27: a small library or unlucky heuristic can
+                  exhaust the deck before target_count yeses) — ahead of
+                  Start over, which stays but is now de-emphasized. */}
+              <Button
+                title="Select more"
+                onPress={handleSelectMore}
+                disabled={isSelectingMore || isStartingOver}
+                testID="swipe-deck-select-more"
+              />
               <Button
                 title="Start over"
                 onPress={handleStartOver}
-                disabled={isStartingOver}
+                disabled={isStartingOver || isSelectingMore}
+                variant="secondary"
                 testID="swipe-deck-start-over"
               />
               <Button
                 title="Done for now"
                 onPress={() => router.back()}
+                disabled={isSelectingMore}
                 variant="secondary"
                 testID="swipe-deck-done"
               />
