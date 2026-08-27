@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -247,6 +247,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const atEndOfDeck = position >= deckSize;
   const terminal = atEndOfDeck;
   const currentCandidate = !terminal ? candidates[position] : undefined;
+  // The card rendered behind the top one. Real content, not a spacer:
+  // it means the next recipe's <Image> is already mounted and painted
+  // while the current card is still being decided, so the fly-out
+  // reveals the correct photo instead of an empty card.
+  const nextCandidate = !terminal ? candidates[position + 1] : undefined;
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
 
@@ -258,6 +263,22 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // end of the deck is still unconfirmed server-side (Codex, PR #107):
   // a rejected write's own rollback in decide() below will have already
   // pulled position back under deckSize by the time this re-evaluates.
+  // Recentres the card only once the new one has committed. A layout
+  // effect, not the worklet that finishes the fly-out: it runs after
+  // React has rendered the incoming recipe, so the card is never on
+  // screen holding the outgoing one. Keyed on the rendered card's own
+  // identity rather than `position` so a rollback or undo that restores
+  // the same index still resets it.
+  // translateX is deliberately not a dependency: a Reanimated shared
+  // value is a stable container, and listing it makes the React compiler
+  // treat it as immutable, which then rejects every write to it here and
+  // in the gesture handlers.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useLayoutEffect(() => {
+    translateX.value = 0;
+  }, [currentCandidate?.recipeId, terminal]);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
   useEffect(() => {
     if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
@@ -265,6 +286,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
 
   function decide(decision: SelectionDecisionValue) {
+    // No recentring needed on this path: currentCandidate is undefined
+    // only when the deck is terminal, and a null round unmounts the card
+    // entirely — the layout effect's deps cover both.
     if (!round || !currentCandidate) return;
     const recipeId = currentCandidate.recipeId;
     const title = cardDetails.get(recipeId)?.title ?? 'that recipe';
@@ -393,9 +417,17 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     }
   }
 
+  // Deliberately does NOT recentre the card. translateX runs on the UI
+  // thread, so resetting it here snapped the card back to centre while
+  // it still held the outgoing recipe's content — runOnJS(decide) only
+  // reaches the JS thread a frame or more later, and React's re-render
+  // lands later still. That gap was the real stale-image flash: the old
+  // card sitting at dead centre, which neither cache warming nor keying
+  // the <Image> could touch, because both act inside a render that
+  // hasn't happened yet. The card now stays off-screen until the new
+  // one has actually committed — see the layout effect above.
   function finishAnimatedCommit(decision: SelectionDecisionValue) {
     'worklet';
-    translateX.value = 0;
     runOnJS(decide)(decision);
   }
 
@@ -410,7 +442,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // uses to call back into JS. The rule doesn't yet recognize
   // react-native-gesture-handler's builder API as a deferred-execution
   // event handler the way it does a plain JSX prop.
-  /* eslint-disable react-hooks/refs */
+  // react-hooks/immutability is disabled alongside it for the same
+  // class of reason: once a shared value is written anywhere the
+  // compiler treats as React code (the recentring layout effect above),
+  // it infers translateX is React-owned and rejects every write to it —
+  // including these, which are ordinary Reanimated gesture handlers
+  // that have always run on the UI thread.
+  /* eslint-disable react-hooks/refs, react-hooks/immutability */
   const panGesture = Gesture.Pan()
     .enabled(!terminal)
     .onUpdate((event) => {
@@ -442,7 +480,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         translateX.value = reducedMotion ? 0 : withSpring(0);
       }
     });
-  /* eslint-enable react-hooks/refs */
+  /* eslint-enable react-hooks/refs, react-hooks/immutability */
 
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { rotate: `${translateX.value / 26}deg` }],
@@ -554,48 +592,28 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
           <>
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
               <View style={[styles.card, styles.cardBehindTwo]} />
-              <View style={[styles.card, styles.cardBehindOne]} />
+              <View style={[styles.card, styles.cardBehindOne]}>
+                {nextCandidate && (
+                  <CardFace
+                    recipeId={nextCandidate.recipeId}
+                    heroUrl={heroUrls[nextCandidate.recipeId]}
+                    detail={cardDetails.get(nextCandidate.recipeId)}
+                    reasonCopy={reasonCopyFor(nextCandidate.reasonCodes)}
+                  />
+                )}
+              </View>
               <GestureDetector gesture={panGesture}>
                 <Animated.View
                   style={[styles.card, styles.cardTop, cardAnimatedStyle]}
                   testID="swipe-deck-top-card"
                 >
-                  {heroUrl ? (
-                    <>
-                      {/* Keyed by recipe so advancing a card mounts a
-                          fresh native image view. Without the key React
-                          reuses one view, and RN's <Image> keeps painting
-                          its old bitmap until the new source finishes
-                          loading — so the title updated instantly while
-                          the previous card's photo stayed put, which no
-                          amount of cache warming can close (PR #110). */}
-                      <Image
-                        key={currentCandidate?.recipeId}
-                        source={{ uri: heroUrl }}
-                        style={styles.cardImage}
-                        testID="swipe-deck-card-image"
-                      />
-                      <View style={styles.cardBody}>
-                        <Text style={styles.cardTitle} numberOfLines={2}>
-                          {currentDetail?.title}
-                        </Text>
-                        {currentDetail?.totalTimeMinutes != null && (
-                          <Text style={styles.cardMeta}>{currentDetail.totalTimeMinutes} min</Text>
-                        )}
-                        {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
-                      </View>
-                    </>
-                  ) : (
-                    <View style={[styles.cardBody, styles.cardBodyTypographic]}>
-                      <Text style={styles.cardTitleTypographic} numberOfLines={3}>
-                        {currentDetail?.title}
-                      </Text>
-                      {currentDetail?.totalTimeMinutes != null && (
-                        <Text style={styles.cardMeta}>{currentDetail.totalTimeMinutes} min</Text>
-                      )}
-                      {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
-                    </View>
-                  )}
+                  <CardFace
+                    recipeId={currentCandidate?.recipeId}
+                    heroUrl={heroUrl}
+                    detail={currentDetail}
+                    reasonCopy={reasonCopy}
+                    imageTestID="swipe-deck-card-image"
+                  />
 
                   <Animated.View
                     style={[styles.stamp, styles.stampYes, yesStampStyle]}
@@ -663,6 +681,61 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         </View>
       )}
     </View>
+  );
+}
+
+interface CardFaceProps {
+  recipeId: string | undefined;
+  heroUrl: string | undefined;
+  detail: DeckCardDetail | undefined;
+  reasonCopy: string | undefined;
+  /** Omitted for the card behind, so the top card's image stays uniquely addressable. */
+  imageTestID?: string;
+}
+
+/**
+ * One card's content, shared by the top card and the one behind it so
+ * the fly-out reveals identical markup rather than an empty placeholder.
+ * The <Image> is keyed by recipe: without it React reuses a single
+ * native view, and RN's <Image> keeps painting its old bitmap until the
+ * new source finishes loading (PR #110).
+ */
+function CardFace({ recipeId, heroUrl, detail, reasonCopy, imageTestID }: CardFaceProps) {
+  const meta = (
+    <>
+      {detail?.totalTimeMinutes != null && (
+        <Text style={styles.cardMeta}>{detail.totalTimeMinutes} min</Text>
+      )}
+      {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
+    </>
+  );
+
+  if (!heroUrl) {
+    return (
+      <View style={[styles.cardBody, styles.cardBodyTypographic]}>
+        <Text style={styles.cardTitleTypographic} numberOfLines={3}>
+          {detail?.title}
+        </Text>
+        {meta}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Image
+        key={recipeId}
+        source={{ uri: heroUrl }}
+        style={styles.cardImage}
+        testID={imageTestID}
+      />
+      <View style={styles.cardBody}>
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {detail?.title}
+        </Text>
+        {meta}
+      </View>
+    </>
   );
 }
 
