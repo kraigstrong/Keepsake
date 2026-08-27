@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -247,6 +247,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const atEndOfDeck = position >= deckSize;
   const terminal = atEndOfDeck;
   const currentCandidate = !terminal ? candidates[position] : undefined;
+  // The card rendered behind the top one. Real content, not a spacer:
+  // it means the next recipe's <Image> is already mounted and painted
+  // while the current card is still being decided, so the fly-out
+  // reveals the correct photo instead of an empty card.
+  const nextCandidate = !terminal ? candidates[position + 1] : undefined;
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
 
@@ -258,6 +263,18 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // end of the deck is still unconfirmed server-side (Codex, PR #107):
   // a rejected write's own rollback in decide() below will have already
   // pulled position back under deckSize by the time this re-evaluates.
+  // A layout effect, not the fly-out worklet: it must run after the
+  // incoming card has rendered. Keyed on card identity rather than
+  // `position` so an undo landing on the same index still resets.
+  // translateX is omitted from the deps deliberately — listing a shared
+  // value makes the compiler treat it as immutable and reject every
+  // write to it, here and in the gesture handlers.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useLayoutEffect(() => {
+    translateX.value = 0;
+  }, [currentCandidate?.recipeId, terminal]);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
   useEffect(() => {
     if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
@@ -265,6 +282,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
 
   function decide(decision: SelectionDecisionValue) {
+    // No recentring needed on this path: currentCandidate is undefined
+    // only when the deck is terminal, and a null round unmounts the card
+    // entirely — the layout effect's deps cover both.
     if (!round || !currentCandidate) return;
     const recipeId = currentCandidate.recipeId;
     const title = cardDetails.get(recipeId)?.title ?? 'that recipe';
@@ -393,9 +413,12 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     }
   }
 
+  // Must not recentre the card: this runs on the UI thread, ahead of the
+  // re-render that swaps in the next recipe, so resetting here shows the
+  // outgoing card centred. The layout effect above recentres it once the
+  // incoming card has committed.
   function finishAnimatedCommit(decision: SelectionDecisionValue) {
     'worklet';
-    translateX.value = 0;
     runOnJS(decide)(decision);
   }
 
@@ -410,7 +433,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // uses to call back into JS. The rule doesn't yet recognize
   // react-native-gesture-handler's builder API as a deferred-execution
   // event handler the way it does a plain JSX prop.
-  /* eslint-disable react-hooks/refs */
+  // react-hooks/immutability is disabled for the same class of reason:
+  // the layout effect's write makes the compiler treat translateX as
+  // React-owned, which then rejects these ordinary UI-thread writes.
+  /* eslint-disable react-hooks/refs, react-hooks/immutability */
   const panGesture = Gesture.Pan()
     .enabled(!terminal)
     .onUpdate((event) => {
@@ -442,7 +468,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         translateX.value = reducedMotion ? 0 : withSpring(0);
       }
     });
-  /* eslint-enable react-hooks/refs */
+  /* eslint-enable react-hooks/refs, react-hooks/immutability */
 
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { rotate: `${translateX.value / 26}deg` }],
@@ -555,39 +581,39 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
               <View style={[styles.card, styles.cardBehindTwo]} />
               <View style={[styles.card, styles.cardBehindOne]} />
+              {/* Carries cardTop's own styles so the handoff is
+                  pixel-identical — flush to the stack, same 1px border.
+                  Hidden from assistive tech: it sits before the top card
+                  in traversal order (zIndex only affects paint), so a
+                  screen reader would otherwise announce the next recipe
+                  while Yes/No still decide the current one. */}
+              {nextCandidate && (
+                <View
+                  style={[styles.card, styles.cardTop, styles.cardNext]}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  testID="swipe-deck-next-card"
+                >
+                  <CardFace
+                    recipeId={nextCandidate.recipeId}
+                    heroUrl={heroUrls[nextCandidate.recipeId]}
+                    detail={cardDetails.get(nextCandidate.recipeId)}
+                    reasonCopy={reasonCopyFor(nextCandidate.reasonCodes)}
+                  />
+                </View>
+              )}
               <GestureDetector gesture={panGesture}>
                 <Animated.View
                   style={[styles.card, styles.cardTop, cardAnimatedStyle]}
                   testID="swipe-deck-top-card"
                 >
-                  {heroUrl ? (
-                    <>
-                      <Image
-                        source={{ uri: heroUrl }}
-                        style={styles.cardImage}
-                        testID="swipe-deck-card-image"
-                      />
-                      <View style={styles.cardBody}>
-                        <Text style={styles.cardTitle} numberOfLines={2}>
-                          {currentDetail?.title}
-                        </Text>
-                        {currentDetail?.totalTimeMinutes != null && (
-                          <Text style={styles.cardMeta}>{currentDetail.totalTimeMinutes} min</Text>
-                        )}
-                        {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
-                      </View>
-                    </>
-                  ) : (
-                    <View style={[styles.cardBody, styles.cardBodyTypographic]}>
-                      <Text style={styles.cardTitleTypographic} numberOfLines={3}>
-                        {currentDetail?.title}
-                      </Text>
-                      {currentDetail?.totalTimeMinutes != null && (
-                        <Text style={styles.cardMeta}>{currentDetail.totalTimeMinutes} min</Text>
-                      )}
-                      {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
-                    </View>
-                  )}
+                  <CardFace
+                    recipeId={currentCandidate?.recipeId}
+                    heroUrl={heroUrl}
+                    detail={currentDetail}
+                    reasonCopy={reasonCopy}
+                    imageTestID="swipe-deck-card-image"
+                  />
 
                   <Animated.View
                     style={[styles.stamp, styles.stampYes, yesStampStyle]}
@@ -655,6 +681,61 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         </View>
       )}
     </View>
+  );
+}
+
+interface CardFaceProps {
+  recipeId: string | undefined;
+  heroUrl: string | undefined;
+  detail: DeckCardDetail | undefined;
+  reasonCopy: string | undefined;
+  /** Omitted for the card behind, so the top card's image stays uniquely addressable. */
+  imageTestID?: string;
+}
+
+/**
+ * One card's content, shared by the top card and the one behind it so
+ * the fly-out reveals identical markup rather than an empty placeholder.
+ * The <Image> is keyed by recipe: without it React reuses a single
+ * native view, and RN's <Image> keeps painting its old bitmap until the
+ * new source finishes loading (PR #110).
+ */
+function CardFace({ recipeId, heroUrl, detail, reasonCopy, imageTestID }: CardFaceProps) {
+  const meta = (
+    <>
+      {detail?.totalTimeMinutes != null && (
+        <Text style={styles.cardMeta}>{detail.totalTimeMinutes} min</Text>
+      )}
+      {reasonCopy && <Text style={styles.cardReason}>{reasonCopy}</Text>}
+    </>
+  );
+
+  if (!heroUrl) {
+    return (
+      <View style={[styles.cardBody, styles.cardBodyTypographic]}>
+        <Text style={styles.cardTitleTypographic} numberOfLines={3}>
+          {detail?.title}
+        </Text>
+        {meta}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Image
+        key={recipeId}
+        source={{ uri: heroUrl }}
+        style={styles.cardImage}
+        testID={imageTestID}
+      />
+      <View style={styles.cardBody}>
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {detail?.title}
+        </Text>
+        {meta}
+      </View>
+    </>
   );
 }
 
@@ -749,10 +830,15 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   cardTop: {
-    zIndex: 3,
+    zIndex: 4,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  // Applied after cardTop to sit directly beneath it while keeping every
+  // other cardTop property, so the two are pixel-identical.
+  cardNext: {
+    zIndex: 3,
   },
   cardImage: {
     width: '100%',
