@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(46);
+select plan(50);
 
 insert into auth.users (id, email)
 values
@@ -478,6 +478,36 @@ select throws_ok(
   format($$ select public.confirm_weekly_plan(%L) $$, (select id from plan_a_next_week)),
   'weekly plan has no recipes to confirm',
   'confirm_weekly_plan: rejects an empty plan'
+);
+
+
+-- Locking discipline (2026-08-27). pgTAP runs the whole file in one
+-- transaction, so it structurally cannot exercise a two-session race —
+-- the same limitation ADR-0020 records for import fencing. What it CAN
+-- do is assert the lock is still present in each body, which is the
+-- failure mode that actually happened: add_to_weekly_plan was redefined
+-- twice after Phase 12 and kept its lock by luck of copy-paste, while
+-- confirm/remove never had one. A future redefinition that drops it
+-- fails here instead of silently drifting planned_count.
+select matches(
+  (select prosrc from pg_proc where proname = 'confirm_weekly_plan'),
+  'for update',
+  'confirm_weekly_plan: still takes the plan row lock'
+);
+select matches(
+  (select prosrc from pg_proc where proname = 'remove_planning_entry'),
+  'for update',
+  'remove_planning_entry: still takes the plan row lock'
+);
+select matches(
+  (select prosrc from pg_proc where proname = 'add_to_weekly_plan'),
+  'for update',
+  'add_to_weekly_plan: still takes the plan row lock'
+);
+select matches(
+  (select prosrc from pg_proc where proname = 'reorder_planning_entries'),
+  'for update',
+  'reorder_planning_entries: still takes the plan row lock'
 );
 
 select * from finish();
