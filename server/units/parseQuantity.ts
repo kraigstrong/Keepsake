@@ -176,6 +176,25 @@ function matchUnit(text: string): { unit: Unit; matchedLength: number } | null {
   return { unit: synonym, matchedLength };
 }
 
+// Words that only ever appear as an ingredient-specific equivalence
+// inside a parenthetical ("1 cup (2 sticks) butter"). Recognised solely
+// so that parenthetical gets stripped like any other alternate quantity,
+// and deliberately NOT added to quantityVocabulary.ts: a stick is a
+// measure of butter, not a general volume, so giving it a conversion
+// factor would let best-fit selection emit "1 stick" for an arbitrary
+// volume and would read "2 sticks celery" as 236 ml of celery. ADR-0018
+// decision 3 keeps that vocabulary closed and every factor general;
+// this list can only ever cause text to be discarded.
+const EQUIVALENCE_ONLY_UNIT_PATTERN = /^sticks?\b/i;
+
+/** matchUnit widened to the strip-only words above — for parentheticals, never for a line's own unit. */
+function matchStrippableUnit(text: string): { matchedLength: number } | null {
+  const unit = matchUnit(text);
+  if (unit) return { matchedLength: unit.matchedLength };
+  const match = EQUIVALENCE_ONLY_UNIT_PATTERN.exec(text);
+  return match ? { matchedLength: match[0].length } : null;
+}
+
 function unparsed(lineText: string): ParsedIngredientLine {
   return { lineText, quantityMin: null, quantityMax: null, unit: null, ingredientText: null };
 }
@@ -250,7 +269,7 @@ function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean):
   }
   rest = rest.replace(/^\s+/, '');
 
-  const unit = matchUnit(rest);
+  const unit = matchStrippableUnit(rest);
   if (!unit) return text;
   rest = rest.slice(unit.matchedLength);
 
@@ -261,7 +280,7 @@ function stripParentheticalAlternateUnit(text: string, hasPrimaryUnit: boolean):
     const afterAltNumber = (
       altNumber ? afterSlash.slice(altNumber.matchedLength) : afterSlash
     ).replace(/^\s+/, '');
-    const altUnit = matchUnit(afterAltNumber);
+    const altUnit = matchStrippableUnit(afterAltNumber);
     if (altUnit) {
       rest = afterAltNumber.slice(altUnit.matchedLength);
     }
