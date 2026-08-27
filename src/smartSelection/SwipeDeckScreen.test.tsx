@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
+import { Image } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as api from './api';
@@ -107,6 +108,7 @@ beforeEach(() => {
   mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(deckCardDetails);
   mockedHeroImage.getHeroImageUrls.mockResolvedValue({});
   mockedHeroImage.getCachedHeroImageUrl.mockReturnValue(null);
+  jest.spyOn(Image, 'prefetch').mockResolvedValue(true);
 });
 
 it('shows a loading state, then an error state with retry on failure', async () => {
@@ -120,6 +122,77 @@ it('shows a loading state, then an error state with retry on failure', async () 
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+});
+
+it('prefetches every resolved hero image url into the native cache before the deck renders', async () => {
+  const detailsWithImages = new Map([
+    [
+      'r1',
+      {
+        title: 'Herb Roast Chicken',
+        heroImagePath: 'household-1/chicken.jpg',
+        totalTimeMinutes: 45,
+      },
+    ],
+    ['r2', { title: 'Tacos', heroImagePath: 'household-1/tacos.jpg', totalTimeMinutes: 30 }],
+    ['r3', { title: 'Sourdough Loaf', heroImagePath: null, totalTimeMinutes: null }],
+  ]);
+  const urlByPath: Record<string, string> = {
+    'household-1/chicken.jpg': 'https://example.com/chicken.jpg',
+    'household-1/tacos.jpg': 'https://example.com/tacos.jpg',
+  };
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(detailsWithImages);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue(urlByPath);
+  mockedHeroImage.getCachedHeroImageUrl.mockImplementation((path) => urlByPath[path] ?? null);
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-card-image')).toBeTruthy());
+
+  expect(Image.prefetch).toHaveBeenCalledWith('https://example.com/chicken.jpg');
+  expect(Image.prefetch).toHaveBeenCalledWith('https://example.com/tacos.jpg');
+  expect(Image.prefetch).toHaveBeenCalledTimes(2);
+});
+
+it('only blocks on the next 6 cards’ hero images, warming the rest in the background (Codex, PR #110)', async () => {
+  const recipeIds = Array.from({ length: 7 }, (_, i) => `r${i + 1}`);
+  const pathFor = (id: string) => `household-1/${id}.jpg`;
+  const urlFor = (id: string) => `https://example.com/${id}.jpg`;
+  const detailsWithImages = new Map(
+    recipeIds.map((id) => [id, { title: id, heroImagePath: pathFor(id), totalTimeMinutes: 30 }]),
+  );
+  const urlByPath = Object.fromEntries(recipeIds.map((id) => [pathFor(id), urlFor(id)]));
+  mockedApi.getSelectionRound.mockResolvedValue(
+    testRound({
+      candidates: recipeIds.map((id, position) => ({
+        recipeId: id,
+        score: 10,
+        reasonCodes: [],
+        position,
+      })),
+    }),
+  );
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(detailsWithImages);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue(urlByPath);
+  mockedHeroImage.getCachedHeroImageUrl.mockImplementation((path) => urlByPath[path] ?? null);
+  // The 7th card falls outside the blocking window — a prefetch for it
+  // that never settles must not stop the deck from rendering.
+  jest
+    .spyOn(Image, 'prefetch')
+    .mockImplementation((url) =>
+      url === urlFor('r7') ? new Promise(() => {}) : Promise.resolve(true),
+    );
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-card-image')).toBeTruthy());
+
+  for (let i = 1; i <= 6; i++) {
+    expect(Image.prefetch).toHaveBeenCalledWith(urlFor(`r${i}`));
+  }
+  // Fired in the background rather than skipped, even though its own
+  // promise is still pending.
+  expect(Image.prefetch).toHaveBeenCalledWith(urlFor('r7'));
 });
 
 it('starts at the first card with a 0 yes count when nothing has been decided yet', async () => {

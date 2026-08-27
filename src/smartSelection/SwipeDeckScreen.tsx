@@ -59,6 +59,11 @@ const FLY_OUT_DURATION_MS = 220;
 
 const DEFAULT_TARGET_COUNT = 4;
 
+// How many upcoming cards' hero images load() blocks on prefetching,
+// rather than the whole deck (up to 24) — Codex, PR #110: awaiting all
+// of them turned a cosmetic warm-up into a long block on a slow network.
+const PREFETCH_WINDOW_SIZE = 6;
+
 /**
  * Up to two reason codes arrive per candidate, priority order; only the
  * first is shown (1e). `never_planned` means no `planning_entries` row
@@ -151,24 +156,47 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       const sortedCandidates = [...roundData.candidates].sort((a, b) => a.position - b.position);
       const details = await fetchDeckCardDetails(sortedCandidates.map((c) => c.recipeId));
 
+      // Resume position: the first candidate with no existing decision.
+      // If every candidate is already decided, start past the end so the
+      // terminal state shows immediately.
+      let startIndex = sortedCandidates.findIndex((c) => !decisions.has(c.recipeId));
+      if (startIndex === -1) startIndex = sortedCandidates.length;
+
       const heroPaths = [...details.values()]
         .map((d) => d.heroImagePath)
         .filter((path): path is string => path !== null);
       let urls: Record<string, string> = {};
       if (heroPaths.length > 0) {
-        await getHeroImageUrls(heroPaths);
+        const urlsByPath = await getHeroImageUrls(heroPaths);
+
+        // Warms the actual bytes into RN's native image cache ahead of
+        // render, same technique as src/thisWeek/prefetch.ts's
+        // prefetchThisWeek(). Only the next PREFETCH_WINDOW_SIZE cards
+        // block load(); the rest still warms, just in the background,
+        // since the user won't reach them for a while anyway.
+        const upcomingIds = new Set(
+          sortedCandidates
+            .slice(startIndex, startIndex + PREFETCH_WINDOW_SIZE)
+            .map((c) => c.recipeId),
+        );
+        const urlsFor = (matches: (recipeId: string) => boolean) =>
+          [...details.entries()]
+            .filter(([recipeId]) => matches(recipeId))
+            .map(([, detail]) => detail.heroImagePath)
+            .filter((path): path is string => path !== null)
+            .map((path) => urlsByPath[path])
+            .filter((url): url is string => url !== undefined);
+        const prefetch = (url: string) => Image.prefetch(url).catch(() => false);
+
+        await Promise.all(urlsFor((id) => upcomingIds.has(id)).map(prefetch));
+        Promise.all(urlsFor((id) => !upcomingIds.has(id)).map(prefetch)).catch(() => {});
+
         details.forEach((detail, recipeId) => {
           if (!detail.heroImagePath) return;
           const cached = getCachedHeroImageUrl(detail.heroImagePath);
           if (cached) urls = { ...urls, [recipeId]: cached };
         });
       }
-
-      // Resume position: the first candidate with no existing decision.
-      // If every candidate is already decided, start past the end so the
-      // terminal state shows immediately.
-      let startIndex = sortedCandidates.findIndex((c) => !decisions.has(c.recipeId));
-      if (startIndex === -1) startIndex = sortedCandidates.length;
 
       // Seed the undo stack from real decision history, oldest first, so
       // Undo immediately after resuming reverses the most recently
