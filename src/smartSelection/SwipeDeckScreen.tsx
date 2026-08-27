@@ -592,16 +592,26 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
           <>
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
               <View style={[styles.card, styles.cardBehindTwo]} />
-              <View style={[styles.card, styles.cardBehindOne]}>
-                {nextCandidate && (
+              <View style={[styles.card, styles.cardBehindOne]} />
+              {/* Carries cardTop's own styles so its geometry is
+                  identical — flush to the stack, same 1px border. An
+                  earlier version put this content in cardBehindOne,
+                  whose 7px inset and missing border made the reveal
+                  land low and narrow and then visibly jump when the top
+                  card recentred over it. */}
+              {nextCandidate && (
+                <View
+                  style={[styles.card, styles.cardTop, styles.cardNext]}
+                  testID="swipe-deck-next-card"
+                >
                   <CardFace
                     recipeId={nextCandidate.recipeId}
                     heroUrl={heroUrls[nextCandidate.recipeId]}
                     detail={cardDetails.get(nextCandidate.recipeId)}
                     reasonCopy={reasonCopyFor(nextCandidate.reasonCodes)}
                   />
-                )}
-              </View>
+                </View>
+              )}
               <GestureDetector gesture={panGesture}>
                 <Animated.View
                   style={[styles.card, styles.cardTop, cardAnimatedStyle]}
@@ -830,10 +840,15 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   cardTop: {
-    zIndex: 3,
+    zIndex: 4,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  // Applied after cardTop to sit directly beneath it while keeping every
+  // other cardTop property, so the two are pixel-identical.
+  cardNext: {
+    zIndex: 3,
   },
   cardImage: {
     width: '100%',
