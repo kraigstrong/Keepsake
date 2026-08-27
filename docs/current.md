@@ -20,9 +20,11 @@ Journey 3 (shared household, two-actor walkthrough) still needs a live developer
 
 ## Next action
 
-**Third live walkthrough** — nothing blocks it. Flip `FLAGS.smartMealSelection` locally for the session (never commit it), developer driving on a real device.
+**Third live walkthrough, in progress (2026-08-27)** — positive so far. One finding surfaced and already fixed: the deck's stale-hero-image flash on swipe (branch `smart-selection/prefetch-deck-hero-images`, see phase-18 history's walkthrough #3). `FLAGS.smartMealSelection` is flipped locally for the session (never commit it), developer driving on a real device.
 
-1. The three 2026-08-27 fixes, plus **"Select more"** on both the zero-yes terminal and "Your picks".
+Remaining for this walkthrough:
+
+1. **"Select more"** on both the zero-yes terminal and "Your picks".
 2. **Refill deck quality** — the one thing no test can answer. Appended candidates are scored against a pool excluding everything already in the deck, so on a small library the second batch is by definition what scored worst first time. Whether that reads as "more good options" or "the dregs" needs eyes on real cards.
 3. Then reassess the group flow, and settle whether the beta ships solo-only (`docs/roadmap.md`'s open question).
 

@@ -47,9 +47,11 @@ Two things pgTAP structurally cannot cover, stated rather than faked: lock order
 
 ## Live walkthroughs
 
-**#1, 2026-08-26** — "looks really great." One finding, logged not fixed: the deck's hero image lags a beat behind the card title, because signed URLs are fetched up front but the bytes aren't warmed into the native cache. Fix is scoped — extend `src/thisWeek/prefetch.ts`'s `Image.prefetch()` technique to the deck's hero URLs.
+**#1, 2026-08-26** — "looks really great." One finding, logged not fixed: the deck's hero image lags a beat behind the card title, because signed URLs are fetched up front but the bytes aren't warmed into the native cache. Fix is scoped — extend `src/thisWeek/prefetch.ts`'s `Image.prefetch()` technique to the deck's hero URLs. **Fixed 2026-08-27**, branch `smart-selection/prefetch-deck-hero-images` — `load()` now awaits `Image.prefetch()` for every resolved hero URL before the deck finishes loading.
 
 **#2, 2026-08-27** — full flow. Three pieces of feedback, all addressed rather than logged: "Help me choose" overlapped the global add FAB; the "That's the deck" terminal read as unfinished placeholder copy with an unclear Continue-vs-Done choice; and reaching the end short of target offered only "done". Shipped as #107 and #108.
+
+**#3, 2026-08-27** — flagged the still-open #1 finding above as distracting enough to fix now rather than defer further; no other findings from this pass yet.
 
 ## Staging
 
