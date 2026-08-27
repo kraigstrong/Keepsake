@@ -5,6 +5,7 @@ import * as api from './api';
 import type { SelectionRound } from './api';
 import * as deckCards from './deckCards';
 import { ShortlistScreen } from './ShortlistScreen';
+import { ToastProvider } from '../components/Toast';
 import { useSession } from '../session/SessionProvider';
 
 jest.mock('./api');
@@ -27,7 +28,11 @@ jest.mock(
 );
 
 function renderScreen(roundId = 'round-1') {
-  return render(<ShortlistScreen roundId={roundId} />);
+  return render(
+    <ToastProvider>
+      <ShortlistScreen roundId={roundId} />
+    </ToastProvider>,
+  );
 }
 
 const mockedApi = api as jest.Mocked<typeof api>;
@@ -37,6 +42,7 @@ const mockedUseSession = useSession as jest.Mock;
 
 const back = jest.fn();
 const push = jest.fn();
+const dismissTo = jest.fn();
 
 function testRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
   return {
@@ -74,9 +80,10 @@ const deckCardDetails = new Map([
 beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
-  mockedUseRouter.mockReturnValue({ back, push });
+  mockedUseRouter.mockReturnValue({ back, push, dismissTo });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedApi.getSelectionRound.mockResolvedValue(testRound());
+  mockedApi.cancelSelectionRound.mockResolvedValue(undefined);
   mockedApi.getMyDecisionsForRound.mockResolvedValue(
     new Map([
       ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
@@ -182,4 +189,25 @@ it('Continue navigates to the review route with the ordered, checked-only recipe
   await fireEvent.press(screen.getByTestId('shortlist-continue'));
 
   expect(push).toHaveBeenCalledWith('/smart-selection/round-1/review?recipeIds=r2,r1');
+});
+
+it('Start over cancels the round and dismisses back to This Week (developer feedback, 2026-08-27)', async () => {
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('shortlist-start-over'));
+
+  await waitFor(() => expect(mockedApi.cancelSelectionRound).toHaveBeenCalledWith('round-1'));
+  expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it('Start over shows a retryable error and stays put if cancelling fails', async () => {
+  mockedApi.cancelSelectionRound.mockRejectedValue(new Error('offline'));
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('shortlist-start-over'));
+
+  await waitFor(() => expect(screen.getByText("Couldn't start over — try again")).toBeTruthy());
+  expect(dismissTo).not.toHaveBeenCalled();
 });

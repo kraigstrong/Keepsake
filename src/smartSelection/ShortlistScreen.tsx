@@ -3,12 +3,18 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getMyDecisionsForRound, getSelectionRound, type SelectionRoundStatus } from './api';
+import {
+  cancelSelectionRound,
+  getMyDecisionsForRound,
+  getSelectionRound,
+  type SelectionRoundStatus,
+} from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
+import { useToast } from '../components/Toast';
 import { useSession } from '../session/SessionProvider';
 import { colors, spacing, typography } from '../theme/tokens';
 
@@ -36,12 +42,14 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const userId = session?.user.id ?? null;
+  const { showToast } = useToast();
 
   const [items, setItems] = useState<ShortlistItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [deckSize, setDeckSize] = useState(0);
   const [decidedCount, setDecidedCount] = useState(0);
   const [roundStatus, setRoundStatus] = useState<SelectionRoundStatus | null>(null);
+  const [isStartingOver, setIsStartingOver] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -106,6 +114,26 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
 
   function handleKeepBrowsing() {
     router.back();
+  }
+
+  // "Start over" / "pick again" (developer live-walkthrough feedback,
+  // 2026-08-27: too few picks to be worth continuing, with no way to try
+  // a fresh round short of leaving and remembering to cancel it later).
+  // Always offered here, not just when short of target — "I don't like
+  // these picks" is a legitimate reason to restart even with plenty.
+  // dismissTo, not back: this screen can be the stack's root (resumed
+  // from a ready_for_review round) or several screens deep, and a stale
+  // screen left behind would go on calling RPCs against a round that no
+  // longer exists once cancelled.
+  async function handleStartOver() {
+    setIsStartingOver(true);
+    try {
+      await cancelSelectionRound(roundId);
+      router.dismissTo('/');
+    } catch {
+      showToast("Couldn't start over — try again");
+      setIsStartingOver(false);
+    }
   }
 
   function handleContinue() {
@@ -217,6 +245,14 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
             </Text>
           </Pressable>
         )}
+        <Pressable
+          onPress={handleStartOver}
+          disabled={isStartingOver}
+          accessibilityRole="button"
+          testID="shortlist-start-over"
+        >
+          <Text style={styles.startOverText}>Start over</Text>
+        </Pressable>
         <Button
           title={`Continue with ${includedCount}`}
           onPress={handleContinue}
@@ -284,6 +320,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.accent,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  startOverText: {
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });
