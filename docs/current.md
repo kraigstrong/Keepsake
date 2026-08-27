@@ -14,9 +14,9 @@ Build history, review findings, and walkthrough notes: [`docs/history/phase-18-s
 
 ## Blocked / open follow-ups
 
-**Weekly-plan locking gap — Friends & Family Preview gate, not yet scheduled.** `apply_selection_round` locks the target plan, but `confirm_weekly_plan` and `remove_planning_entry` never take that lock, so apply is serialised against the adders and not those two. Worst case is silent: a confirm interleaving with an apply leaves a confirmed plan holding `counted = false` entries whose `planned_count` was never incremented — permanent drift in a number the ranking heuristic reads, that no user would think to report. Pre-existing since Phase 12; apply is just the first caller depending on it. Decision 2026-08-25: merge #101, fix this next rather than block.
+**Weekly-plan locking — fixed 2026-08-27 ([PR #113](https://github.com/kraigstrong/Keepsake/pull/113)); one verification gap left open.** `confirm_weekly_plan` and `remove_planning_entry` now take the plan row lock before their first read, matching the three siblings that have since Phase 12. Nothing here is still to be *built*.
 
-**Fixed 2026-08-27** — both RPCs now take the plan row lock before their first read, matching the three siblings that always did. **The concurrency behaviour itself is not empirically verified**, and that should not be quietly upgraded later: pgTAP runs a file in one transaction and cannot express a two-session race, and three attempts at a local two-session reproduction were inconclusive rather than negative — the naive "does it block?" test proves nothing, because the old `confirm_weekly_plan` blocks too, just late, at its final `update`. What is verified is that the lock is present, that behaviour is otherwise unchanged (the existing 46-test suite plus four new structural guards), and that the reasoning matches the pattern already used elsewhere. This joins Reliability's existing "verify true two-connection concurrency" item rather than closing it.
+What remains is evidence, not code, and it should not be quietly upgraded later: **the concurrency behaviour itself is not empirically verified.** pgTAP runs a file in one transaction and cannot express a two-session race, and three local reproduction attempts were inconclusive rather than negative — the naive "does it block?" test proves nothing, because the old `confirm_weekly_plan` blocks too, just late, at its final `update`, after counting from a stale snapshot. Verified instead: the lock is present, behaviour is otherwise unchanged (46 existing tests plus four new structural guards that fail if a redefinition drops a lock). This joins Reliability's existing "verify true two-connection concurrency" item rather than closing it.
 
 **Stale parsed ingredient text — decision needed, and it is what still gates the beta on the scaling bug.** Found by Codex on [PR #112](https://github.com/kraigstrong/Keepsake/pull/112), 2026-08-27, and verified against source. `parseQuantity` runs only at write time — `RecipeEditorScreen.tsx:304` and `import-recipe/index.ts:585` — and its output is persisted to `recipe_ingredients` (`quantity_min/max`, `unit`, `ingredient_text`). `src/sync/remote.ts:73-80` reads those columns verbatim and `src/recipes/scaling.ts` scales them **without ever reparsing**. So a parser fix reaches new saves and imports only; the chai loaf that prompted the report still shows `"2 cups (2 sticks) butter"` today. It self-heals if a recipe is edited and re-saved, which nobody will do deliberately.
 
@@ -32,10 +32,12 @@ Journey 3 (shared household, two-actor walkthrough) still needs a live developer
 
 ## Next action
 
-**Clearing the two Friends & Family Preview gates** (developer direction, 2026-08-27), in order:
+**Both Friends & Family Preview gates worked 2026-08-27** (developer direction). Neither needs more building; what's left on each is a developer call, both described under Blocked above:
 
-1. The `"1 cup (2 sticks)"` scaling bug — **parser fixed, gate still open.** Branch `units/stick-parenthetical-scaling` fixes `parseQuantity`, by a route neither candidate in the roadmap anticipated. But parsing happens at *write* time and the result is persisted, so **every recipe already in the database still renders the stale parenthetical** — see Blocked below. Needs a decision before the gate closes.
-2. **The weekly-plan locking gap** — a locking pass across the RPC family, not a patch to one function.
+1. `"1 cup (2 sticks)"` scaling — parser fixed ([#112](https://github.com/kraigstrong/Keepsake/pull/112)), **gate still open**: parsing happens at write time and the result is persisted, so every recipe already stored still renders the stale parenthetical. Needs a decision between backfill / reparse-on-read / accept.
+2. Weekly-plan locking — fixed ([#113](https://github.com/kraigstrong/Keepsake/pull/113)), with the concurrency evidence gap noted rather than closed.
+
+So the next thing that needs *you* is those two calls; the next thing that needs a session is below.
 
 Walkthrough #3 (2026-08-27) went well and its one finding — the deck's stale-image flash — is fixed and merged ([#110](https://github.com/kraigstrong/Keepsake/pull/110), [#111](https://github.com/kraigstrong/Keepsake/pull/111)); see the phase-18 history, which is worth reading for how the first two attempts were aimed at the wrong layer. Terminal states were judged fine as they are, with a look-and-feel pass logged to milestone 4's backlog instead.
 
