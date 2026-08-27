@@ -307,6 +307,46 @@ describe('parseQuantity — fixture corpus', () => {
       ingredientText: 'butter',
     },
 
+    // "stick" is an ingredient-specific equivalence, not a unit this
+    // codebase converts (developer report, 2026-08-23: "1 cup (2 sticks)"
+    // doubled to "2 cups (2 sticks)" because the parenthetical wasn't
+    // recognised and so was left to go stale). Stripped like any other
+    // alternate quantity — see EQUIVALENCE_ONLY_UNIT_PATTERN for why it
+    // is deliberately not in the closed vocabulary.
+    {
+      line: '1 cup (2 sticks) butter',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'cup',
+      ingredientText: 'butter',
+    },
+    {
+      line: '1/2 cup (1 stick) unsalted butter, melted',
+      quantityMin: 0.5,
+      quantityMax: 0.5,
+      unit: 'cup',
+      ingredientText: 'unsalted butter, melted',
+    },
+    {
+      line: '1 cup (2 sticks / 227 g) butter',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'cup',
+      ingredientText: 'butter',
+    },
+
+    // The counterpart that must NOT change: "stick" is only ever matched
+    // inside a parenthetical, so a line whose own quantity is in sticks
+    // still parses with no unit and scales as plain text. Admitting it to
+    // the vocabulary would instead read this as 236 ml of celery.
+    {
+      line: '2 sticks celery, finely diced',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: null,
+      ingredientText: 'sticks celery, finely diced',
+    },
+
     // Compound parenthetical annotations (found via the same 2026-08-19
     // survey as the "and" mixed-number bug, same site): a ranged
     // annotation, and a dual-unit slash annotation restating the

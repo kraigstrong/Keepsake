@@ -16,20 +16,34 @@ Build history, review findings, and walkthrough notes: [`docs/history/phase-18-s
 
 **Weekly-plan locking gap — Friends & Family Preview gate, not yet scheduled.** `apply_selection_round` locks the target plan, but `confirm_weekly_plan` and `remove_planning_entry` never take that lock, so apply is serialised against the adders and not those two. Worst case is silent: a confirm interleaving with an apply leaves a confirmed plan holding `counted = false` entries whose `planned_count` was never incremented — permanent drift in a number the ranking heuristic reads, that no user would think to report. Pre-existing since Phase 12; apply is just the first caller depending on it. Decision 2026-08-25: merge #101, fix this next rather than block.
 
+**Stale parsed ingredient text — decision needed, and it is what still gates the beta on the scaling bug.** Found by Codex on [PR #112](https://github.com/kraigstrong/Keepsake/pull/112), 2026-08-27, and verified against source. `parseQuantity` runs only at write time — `RecipeEditorScreen.tsx:304` and `import-recipe/index.ts:585` — and its output is persisted to `recipe_ingredients` (`quantity_min/max`, `unit`, `ingredient_text`). `src/sync/remote.ts:73-80` reads those columns verbatim and `src/recipes/scaling.ts` scales them **without ever reparsing**. So a parser fix reaches new saves and imports only; the chai loaf that prompted the report still shows `"2 cups (2 sticks) butter"` today. It self-heals if a recipe is edited and re-saved, which nobody will do deliberately.
+
+Three options, and this is a developer decision because it mutates stored user content:
+
+1. **Backfill migration** re-stripping affected `ingredient_text` in SQL. Reaches every existing row, but `parseQuantity` is TypeScript — SQL would re-implement a regex against real recipe text, with no way to preview per-row results before committing. Irreversible on user data.
+2. **Reparse on sync/read** in the client. No data mutation, self-correcting, but moves parsing onto a hot path it was deliberately kept off.
+3. **Accept it** and let recipes heal on next save. Cheapest; means a known-wrong number can persist for a beta tester, which is exactly what made this a gate.
+
+Not attempted autonomously: option 1 is a destructive operation over real user content and wants a human's sign-off, and options 2 and 3 change what "done" means for the gate.
+
 Journey 3 (shared household, two-actor walkthrough) still needs a live developer session.
 
 ## Next action
 
-**Third live walkthrough, in progress (2026-08-27)** — positive so far. One finding surfaced and already fixed: the deck's stale-hero-image flash on swipe (branch `smart-selection/prefetch-deck-hero-images`, see phase-18 history's walkthrough #3). `FLAGS.smartMealSelection` is flipped locally for the session (never commit it), developer driving on a real device.
+**Clearing the two Friends & Family Preview gates** (developer direction, 2026-08-27), in order:
 
-Remaining for this walkthrough:
+1. The `"1 cup (2 sticks)"` scaling bug — **parser fixed, gate still open.** Branch `units/stick-parenthetical-scaling` fixes `parseQuantity`, by a route neither candidate in the roadmap anticipated. But parsing happens at *write* time and the result is persisted, so **every recipe already in the database still renders the stale parenthetical** — see Blocked below. Needs a decision before the gate closes.
+2. **The weekly-plan locking gap** — a locking pass across the RPC family, not a patch to one function.
 
-1. **"Select more"** on both the zero-yes terminal and "Your picks".
-2. **Refill deck quality** — the one thing no test can answer. Appended candidates are scored against a pool excluding everything already in the deck, so on a small library the second batch is by definition what scored worst first time. Whether that reads as "more good options" or "the dregs" needs eyes on real cards.
-3. Then reassess the group flow, and settle whether the beta ships solo-only (`docs/roadmap.md`'s open question).
+Walkthrough #3 (2026-08-27) went well and its one finding — the deck's stale-image flash — is fixed and merged ([#110](https://github.com/kraigstrong/Keepsake/pull/110), [#111](https://github.com/kraigstrong/Keepsake/pull/111)); see the phase-18 history, which is worth reading for how the first two attempts were aimed at the wrong layer. Terminal states were judged fine as they are, with a look-and-feel pass logged to milestone 4's backlog instead.
+
+Still unanswered from that walkthrough, needing a device session rather than a decision:
+
+- **Refill deck quality** — the one thing no test can answer. Appended candidates are scored against a pool excluding everything already in the deck, so on a small library the second batch is by definition what scored worst first time. Whether that reads as "more good options" or "the dregs" needs eyes on real cards.
+- Then reassess the group flow, and **settle whether the beta ships solo-only** (`docs/roadmap.md`'s open question) — a developer decision that shapes how much of milestone 4 remains.
 
 Known and deferred, don't re-report: a lost response on "Select more" can append a second batch (no duplicates, just a longer deck) — logged in `docs/roadmap.md`'s Not-yet-triaged.
 
 **Working method worth keeping:** delegate a slice with the ADR as spec and *named required mutations*, then review the real diff and re-run the mutations independently. Four times on milestone 4 a guard was correct while no test pinned it — see the phase-18 history for the cases. A green suite is not evidence of coverage.
 
-Also queued, unrelated: five untriaged backlog entries, and the `"1 cup (2 sticks)"` scaling bug (a Friends & Family Preview gate, not urgent).
+Also queued, unrelated: five untriaged backlog entries.
