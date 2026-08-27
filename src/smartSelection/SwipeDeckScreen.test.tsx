@@ -126,7 +126,14 @@ it('shows a loading state, then an error state with retry on failure', async () 
 
 it('prefetches every resolved hero image url into the native cache before the deck renders', async () => {
   const detailsWithImages = new Map([
-    ['r1', { title: 'Herb Roast Chicken', heroImagePath: 'household-1/chicken.jpg', totalTimeMinutes: 45 }],
+    [
+      'r1',
+      {
+        title: 'Herb Roast Chicken',
+        heroImagePath: 'household-1/chicken.jpg',
+        totalTimeMinutes: 45,
+      },
+    ],
     ['r2', { title: 'Tacos', heroImagePath: 'household-1/tacos.jpg', totalTimeMinutes: 30 }],
     ['r3', { title: 'Sourdough Loaf', heroImagePath: null, totalTimeMinutes: null }],
   ]);
