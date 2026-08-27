@@ -114,6 +114,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [yesCount, setYesCount] = useState(0);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [passed, setPassed] = useState<PassedBannerState | null>(null);
+  // Count of in-flight recordSelectionDecision calls — gates the
+  // auto-navigate-to-shortlist effect below so it can't fire while the
+  // very decision that reached the end of the deck (or an earlier one)
+  // is still unconfirmed server-side (Codex, PR #107).
+  const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -213,23 +218,19 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const currentDetail = currentCandidate ? cardDetails.get(currentCandidate.recipeId) : undefined;
   const progressFraction = deckSize > 0 ? Math.min(position, deckSize) / deckSize : 0;
 
-  // Exhausting the deck with at least one yes jumps straight to the
-  // shortlist ("Your picks") — no separate "That's the deck" / "Continue
-  // with N picks" step in between (developer live-walkthrough feedback,
-  // 2026-08-26: the terminal screen's design-placeholder copy read as
-  // unfinished, and "Continue" vs. "Done for now" was unclear given both
-  // just meant "leave the deck"). `replace`, not `push`: this deck
-  // screen has nothing further to offer once the whole thing is decided,
-  // so it shouldn't linger in the stack for a back-gesture to land on —
-  // unlike the mid-deck "Review N picks" bar below, which still uses
-  // `push` because the deck is genuinely resumable from there. A zero-
-  // yes exhaustion has nothing to hand off to the shortlist, so it keeps
-  // the lightweight terminal state below instead.
+  // Exhausted deck with a pick jumps straight to the shortlist, replacing
+  // (not pushing) this now-unresumable screen; a still-resumable deck
+  // (the "Review N picks" bar below) pushes instead. Gated on
+  // pendingWriteCount === 0 so this can't fire — and strand the user on
+  // an unresumable shortlist — while the very decision that reached the
+  // end of the deck is still unconfirmed server-side (Codex, PR #107):
+  // a rejected write's own rollback in decide() below will have already
+  // pulled position back under deckSize by the time this re-evaluates.
   useEffect(() => {
-    if (atEndOfDeck && yesCount > 0) {
+    if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
     }
-  }, [atEndOfDeck, yesCount, roundId, router]);
+  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
 
   function decide(decision: SelectionDecisionValue) {
     if (!round || !currentCandidate) return;
@@ -267,13 +268,16 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // left for a future resume to reopen (`load()`'s "first candidate
     // with no decision" already handles a gap anywhere in the deck, not
     // just a contiguous prefix).
-    const writePromise = recordSelectionDecision(round.id, recipeId, decision).catch(() => {
-      setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
-      if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
-      setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
-      setPassed((current) => (current?.recipeId === recipeId ? null : current));
-      showToast("Couldn't save that decision — you'll need to redo it");
-    });
+    setPendingWriteCount((c) => c + 1);
+    const writePromise = recordSelectionDecision(round.id, recipeId, decision)
+      .catch(() => {
+        setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
+        if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
+        setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
+        setPassed((current) => (current?.recipeId === recipeId ? null : current));
+        showToast("Couldn't save that decision — you'll need to redo it");
+      })
+      .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
   }
 

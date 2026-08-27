@@ -233,11 +233,38 @@ it('exhausting the deck with at least one yes navigates straight to the shortlis
   // live-walkthrough feedback, 2026-08-26: the intermediate terminal
   // screen's placeholder-feeling copy and unclear Continue-vs-Done
   // choice were the "too many clicks" complaint).
-  await waitFor(() =>
-    expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/shortlist'),
-  );
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/shortlist'));
   // replace, not push — this deck has nothing left to resume.
   expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/shortlist'));
+});
+
+it('does not navigate away while a decision write is still pending, and does once it resolves (Codex, PR #107)', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  const resolvers: (() => void)[] = [];
+  mockedApi.recordSelectionDecision.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolvers.push(resolve);
+      }),
+  );
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  // The deck is exhausted with a yes, but none of the three writes above
+  // have resolved yet — replacing now would risk ShortlistScreen reading
+  // decisions before the server has them (Codex, PR #107).
+  expect(screen.getByTestId('swipe-deck-advancing')).toBeTruthy();
+  expect(replace).not.toHaveBeenCalled();
+
+  resolvers.forEach((resolve) => resolve());
+
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/shortlist'));
 });
 
 it('keeps Undo reachable in the terminal state, and using it returns to the deck', async () => {
