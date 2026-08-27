@@ -20,13 +20,17 @@ Journey 3 (shared household, two-actor walkthrough) still needs a live developer
 
 ## Next action
 
-**Third live walkthrough, in progress (2026-08-27)** — positive so far. One finding surfaced and already fixed: the deck's stale-hero-image flash on swipe (branch `smart-selection/prefetch-deck-hero-images`, see phase-18 history's walkthrough #3). `FLAGS.smartMealSelection` is flipped locally for the session (never commit it), developer driving on a real device.
+**Clearing the two Friends & Family Preview gates** (developer direction, 2026-08-27), in order:
 
-Remaining for this walkthrough:
+1. ~~The `"1 cup (2 sticks)"` scaling bug.~~ **Done** — branch `units/stick-parenthetical-scaling`. Fixed by a route neither candidate in the roadmap anticipated; that entry records why the recommended one was the riskier option.
+2. **The weekly-plan locking gap** — the remaining open item under Blocked below, and the next thing to pick up. A locking pass across the RPC family, not a patch to one function.
 
-1. **"Select more"** on both the zero-yes terminal and "Your picks".
-2. **Refill deck quality** — the one thing no test can answer. Appended candidates are scored against a pool excluding everything already in the deck, so on a small library the second batch is by definition what scored worst first time. Whether that reads as "more good options" or "the dregs" needs eyes on real cards.
-3. Then reassess the group flow, and settle whether the beta ships solo-only (`docs/roadmap.md`'s open question).
+Walkthrough #3 (2026-08-27) went well and its one finding — the deck's stale-image flash — is fixed and merged ([#110](https://github.com/kraigstrong/Keepsake/pull/110), [#111](https://github.com/kraigstrong/Keepsake/pull/111)); see the phase-18 history, which is worth reading for how the first two attempts were aimed at the wrong layer. Terminal states were judged fine as they are, with a look-and-feel pass logged to milestone 4's backlog instead.
+
+Still unanswered from that walkthrough, needing a device session rather than a decision:
+
+- **Refill deck quality** — the one thing no test can answer. Appended candidates are scored against a pool excluding everything already in the deck, so on a small library the second batch is by definition what scored worst first time. Whether that reads as "more good options" or "the dregs" needs eyes on real cards.
+- Then reassess the group flow, and **settle whether the beta ships solo-only** (`docs/roadmap.md`'s open question) — a developer decision that shapes how much of milestone 4 remains.
 
 Known and deferred, don't re-report: a lost response on "Select more" can append a second batch (no duplicates, just a longer deck) — logged in `docs/roadmap.md`'s Not-yet-triaged.
 
