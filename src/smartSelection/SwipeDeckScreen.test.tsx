@@ -195,6 +195,23 @@ it('only blocks on the next 6 cards’ hero images, warming the rest in the back
   expect(Image.prefetch).toHaveBeenCalledWith(urlFor('r7'));
 });
 
+it('hides the next-card preview from assistive tech (Codex, PR #111)', async () => {
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+
+  // Default queries skip accessibility-hidden subtrees, so the next
+  // recipe being unreachable here IS the assertion. The preview sits
+  // before the top card in traversal order (zIndex only affects paint),
+  // so without this a screen reader announces "Tacos" while Yes/No still
+  // decide "Herb Roast Chicken".
+  expect(screen.queryByText('Tacos')).toBeNull();
+
+  // Still rendered and visible — only hidden from assistive tech.
+  expect(screen.getByText('Tacos', { includeHiddenElements: true })).toBeTruthy();
+  expect(screen.getByTestId('swipe-deck-next-card', { includeHiddenElements: true })).toBeTruthy();
+});
+
 it('starts at the first card with a 0 yes count when nothing has been decided yet', async () => {
   renderDeck();
 

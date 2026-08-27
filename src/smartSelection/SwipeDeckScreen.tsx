@@ -263,16 +263,12 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // end of the deck is still unconfirmed server-side (Codex, PR #107):
   // a rejected write's own rollback in decide() below will have already
   // pulled position back under deckSize by the time this re-evaluates.
-  // Recentres the card only once the new one has committed. A layout
-  // effect, not the worklet that finishes the fly-out: it runs after
-  // React has rendered the incoming recipe, so the card is never on
-  // screen holding the outgoing one. Keyed on the rendered card's own
-  // identity rather than `position` so a rollback or undo that restores
-  // the same index still resets it.
-  // translateX is deliberately not a dependency: a Reanimated shared
-  // value is a stable container, and listing it makes the React compiler
-  // treat it as immutable, which then rejects every write to it here and
-  // in the gesture handlers.
+  // A layout effect, not the fly-out worklet: it must run after the
+  // incoming card has rendered. Keyed on card identity rather than
+  // `position` so an undo landing on the same index still resets.
+  // translateX is omitted from the deps deliberately — listing a shared
+  // value makes the compiler treat it as immutable and reject every
+  // write to it, here and in the gesture handlers.
   /* eslint-disable react-hooks/exhaustive-deps */
   useLayoutEffect(() => {
     translateX.value = 0;
@@ -417,15 +413,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     }
   }
 
-  // Deliberately does NOT recentre the card. translateX runs on the UI
-  // thread, so resetting it here snapped the card back to centre while
-  // it still held the outgoing recipe's content — runOnJS(decide) only
-  // reaches the JS thread a frame or more later, and React's re-render
-  // lands later still. That gap was the real stale-image flash: the old
-  // card sitting at dead centre, which neither cache warming nor keying
-  // the <Image> could touch, because both act inside a render that
-  // hasn't happened yet. The card now stays off-screen until the new
-  // one has actually committed — see the layout effect above.
+  // Must not recentre the card: this runs on the UI thread, ahead of the
+  // re-render that swaps in the next recipe, so resetting here shows the
+  // outgoing card centred. The layout effect above recentres it once the
+  // incoming card has committed.
   function finishAnimatedCommit(decision: SelectionDecisionValue) {
     'worklet';
     runOnJS(decide)(decision);
@@ -442,12 +433,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // uses to call back into JS. The rule doesn't yet recognize
   // react-native-gesture-handler's builder API as a deferred-execution
   // event handler the way it does a plain JSX prop.
-  // react-hooks/immutability is disabled alongside it for the same
-  // class of reason: once a shared value is written anywhere the
-  // compiler treats as React code (the recentring layout effect above),
-  // it infers translateX is React-owned and rejects every write to it —
-  // including these, which are ordinary Reanimated gesture handlers
-  // that have always run on the UI thread.
+  // react-hooks/immutability is disabled for the same class of reason:
+  // the layout effect's write makes the compiler treat translateX as
+  // React-owned, which then rejects these ordinary UI-thread writes.
   /* eslint-disable react-hooks/refs, react-hooks/immutability */
   const panGesture = Gesture.Pan()
     .enabled(!terminal)
@@ -593,15 +581,17 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             <View style={styles.cardStack} testID="swipe-deck-card-stack">
               <View style={[styles.card, styles.cardBehindTwo]} />
               <View style={[styles.card, styles.cardBehindOne]} />
-              {/* Carries cardTop's own styles so its geometry is
-                  identical — flush to the stack, same 1px border. An
-                  earlier version put this content in cardBehindOne,
-                  whose 7px inset and missing border made the reveal
-                  land low and narrow and then visibly jump when the top
-                  card recentred over it. */}
+              {/* Carries cardTop's own styles so the handoff is
+                  pixel-identical — flush to the stack, same 1px border.
+                  Hidden from assistive tech: it sits before the top card
+                  in traversal order (zIndex only affects paint), so a
+                  screen reader would otherwise announce the next recipe
+                  while Yes/No still decide the current one. */}
               {nextCandidate && (
                 <View
                   style={[styles.card, styles.cardTop, styles.cardNext]}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
                   testID="swipe-deck-next-card"
                 >
                   <CardFace
