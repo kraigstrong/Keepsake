@@ -84,6 +84,7 @@ beforeEach(() => {
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedApi.getSelectionRound.mockResolvedValue(testRound());
   mockedApi.cancelSelectionRound.mockResolvedValue(undefined);
+  mockedApi.refillSelectionRound.mockResolvedValue({ addedCount: 0 });
   mockedApi.getMyDecisionsForRound.mockResolvedValue(
     new Map([
       ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
@@ -167,6 +168,92 @@ it('hides "Keep browsing" once the whole deck has been decided', async () => {
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
   expect(screen.queryByTestId('shortlist-keep-browsing')).toBeNull();
+});
+
+it('shows "Select more" instead of "Keep browsing" once the whole deck has been decided and the round is still active (ADR-0027 decision 2b)', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+      ['r3', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:03.000Z' }],
+      ['r4', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:04.000Z' }],
+    ]),
+  );
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.queryByTestId('shortlist-keep-browsing')).toBeNull();
+  expect(screen.getByTestId('shortlist-select-more')).toBeTruthy();
+});
+
+it('does not show "Select more" while undecided candidates remain (mutually exclusive with "Keep browsing")', async () => {
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  expect(screen.getByTestId('shortlist-keep-browsing')).toBeTruthy();
+  expect(screen.queryByTestId('shortlist-select-more')).toBeNull();
+});
+
+it('Select more appends fresh candidates and pushes a fresh deck mount, not back()', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+      ['r3', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:03.000Z' }],
+      ['r4', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:04.000Z' }],
+    ]),
+  );
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('shortlist-select-more'));
+
+  await waitFor(() => expect(mockedApi.refillSelectionRound).toHaveBeenCalledWith('round-1'));
+  expect(push).toHaveBeenCalledWith('/smart-selection/round-1');
+  expect(back).not.toHaveBeenCalled();
+});
+
+it('Select more shows a toast and stays put when there is nothing left to add', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+      ['r3', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:03.000Z' }],
+      ['r4', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:04.000Z' }],
+    ]),
+  );
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 0 });
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('shortlist-select-more'));
+
+  await waitFor(() =>
+    expect(screen.getByText('No more recipes to suggest right now')).toBeTruthy(),
+  );
+  expect(push).not.toHaveBeenCalled();
+});
+
+it('Select more shows a retryable error and stays put if it fails', async () => {
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:01.000Z' }],
+      ['r2', { decision: 'yes' as const, decidedAt: '2026-08-26T00:00:02.000Z' }],
+      ['r3', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:03.000Z' }],
+      ['r4', { decision: 'no' as const, decidedAt: '2026-08-26T00:00:04.000Z' }],
+    ]),
+  );
+  mockedApi.refillSelectionRound.mockRejectedValueOnce(new Error('offline'));
+  renderScreen();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('shortlist-select-more'));
+
+  await waitFor(() =>
+    expect(screen.getByText("Couldn't get more suggestions — try again")).toBeTruthy(),
+  );
+  expect(push).not.toHaveBeenCalled();
 });
 
 it('hides "Keep browsing" once the round has left \'active\', even with undecided candidates remaining', async () => {
