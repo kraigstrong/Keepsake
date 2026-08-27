@@ -47,11 +47,22 @@ Two things pgTAP structurally cannot cover, stated rather than faked: lock order
 
 ## Live walkthroughs
 
-**#1, 2026-08-26** — "looks really great." One finding, logged not fixed: the deck's hero image lags a beat behind the card title, because signed URLs are fetched up front but the bytes aren't warmed into the native cache. Fix is scoped — extend `src/thisWeek/prefetch.ts`'s `Image.prefetch()` technique to the deck's hero URLs. **Fixed 2026-08-27**, branch `smart-selection/prefetch-deck-hero-images` — `load()` now awaits `Image.prefetch()` for every resolved hero URL before the deck finishes loading.
+**#1, 2026-08-26** — "looks really great." One finding, logged not fixed: the deck's hero image lags a beat behind the card title. Diagnosed at the time as cold image bytes, with a scoped fix — extend `src/thisWeek/prefetch.ts`'s `Image.prefetch()` technique to the deck. **That diagnosis was wrong**; see #3.
 
 **#2, 2026-08-27** — full flow. Three pieces of feedback, all addressed rather than logged: "Help me choose" overlapped the global add FAB; the "That's the deck" terminal read as unfinished placeholder copy with an unclear Continue-vs-Done choice; and reaching the end short of target offered only "done". Shipped as #107 and #108.
 
-**#3, 2026-08-27** — flagged the still-open #1 finding above as distracting enough to fix now rather than defer further; no other findings from this pass yet.
+**#3, 2026-08-27** — picked up #1's stale-image flash. Took four attempts, and the first three were aimed at the wrong layer ([PR #110](https://github.com/kraigstrong/Keepsake/pull/110)):
+
+1. **Prefetch the deck's hero images.** Made it faster. Flash remained.
+2. **Key the `<Image>` by recipe** — one unkeyed `<Image>` meant React reused a single native view, and RN's `<Image>` holds its old bitmap until a new source loads. Real bug, real fix, flash still remained.
+3. **The actual cause:** `finishAnimatedCommit` set `translateX = 0` on the UI thread and *then* called `runOnJS(decide)`. The card snapped back to centre still holding the outgoing recipe, because the re-render that swaps in the new one lands a frame or more later. Both earlier fixes operated inside that later render — which is exactly why they changed the flash's duration and shape without removing it. The fly-out now leaves the card off-screen and a layout effect recentres it once the incoming card has committed.
+4. Plus rendering the next candidate beneath the top card (shared `CardFace`) so the reveal shows real content — and, on the second pass, at the top card's *exact* geometry, since hosting it in the 7px-inset `cardBehindOne` made the handoff visibly jump.
+
+**Decision, 2026-08-27 (developer):** the flush handoff is the final behaviour. Restoring the stack-depth cue during a swipe — rendering the next card scaled down and animating it to full size — was offered and declined: the inset card "snapping around" was the jarring part, and a motionless, geometrically identical handoff reads better. The two inset placeholders stay as decoration for the last card in a deck. Don't reintroduce the depth animation without new feedback asking for it.
+
+**The lesson, and it is the same one as the section above:** a confident, plausible, well-written diagnosis is not evidence. #1's roadmap entry named a mechanism, a precedent, and a specific fix, and it was acted on twice before anyone read the render path or the commit worklet. What finally settled it was reading `finishAnimatedCommit` and noticing a UI-thread write ordered before a JS-thread hop. Symptom-shaped fixes that "help a bit" are a signal the mechanism is still unidentified, not that the fix needs another increment.
+
+One suppression to be aware of: writing a shared value from a layout effect makes the React compiler treat `translateX` as React-owned, so `react-hooks/immutability` is disabled alongside the pre-existing `react-hooks/refs` block covering the gesture handlers.
 
 ## Staging
 
