@@ -162,6 +162,41 @@ export async function startSelectionRound(
   return data as StartSelectionRoundResult;
 }
 
+export interface RefillSelectionRoundResult {
+  addedCount: number;
+}
+
+/**
+ * "Select more" (ADR-0027 decision 2b): appends fresh candidates to an
+ * already-`active` round's existing deck via the append branch of the
+ * select-candidates Edge Function (`roundId` present, no `mode`). Client
+ * name stays user-facing "refill" — only the RPC needed to avoid that
+ * word, to leave it free for the eventual group-flow refill_selection_
+ * round feature. Same error-unwrap shape as startSelectionRound:
+ * addedCount: 0 (no eligible recipes left) is still success, not an
+ * error the catch branch below would see.
+ */
+export async function refillSelectionRound(roundId: string): Promise<RefillSelectionRoundResult> {
+  const { data, error } = await supabase.functions.invoke('select-candidates', {
+    body: { roundId },
+  });
+
+  if (error) {
+    let specificMessage: string | undefined;
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = (await error.context.clone().json()) as { error?: string };
+        specificMessage = body.error;
+      } catch {
+        // response body wasn't JSON — fall through to the generic message
+      }
+    }
+    throw new Error(specificMessage ?? error.message);
+  }
+
+  return data as RefillSelectionRoundResult;
+}
+
 /**
  * Round + participants + deck in one call (get_selection_round is
  * SECURITY DEFINER and re-derives the caller's household itself, same
