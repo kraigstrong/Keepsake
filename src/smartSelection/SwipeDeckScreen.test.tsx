@@ -154,6 +154,47 @@ it('prefetches every resolved hero image url into the native cache before the de
   expect(Image.prefetch).toHaveBeenCalledTimes(2);
 });
 
+it('only blocks on the next 6 cards’ hero images, warming the rest in the background (Codex, PR #110)', async () => {
+  const recipeIds = Array.from({ length: 7 }, (_, i) => `r${i + 1}`);
+  const pathFor = (id: string) => `household-1/${id}.jpg`;
+  const urlFor = (id: string) => `https://example.com/${id}.jpg`;
+  const detailsWithImages = new Map(
+    recipeIds.map((id) => [id, { title: id, heroImagePath: pathFor(id), totalTimeMinutes: 30 }]),
+  );
+  const urlByPath = Object.fromEntries(recipeIds.map((id) => [pathFor(id), urlFor(id)]));
+  mockedApi.getSelectionRound.mockResolvedValue(
+    testRound({
+      candidates: recipeIds.map((id, position) => ({
+        recipeId: id,
+        score: 10,
+        reasonCodes: [],
+        position,
+      })),
+    }),
+  );
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(detailsWithImages);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue(urlByPath);
+  mockedHeroImage.getCachedHeroImageUrl.mockImplementation((path) => urlByPath[path] ?? null);
+  // The 7th card falls outside the blocking window — a prefetch for it
+  // that never settles must not stop the deck from rendering.
+  jest
+    .spyOn(Image, 'prefetch')
+    .mockImplementation((url) =>
+      url === urlFor('r7') ? new Promise(() => {}) : Promise.resolve(true),
+    );
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-card-image')).toBeTruthy());
+
+  for (let i = 1; i <= 6; i++) {
+    expect(Image.prefetch).toHaveBeenCalledWith(urlFor(`r${i}`));
+  }
+  // Fired in the background rather than skipped, even though its own
+  // promise is still pending.
+  expect(Image.prefetch).toHaveBeenCalledWith(urlFor('r7'));
+});
+
 it('starts at the first card with a 0 yes count when nothing has been decided yet', async () => {
   renderDeck();
 
