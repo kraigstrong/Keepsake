@@ -57,6 +57,7 @@ const mockedUseReducedMotion = useReducedMotion as jest.Mock;
 const back = jest.fn();
 const push = jest.fn();
 const replace = jest.fn();
+const dismissTo = jest.fn();
 
 function testRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
   return {
@@ -94,13 +95,15 @@ const deckCardDetails = new Map([
 beforeEach(() => {
   jest.clearAllMocks();
   mockLastFocusEffect = null;
-  mockedUseRouter.mockReturnValue({ back, push, replace });
+  mockedUseRouter.mockReturnValue({ back, push, replace, dismissTo });
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
   mockedUseReducedMotion.mockReturnValue(false);
   mockedApi.getSelectionRound.mockResolvedValue(testRound());
   mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map());
   mockedApi.recordSelectionDecision.mockResolvedValue(undefined);
   mockedApi.clearSelectionDecision.mockResolvedValue(undefined);
+  mockedApi.cancelSelectionRound.mockResolvedValue(undefined);
+  mockedApi.refillSelectionRound.mockResolvedValue({ addedCount: 0 });
   mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(deckCardDetails);
   mockedHeroImage.getHeroImageUrls.mockResolvedValue({});
   mockedHeroImage.getCachedHeroImageUrl.mockReturnValue(null);
@@ -210,11 +213,186 @@ it('shows a minimal terminal state with zero yeses, and Done for now returns to 
   await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
   expect(screen.getByText('No picks this round')).toBeTruthy();
   // Nothing to shortlist with zero yeses — no auto-navigation, no
-  // "Continue" — only Undo/Done for now.
+  // "Continue" — only Undo/Start over/Done for now.
   expect(replace).not.toHaveBeenCalled();
 
   await fireEvent.press(screen.getByTestId('swipe-deck-done'));
   expect(back).toHaveBeenCalled();
+});
+
+it('Start over cancels the round and dismisses the whole stack back to This Week (developer feedback, 2026-08-27)', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-start-over'));
+
+  await waitFor(() => expect(mockedApi.cancelSelectionRound).toHaveBeenCalledWith('round-1'));
+  expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it('Start over shows a retryable error and stays put if cancelling fails', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  mockedApi.cancelSelectionRound.mockRejectedValue(new Error('offline'));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-start-over'));
+
+  await waitFor(() => expect(screen.getByText("Couldn't start over — try again")).toBeTruthy());
+  expect(dismissTo).not.toHaveBeenCalled();
+});
+
+it('Select more appends fresh candidates and continues the deck in place (ADR-0027 decision 2b)', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+
+  // load()'s second call must reflect the caller's actual prior decisions
+  // (all three already 'no') and the newly appended fourth candidate —
+  // this is what makes "first undecided candidate" resume land past the
+  // old end with zero new logic in load() itself.
+  mockedApi.getMyDecisionsForRound.mockResolvedValue(
+    new Map([
+      ['r1', { decision: 'no', decidedAt: '2026-08-25T00:00:01.000Z' }],
+      ['r2', { decision: 'no', decidedAt: '2026-08-25T00:00:02.000Z' }],
+      ['r3', { decision: 'no', decidedAt: '2026-08-25T00:00:03.000Z' }],
+    ]),
+  );
+  mockedApi.getSelectionRound.mockResolvedValue(
+    testRound({
+      targetCount: 10,
+      candidates: [
+        { recipeId: 'r1', score: 10, reasonCodes: ['never_planned'], position: 0 },
+        { recipeId: 'r2', score: 8, reasonCodes: [], position: 1 },
+        { recipeId: 'r3', score: 5, reasonCodes: ['diversity'], position: 2 },
+        { recipeId: 'r4', score: 6, reasonCodes: [], position: 3 },
+      ],
+    }),
+  );
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(
+    new Map([
+      ...deckCardDetails,
+      ['r4', { title: 'Grilled Salmon', heroImagePath: null, totalTimeMinutes: 20 }],
+    ]),
+  );
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+
+  expect(mockedApi.refillSelectionRound).toHaveBeenCalledWith('round-1');
+  await waitFor(() => expect(screen.getByText('Grilled Salmon')).toBeTruthy());
+  expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull();
+  expect(screen.getByText('4 of 4')).toBeTruthy();
+});
+
+it('Select more waits for an in-flight decision write before reloading (Codex, PR #108)', async () => {
+  // The last card is swiped moments before this button is reachable, so
+  // its recordSelectionDecision is routinely still pending. Reloading
+  // then would let getMyDecisionsForRound miss that write and reopen the
+  // card as undecided, letting a second vote race the first.
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  let resolveLastWrite: (() => void) | undefined;
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+
+  // Hold only the final card's write open.
+  mockedApi.recordSelectionDecision.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveLastWrite = resolve;
+      }),
+  );
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+  // Deliberately not awaited: the handler is blocked on the pending
+  // write, so awaiting the press here would deadlock the test against
+  // the very thing it's asserting.
+  fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+  await Promise.resolve();
+
+  // The pending write gates everything — refill must not have fired yet.
+  expect(mockedApi.refillSelectionRound).not.toHaveBeenCalled();
+
+  resolveLastWrite!();
+
+  await waitFor(() => expect(mockedApi.refillSelectionRound).toHaveBeenCalledWith('round-1'));
+});
+
+it('Select more shows a toast and stays on the terminal state when there is nothing left to add', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 0 });
+  const getSelectionRoundCallsBefore = mockedApi.getSelectionRound.mock.calls.length;
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+
+  await waitFor(() =>
+    expect(screen.getByText('No more recipes to suggest right now')).toBeTruthy(),
+  );
+  expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy();
+  // addedCount: 0 must not trigger a re-load — nothing changed to reload.
+  expect(mockedApi.getSelectionRound.mock.calls.length).toBe(getSelectionRoundCallsBefore);
+});
+
+it('Select more shows a retryable error and stays on the terminal state if it fails', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+  mockedApi.refillSelectionRound.mockRejectedValueOnce(new Error('offline'));
+
+  await fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+
+  await waitFor(() =>
+    expect(screen.getByText("Couldn't get more suggestions — try again")).toBeTruthy(),
+  );
+  expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy();
 });
 
 it('exhausting the deck with at least one yes navigates straight to the shortlist, replacing the deck in the stack', async () => {

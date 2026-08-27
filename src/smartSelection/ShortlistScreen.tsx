@@ -3,12 +3,19 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getMyDecisionsForRound, getSelectionRound, type SelectionRoundStatus } from './api';
+import {
+  cancelSelectionRound,
+  getMyDecisionsForRound,
+  getSelectionRound,
+  refillSelectionRound,
+  type SelectionRoundStatus,
+} from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
+import { useToast } from '../components/Toast';
 import { useSession } from '../session/SessionProvider';
 import { colors, spacing, typography } from '../theme/tokens';
 
@@ -36,12 +43,15 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const userId = session?.user.id ?? null;
+  const { showToast } = useToast();
 
   const [items, setItems] = useState<ShortlistItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [deckSize, setDeckSize] = useState(0);
   const [decidedCount, setDecidedCount] = useState(0);
   const [roundStatus, setRoundStatus] = useState<SelectionRoundStatus | null>(null);
+  const [isStartingOver, setIsStartingOver] = useState(false);
+  const [isSelectingMore, setIsSelectingMore] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -108,6 +118,50 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
     router.back();
   }
 
+  // "Select more" (ADR-0027 decision 2b): shown in the footer slot
+  // canKeepBrowsing leaves empty — the two are mutually exclusive by
+  // construction (one requires remainingCount > 0, the other === 0).
+  // router.push to a fresh deck-route mount, not router.back(): this
+  // screen is reachable multiple ways (mid-deck Review bar push, full-
+  // exhaustion replace), and back() in some of those paths would land on
+  // a stale in-memory deck screen instance rather than one that re-runs
+  // load().
+  async function handleSelectMore() {
+    setIsSelectingMore(true);
+    try {
+      const { addedCount } = await refillSelectionRound(roundId);
+      if (addedCount === 0) {
+        showToast('No more recipes to suggest right now');
+        setIsSelectingMore(false);
+        return;
+      }
+      router.push(`/smart-selection/${roundId}`);
+    } catch {
+      showToast("Couldn't get more suggestions — try again");
+      setIsSelectingMore(false);
+    }
+  }
+
+  // "Start over" / "pick again" (developer live-walkthrough feedback,
+  // 2026-08-27: too few picks to be worth continuing, with no way to try
+  // a fresh round short of leaving and remembering to cancel it later).
+  // Always offered here, not just when short of target — "I don't like
+  // these picks" is a legitimate reason to restart even with plenty.
+  // dismissTo, not back: this screen can be the stack's root (resumed
+  // from a ready_for_review round) or several screens deep, and a stale
+  // screen left behind would go on calling RPCs against a round that no
+  // longer exists once cancelled.
+  async function handleStartOver() {
+    setIsStartingOver(true);
+    try {
+      await cancelSelectionRound(roundId);
+      router.dismissTo('/');
+    } catch {
+      showToast("Couldn't start over — try again");
+      setIsStartingOver(false);
+    }
+  }
+
   function handleContinue() {
     const includedIds = (items ?? []).filter((item) => item.included).map((item) => item.recipeId);
     // Serialized route param (comma-joined UUIDs) — no existing precedent
@@ -145,6 +199,10 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
   // Offering "keep browsing" into a deck that will silently reject every
   // decision write would just be a second dead end.
   const canKeepBrowsing = remainingCount > 0 && roundStatus === 'active';
+  // Deck fully swiped, round still open — the mutually exclusive
+  // counterpart to canKeepBrowsing above (one requires remainingCount >
+  // 0, the other === 0), so exactly one of the two ever renders.
+  const canSelectMore = remainingCount === 0 && roundStatus === 'active';
 
   return (
     <View style={styles.screen} testID="shortlist-screen">
@@ -217,6 +275,24 @@ export function ShortlistScreen({ roundId }: ShortlistScreenProps) {
             </Text>
           </Pressable>
         )}
+        {canSelectMore && (
+          <Pressable
+            onPress={handleSelectMore}
+            disabled={isSelectingMore}
+            accessibilityRole="button"
+            testID="shortlist-select-more"
+          >
+            <Text style={styles.keepBrowsingText}>Select more</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={handleStartOver}
+          disabled={isStartingOver || isSelectingMore}
+          accessibilityRole="button"
+          testID="shortlist-start-over"
+        >
+          <Text style={styles.startOverText}>Start over</Text>
+        </Pressable>
         <Button
           title={`Continue with ${includedCount}`}
           onPress={handleContinue}
@@ -284,6 +360,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.accent,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  startOverText: {
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

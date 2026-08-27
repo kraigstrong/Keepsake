@@ -59,17 +59,58 @@ interface RequestBody {
   participantUserIds?: unknown;
   targetCount?: unknown;
   closesAt?: unknown;
+  roundId?: unknown;
 }
 
-interface ParsedRequest {
+interface ParsedCreateRequest {
+  kind: 'create';
   mode: 'solo' | 'group';
   participantUserIds: string[];
   targetCount: number;
   closesAt: string | null;
 }
 
+interface ParsedAppendRequest {
+  kind: 'append';
+  roundId: string;
+  /** Undefined means "use the round's own target_count" (see the append branch below). */
+  targetCount: number | undefined;
+}
+
+type ParsedRequest = ParsedCreateRequest | ParsedAppendRequest;
+
 /** Returns a jsonResponse to send back on a validation failure, else the parsed request. */
 function parseRequestBody(body: RequestBody): ParsedRequest | Response {
+  if (body.roundId !== undefined) {
+    if (typeof body.roundId !== 'string') {
+      return jsonResponse({ error: '"roundId" must be a string' }, 400);
+    }
+    if (
+      body.mode !== undefined ||
+      body.participantUserIds !== undefined ||
+      body.closesAt !== undefined
+    ) {
+      return jsonResponse(
+        { error: '"roundId" cannot be combined with "mode", "participantUserIds", or "closesAt"' },
+        400,
+      );
+    }
+
+    let appendTargetCount: number | undefined;
+    if (body.targetCount !== undefined) {
+      if (
+        typeof body.targetCount !== 'number' ||
+        !Number.isInteger(body.targetCount) ||
+        body.targetCount <= 0
+      ) {
+        return jsonResponse({ error: '"targetCount" must be a positive integer' }, 400);
+      }
+      appendTargetCount = body.targetCount;
+    }
+
+    return { kind: 'append', roundId: body.roundId, targetCount: appendTargetCount };
+  }
+
   if (body.mode !== 'solo' && body.mode !== 'group') {
     return jsonResponse({ error: '"mode" must be "solo" or "group"' }, 400);
   }
@@ -105,7 +146,7 @@ function parseRequestBody(body: RequestBody): ParsedRequest | Response {
     closesAt = body.closesAt;
   }
 
-  return { mode: body.mode, participantUserIds, targetCount, closesAt };
+  return { kind: 'create', mode: body.mode, participantUserIds, targetCount, closesAt };
 }
 
 /**
@@ -151,44 +192,169 @@ async function fetchEligibleRecipeIds(supabase: SupabaseClient): Promise<string[
   return (data ?? []).map((r) => (r as { id: string }).id);
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: CORS_HEADERS });
+/** Append-mode's extra pool exclusion, alongside This Week's — a recipe already in this round's deck must not be re-suggested. */
+async function fetchExistingRoundCandidateRecipeIds(
+  supabase: SupabaseClient,
+  roundId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('selection_round_candidates')
+    .select('recipe_id')
+    .eq('round_id', roundId);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => (r as { recipe_id: string }).recipe_id));
+}
+
+interface RoundStatusRow {
+  id: string;
+  status: string;
+  target_count: number | null;
+  candidate_strategy_version: string | null;
+}
+
+/**
+ * Append mode (ADR-0027 decision 2b): pulls fresh candidates into an
+ * already-`active` round's existing deck, on top of picks already made.
+ * Reuses create mode's exact collaborators — the pool/This-Week
+ * exclusion, buildCandidateSnapshots/fetchThisWeekTagsAndCategoryKeys/
+ * scoreCandidates — rather than duplicating them. Unlike create mode,
+ * there's nothing to claim: the round already exists, so this reads it
+ * with a plain RLS-scoped select (not create_selection_round) and calls
+ * append_selection_round_candidates instead of finalize.
+ */
+async function handleAppendRequest(
+  supabase: SupabaseClient,
+  parsed: ParsedAppendRequest,
+): Promise<Response> {
+  const { roundId } = parsed;
+
+  const { data: round, error: roundError } = await supabase
+    .from('selection_rounds')
+    .select('id, status, target_count, candidate_strategy_version')
+    .eq('id', roundId)
+    .maybeSingle();
+  if (roundError) {
+    return jsonResponse({ error: roundError.message }, 502);
   }
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
+  if (!round) {
+    return jsonResponse({ error: 'selection round not found' }, 404);
   }
 
-  const authorization = req.headers.get('Authorization');
-  if (!authorization) {
-    return jsonResponse({ error: 'Missing Authorization header' }, 401);
+  const {
+    status,
+    target_count: roundTargetCount,
+    candidate_strategy_version: roundStrategyVersion,
+  } = round as RoundStatusRow;
+  // Defense-in-depth before spending a scoring pass — append_selection_
+  // round_candidates enforces this same guard server-side regardless.
+  // No mode check: `active` is "nothing revealed yet" for solo and group
+  // alike (ADR-0027 decision 2b).
+  if (status !== 'active') {
+    return jsonResponse({ error: 'selection round is not active' }, 409);
   }
 
-  let parsed: ParsedRequest;
+  // Refuse rather than silently mix scorers (Codex, PR #108). A round
+  // that stays active across a strategy deployment would otherwise get
+  // an appended batch from the new scorer while still recording the old
+  // version — a deck that is half one experiment and half another, with
+  // nothing recording that it happened. Only reachable once a second
+  // version actually exists (STRATEGY_VERSION is the sole one today);
+  // failing loudly then beats discovering it in the analysis later. The
+  // user's recovery is Start over, which builds a fresh single-version
+  // deck.
+  if (roundStrategyVersion !== null && roundStrategyVersion !== STRATEGY_VERSION) {
+    return jsonResponse(
+      {
+        error: `selection round was built with ${roundStrategyVersion}, which this deployment no longer serves`,
+        roundId,
+      },
+      409,
+    );
+  }
+
+  // Reuses the round's own strategy — an explicit targetCount overrides
+  // for this append only, but omitting it must not quietly resize the
+  // deck's target to DEFAULT_TARGET_COUNT.
+  const targetCount = parsed.targetCount ?? roundTargetCount ?? DEFAULT_TARGET_COUNT;
+
+  let candidateRecipeIds: string[];
+  let thisWeekRecipeIds: Set<string>;
   try {
-    const json = await req.json();
-    // A bare JSON literal (null, "x", 3, an array) parses without
-    // throwing, but would then throw inside parseRequestBody on its
-    // first property access, landing in the catch below with a
-    // misleading "not valid JSON" message for a body that was valid
-    // JSON, just not an object.
-    if (typeof json !== 'object' || json === null || Array.isArray(json)) {
-      return jsonResponse({ error: 'Request body must be a JSON object' }, 400);
-    }
-    const result = parseRequestBody(json as RequestBody);
-    if (result instanceof Response) return result;
-    parsed = result;
-  } catch {
-    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+    const [eligibleRecipeIds, fetchedThisWeekRecipeIds, existingRoundCandidateRecipeIds] =
+      await Promise.all([
+        fetchEligibleRecipeIds(supabase),
+        fetchCurrentThisWeekRecipeIds(supabase),
+        fetchExistingRoundCandidateRecipeIds(supabase, roundId),
+      ]);
+    thisWeekRecipeIds = fetchedThisWeekRecipeIds;
+    candidateRecipeIds = eligibleRecipeIds.filter(
+      (id) => !thisWeekRecipeIds.has(id) && !existingRoundCandidateRecipeIds.has(id),
+    );
+  } catch (error) {
+    return jsonResponse(
+      { error: `Candidate generation failed: ${errorMessage(error)}`, roundId },
+      502,
+    );
   }
 
-  // Caller's own JWT, never service-role (ADR-0015/ADR-0027 decision
-  // 5) — RLS applies to every read/RPC call below exactly as it would
-  // for any other client request.
-  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: authorization } },
-  });
+  // Empty pool after exclusion is a normal 200, not an error — the crux
+  // of the "small library exhausted" case this mechanism exists for,
+  // distinct from create mode's 422 for a genuinely broken brand-new
+  // round (an append leaves an already-usable deck exactly as it was).
+  if (candidateRecipeIds.length === 0) {
+    return jsonResponse({ roundId, addedCount: 0 }, 200);
+  }
 
+  let candidates: { recipe_id: string; score: number; reason_codes: string[] }[];
+  try {
+    const [candidateSnapshots, thisWeekContext] = await Promise.all([
+      buildCandidateSnapshots(supabase, candidateRecipeIds, roundId),
+      fetchThisWeekTagsAndCategoryKeys(supabase, [...thisWeekRecipeIds]),
+    ]);
+
+    const ranked = scoreCandidates({
+      roundId,
+      now: new Date(),
+      targetCount,
+      candidates: candidateSnapshots,
+      thisWeekTags: thisWeekContext.tags,
+      thisWeekCategoryKeys: thisWeekContext.categoryKeys,
+    });
+
+    candidates = ranked.map((r) => ({
+      recipe_id: r.recipeId,
+      score: r.score,
+      reason_codes: r.reasonCodes,
+    }));
+  } catch (error) {
+    return jsonResponse(
+      { error: `Candidate scoring failed: ${errorMessage(error)}`, roundId },
+      502,
+    );
+  }
+
+  const { data: appended, error: appendError } = await supabase
+    .rpc('append_selection_round_candidates', { round_id: roundId, candidates })
+    .single();
+
+  if (appendError || !appended) {
+    const message = appendError?.message ?? 'Could not append candidates to the selection round';
+    const status = /not found|not active/.test(message) ? 409 : 502;
+    return jsonResponse({ error: message, roundId }, status);
+  }
+
+  return jsonResponse({ roundId, addedCount: candidates.length }, 200);
+}
+
+/**
+ * Create mode (ADR-0027 decision 5): the two-commit round-creation path
+ * — create_selection_round, score in between, then finalize_selection_
+ * round_candidates.
+ */
+async function handleCreateRequest(
+  supabase: SupabaseClient,
+  parsed: ParsedCreateRequest,
+): Promise<Response> {
   // Step 1: claim a pending round (ADR-0027 decision 1a) — born
   // pending_candidates, recoverable by retry if anything below fails.
   const { data: created, error: createError } = await supabase
@@ -333,4 +499,47 @@ Deno.serve(async (req: Request) => {
   }
 
   return jsonResponse({ roundId, candidateCount: candidates.length }, 200);
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: CORS_HEADERS });
+  }
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405);
+  }
+
+  const authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return jsonResponse({ error: 'Missing Authorization header' }, 401);
+  }
+
+  let parsed: ParsedRequest;
+  try {
+    const json = await req.json();
+    // A bare JSON literal (null, "x", 3, an array) parses without
+    // throwing, but would then throw inside parseRequestBody on its
+    // first property access, landing in the catch below with a
+    // misleading "not valid JSON" message for a body that was valid
+    // JSON, just not an object.
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+      return jsonResponse({ error: 'Request body must be a JSON object' }, 400);
+    }
+    const result = parseRequestBody(json as RequestBody);
+    if (result instanceof Response) return result;
+    parsed = result;
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+
+  // Caller's own JWT, never service-role (ADR-0015/ADR-0027 decision
+  // 5) — RLS applies to every read/RPC call below exactly as it would
+  // for any other client request.
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authorization } },
+  });
+
+  return parsed.kind === 'append'
+    ? handleAppendRequest(supabase, parsed)
+    : handleCreateRequest(supabase, parsed);
 });

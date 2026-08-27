@@ -12,10 +12,12 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  cancelSelectionRound,
   clearSelectionDecision,
   getMyDecisionsForRound,
   getSelectionRound,
   recordSelectionDecision,
+  refillSelectionRound,
   type SelectionDecisionRecord,
   type SelectionDecisionValue,
   type SelectionRound,
@@ -119,6 +121,8 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // very decision that reached the end of the deck (or an earlier one)
   // is still unconfirmed server-side (Codex, PR #107).
   const [pendingWriteCount, setPendingWriteCount] = useState(0);
+  const [isStartingOver, setIsStartingOver] = useState(false);
+  const [isSelectingMore, setIsSelectingMore] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -308,6 +312,59 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     });
   }
 
+  // "Start over" / "pick again" (developer live-walkthrough feedback,
+  // 2026-08-27: reaching the end of the deck with too few (or zero)
+  // yeses left no way to try a fresh round short of leaving and hoping
+  // to remember to cancel it). Cancelling frees the household's
+  // one-round-at-a-time slot so a later startSelectionRound isn't
+  // rejected by create_selection_round's existing-round check.
+  // dismissTo, not back — this can be reached with the deck as the
+  // stack's root or several screens deep (resumed from a ready_for_review
+  // round via the shortlist), and a stale screen left behind would go on
+  // calling RPCs against a round that no longer exists.
+  async function handleStartOver() {
+    setIsStartingOver(true);
+    try {
+      await cancelSelectionRound(roundId);
+      router.dismissTo('/');
+    } catch {
+      showToast("Couldn't start over — try again");
+      setIsStartingOver(false);
+    }
+  }
+
+  // "Select more" (ADR-0027 decision 2b, developer live-walkthrough
+  // feedback: a small library or unlucky heuristic can exhaust the deck
+  // before target_count yeses). Re-runs load() in place rather than
+  // navigating — load()'s existing "first undecided candidate" resume
+  // logic naturally lands past the old end once round.candidates is
+  // longer, so a fresh append falls out of `terminal` with no new logic
+  // needed there.
+  async function handleSelectMore() {
+    setIsSelectingMore(true);
+    try {
+      // Settle every in-flight decision write before reloading (same
+      // reasoning as handleUndo's per-card await, and the same race the
+      // auto-navigate effect above guards with pendingWriteCount —
+      // Codex, PR #108). The last card is typically swiped moments
+      // before this button is reachable, so without this load()'s
+      // getMyDecisionsForRound can miss that write, reopen the card as
+      // undecided, and let a second vote race the first.
+      await Promise.allSettled([...pendingWritesRef.current.values()]);
+
+      const { addedCount } = await refillSelectionRound(roundId);
+      if (addedCount === 0) {
+        showToast('No more recipes to suggest right now');
+      } else {
+        await load();
+      }
+    } catch {
+      showToast("Couldn't get more suggestions — try again");
+    } finally {
+      setIsSelectingMore(false);
+    }
+  }
+
   function finishAnimatedCommit(decision: SelectionDecisionValue) {
     'worklet';
     translateX.value = 0;
@@ -424,17 +481,42 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
           ) : (
             <View style={styles.terminal} testID="swipe-deck-terminal">
               <Text style={styles.terminalTitle}>No picks this round</Text>
-              {/* A mistaken last 'no' must stay reversible (1d, Codex PR
-                  #104) — handleUndo un-terminals correctly (position
-                  drops back under deckSize, atEndOfDeck follows). */}
-              <UndoControl
+              {/* A real Button here, not the compact controlsRow-style
+                  UndoControl — that reads fine grouped next to Yes/No in
+                  a row, but alone in this centered empty state it looked
+                  like a stray floating link (developer live-walkthrough
+                  feedback, 2026-08-27). A mistaken last 'no' must still
+                  stay reversible (1d, Codex PR #104) — handleUndo
+                  un-terminals correctly (position drops back under
+                  deckSize, atEndOfDeck follows). */}
+              <Button
+                title="Undo last decision"
                 onPress={handleUndo}
                 disabled={undoStack.length === 0}
+                variant="secondary"
                 testID="swipe-deck-terminal-undo"
+              />
+              {/* New primary action (developer live-walkthrough feedback,
+                  2026-08-27: a small library or unlucky heuristic can
+                  exhaust the deck before target_count yeses) — ahead of
+                  Start over, which stays but is now de-emphasized. */}
+              <Button
+                title="Select more"
+                onPress={handleSelectMore}
+                disabled={isSelectingMore || isStartingOver}
+                testID="swipe-deck-select-more"
+              />
+              <Button
+                title="Start over"
+                onPress={handleStartOver}
+                disabled={isStartingOver || isSelectingMore}
+                variant="secondary"
+                testID="swipe-deck-start-over"
               />
               <Button
                 title="Done for now"
                 onPress={() => router.back()}
+                disabled={isSelectingMore}
                 variant="secondary"
                 testID="swipe-deck-done"
               />
