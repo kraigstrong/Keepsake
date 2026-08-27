@@ -156,7 +156,21 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         .filter((path): path is string => path !== null);
       let urls: Record<string, string> = {};
       if (heroPaths.length > 0) {
-        await getHeroImageUrls(heroPaths);
+        const urlsByPath = await getHeroImageUrls(heroPaths);
+        // Warms the actual bytes into RN's native image cache ahead of
+        // render — same technique and reasoning as
+        // src/thisWeek/prefetch.ts's prefetchThisWeek(). Without this,
+        // resolving the signed URL only gets the string ready; <Image>
+        // still makes its own network fetch + decode the first time a
+        // given uri renders, which is what showed the previous card's
+        // photo for a beat after a swipe (developer live-walkthrough
+        // feedback, 2026-08-27). Awaited here rather than fired in the
+        // background because the deck (capped at 24 candidates) is
+        // already behind this screen's own "Setting up your deck…"
+        // loading state, so there's no earlier point to start it from.
+        await Promise.all(
+          Object.values(urlsByPath).map((url) => Image.prefetch(url).catch(() => false)),
+        );
         details.forEach((detail, recipeId) => {
           if (!detail.heroImagePath) return;
           const cached = getCachedHeroImageUrl(detail.heroImagePath);

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
+import { Image } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as api from './api';
@@ -107,6 +108,7 @@ beforeEach(() => {
   mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(deckCardDetails);
   mockedHeroImage.getHeroImageUrls.mockResolvedValue({});
   mockedHeroImage.getCachedHeroImageUrl.mockReturnValue(null);
+  jest.spyOn(Image, 'prefetch').mockResolvedValue(true);
 });
 
 it('shows a loading state, then an error state with retry on failure', async () => {
@@ -120,6 +122,29 @@ it('shows a loading state, then an error state with retry on failure', async () 
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+});
+
+it('prefetches every resolved hero image url into the native cache before the deck renders', async () => {
+  const detailsWithImages = new Map([
+    ['r1', { title: 'Herb Roast Chicken', heroImagePath: 'household-1/chicken.jpg', totalTimeMinutes: 45 }],
+    ['r2', { title: 'Tacos', heroImagePath: 'household-1/tacos.jpg', totalTimeMinutes: 30 }],
+    ['r3', { title: 'Sourdough Loaf', heroImagePath: null, totalTimeMinutes: null }],
+  ]);
+  const urlByPath: Record<string, string> = {
+    'household-1/chicken.jpg': 'https://example.com/chicken.jpg',
+    'household-1/tacos.jpg': 'https://example.com/tacos.jpg',
+  };
+  mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(detailsWithImages);
+  mockedHeroImage.getHeroImageUrls.mockResolvedValue(urlByPath);
+  mockedHeroImage.getCachedHeroImageUrl.mockImplementation((path) => urlByPath[path] ?? null);
+
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-card-image')).toBeTruthy());
+
+  expect(Image.prefetch).toHaveBeenCalledWith('https://example.com/chicken.jpg');
+  expect(Image.prefetch).toHaveBeenCalledWith('https://example.com/tacos.jpg');
+  expect(Image.prefetch).toHaveBeenCalledTimes(2);
 });
 
 it('starts at the first card with a 0 yes count when nothing has been decided yet', async () => {
