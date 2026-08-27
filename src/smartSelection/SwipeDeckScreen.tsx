@@ -343,6 +343,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   async function handleSelectMore() {
     setIsSelectingMore(true);
     try {
+      // Settle every in-flight decision write before reloading (same
+      // reasoning as handleUndo's per-card await, and the same race the
+      // auto-navigate effect above guards with pendingWriteCount —
+      // Codex, PR #108). The last card is typically swiped moments
+      // before this button is reachable, so without this load()'s
+      // getMyDecisionsForRound can miss that write, reopen the card as
+      // undecided, and let a second vote race the first.
+      await Promise.allSettled([...pendingWritesRef.current.values()]);
+
       const { addedCount } = await refillSelectionRound(roundId);
       if (addedCount === 0) {
         showToast('No more recipes to suggest right now');

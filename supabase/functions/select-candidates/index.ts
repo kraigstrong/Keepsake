@@ -209,6 +209,7 @@ interface RoundStatusRow {
   id: string;
   status: string;
   target_count: number | null;
+  candidate_strategy_version: string | null;
 }
 
 /**
@@ -229,7 +230,7 @@ async function handleAppendRequest(
 
   const { data: round, error: roundError } = await supabase
     .from('selection_rounds')
-    .select('id, status, target_count')
+    .select('id, status, target_count, candidate_strategy_version')
     .eq('id', roundId)
     .maybeSingle();
   if (roundError) {
@@ -239,13 +240,36 @@ async function handleAppendRequest(
     return jsonResponse({ error: 'selection round not found' }, 404);
   }
 
-  const { status, target_count: roundTargetCount } = round as RoundStatusRow;
+  const {
+    status,
+    target_count: roundTargetCount,
+    candidate_strategy_version: roundStrategyVersion,
+  } = round as RoundStatusRow;
   // Defense-in-depth before spending a scoring pass — append_selection_
   // round_candidates enforces this same guard server-side regardless.
   // No mode check: `active` is "nothing revealed yet" for solo and group
   // alike (ADR-0027 decision 2b).
   if (status !== 'active') {
     return jsonResponse({ error: 'selection round is not active' }, 409);
+  }
+
+  // Refuse rather than silently mix scorers (Codex, PR #108). A round
+  // that stays active across a strategy deployment would otherwise get
+  // an appended batch from the new scorer while still recording the old
+  // version — a deck that is half one experiment and half another, with
+  // nothing recording that it happened. Only reachable once a second
+  // version actually exists (STRATEGY_VERSION is the sole one today);
+  // failing loudly then beats discovering it in the analysis later. The
+  // user's recovery is Start over, which builds a fresh single-version
+  // deck.
+  if (roundStrategyVersion !== null && roundStrategyVersion !== STRATEGY_VERSION) {
+    return jsonResponse(
+      {
+        error: `selection round was built with ${roundStrategyVersion}, which this deployment no longer serves`,
+        roundId,
+      },
+      409,
+    );
   }
 
   // Reuses the round's own strategy — an explicit targetCount overrides

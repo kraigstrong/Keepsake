@@ -308,6 +308,46 @@ it('Select more appends fresh candidates and continues the deck in place (ADR-00
   expect(screen.getByText('4 of 4')).toBeTruthy();
 });
 
+it('Select more waits for an in-flight decision write before reloading (Codex, PR #108)', async () => {
+  // The last card is swiped moments before this button is reachable, so
+  // its recordSelectionDecision is routinely still pending. Reloading
+  // then would let getMyDecisionsForRound miss that write and reopen the
+  // card as undecided, letting a second vote race the first.
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  let resolveLastWrite: (() => void) | undefined;
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+
+  // Hold only the final card's write open.
+  mockedApi.recordSelectionDecision.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveLastWrite = resolve;
+      }),
+  );
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+  // Deliberately not awaited: the handler is blocked on the pending
+  // write, so awaiting the press here would deadlock the test against
+  // the very thing it's asserting.
+  fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+  await Promise.resolve();
+
+  // The pending write gates everything — refill must not have fired yet.
+  expect(mockedApi.refillSelectionRound).not.toHaveBeenCalled();
+
+  resolveLastWrite!();
+
+  await waitFor(() => expect(mockedApi.refillSelectionRound).toHaveBeenCalledWith('round-1'));
+});
+
 it('Select more shows a toast and stays on the terminal state when there is nothing left to add', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
   renderDeck();
