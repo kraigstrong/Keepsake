@@ -562,7 +562,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                 >
                   {heroUrl ? (
                     <>
+                      {/* Keyed by recipe so advancing a card mounts a
+                          fresh native image view. Without the key React
+                          reuses one view, and RN's <Image> keeps painting
+                          its old bitmap until the new source finishes
+                          loading — so the title updated instantly while
+                          the previous card's photo stayed put, which no
+                          amount of cache warming can close (PR #110). */}
                       <Image
+                        key={currentCandidate?.recipeId}
                         source={{ uri: heroUrl }}
                         style={styles.cardImage}
                         testID="swipe-deck-card-image"
