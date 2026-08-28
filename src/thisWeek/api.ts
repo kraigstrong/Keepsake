@@ -1,3 +1,4 @@
+import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 import { currentWeekKey } from './weekKey';
 
@@ -126,6 +127,9 @@ export async function removeFromThisWeek(entryId: string): Promise<void> {
 export async function confirmThisWeek(planId: string): Promise<void> {
   const { error } = await supabase.rpc('confirm_weekly_plan', { plan_id: planId });
   if (error) throw new Error(error.message);
+  // After the throw, so this counts plans actually confirmed rather than
+  // attempts — same placement as import_completed in src/import/api.ts.
+  trackEvent('weekly_plan_confirmed');
 }
 
 export async function reopenThisWeek(planId: string): Promise<void> {

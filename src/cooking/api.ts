@@ -1,3 +1,4 @@
+import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
 export interface CookingEvent {
@@ -68,4 +69,10 @@ export async function recordCookingEvent(input: RecordCookingEventInput): Promis
     client_event_id_param: input.clientEventId,
   });
   if (error) throw new Error(error.message);
+  // Fires on the outbox's successful replay too, which is correct: the
+  // RPC is idempotent on clientEventId, so a replayed event records once
+  // server-side. A retry that reaches here did commit exactly one cook.
+  // hasNote is a boolean — the note itself is exactly the content PRD
+  // §30 forbids in analytics.
+  trackEvent('cooking_completed', { hasNote: input.note != null && input.note.length > 0 });
 }

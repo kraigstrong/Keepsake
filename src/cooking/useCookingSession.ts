@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { clearCookingSession, getCookingSession, saveCookingSession } from './checklistState';
 import { getDatabase } from '../db/database';
 import { useHousehold } from '../household/HouseholdProvider';
+import { trackEvent } from '../observability';
 import { fetchRecipe, type Recipe } from '../recipes/api';
 import { readLocalRecipe } from '../sync/offlineRecipes';
 
@@ -50,6 +51,19 @@ export function useCookingSession(recipeId: string): UseCookingSessionResult {
   useEffect(() => {
     checkedInstructionKeysRef.current = checkedInstructionKeys;
   }, [checkedInstructionKeys]);
+
+  // The one selection/cooking event with no API call behind it: opening
+  // Cooking Mode is a screen event. Keyed on recipeId rather than a bare
+  // flag so navigating to a different recipe's Cooking Mode counts
+  // again, while a re-render or a refetch of the same recipe does not.
+  // Pairs with cooking_completed in api.ts — the gap between them is the
+  // signal (opened Cooking Mode, never recorded a cook).
+  const startedForRecipeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (startedForRecipeIdRef.current === recipeId) return;
+    startedForRecipeIdRef.current = recipeId;
+    trackEvent('cooking_started');
+  }, [recipeId]);
 
   useEffect(() => {
     let cancelled = false;

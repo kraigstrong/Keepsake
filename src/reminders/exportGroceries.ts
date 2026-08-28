@@ -1,5 +1,6 @@
 import { addGroceryReminder, getActiveReminderIds, getOwnedGroceryListId } from './reminders';
 import { getExportedItems, recordExport } from './exportRecords';
+import { trackEvent } from '../observability';
 import type { LocalDb } from '../sync/local';
 
 /**
@@ -128,6 +129,16 @@ export async function exportGroceriesToReminders(
     completed += 1;
     onProgress?.(completed, params.items.length);
   }
+
+  // All four buckets, because a partial export is the interesting case
+  // and reporting only successes would hide it. skipped is expected
+  // (already-exported items), not a failure.
+  trackEvent('grocery_list_exported', {
+    succeeded: outcome.succeeded.length,
+    skipped: outcome.skipped.length,
+    partial: outcome.partial.length,
+    failed: outcome.failed.length,
+  });
 
   return outcome;
 }

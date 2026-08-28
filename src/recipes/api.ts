@@ -1,4 +1,5 @@
 import type { ParsedIngredientLine } from '../../server/units/parseQuantity';
+import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
 export interface RecipeSummary {
@@ -275,6 +276,10 @@ export async function saveRecipe(payload: RecipeSavePayload): Promise<{ id: stri
     .single();
 
   if (error) throw error;
+  // isNew distinguishes creating a recipe from editing one — the former
+  // is the activation signal, the latter engagement. A boolean, not the
+  // id: no recipe identity in analytics (PRD §30, SEC-05).
+  trackEvent('recipe_saved', { isNew: payload.id == null });
   return { id: (data as { id: string }).id };
 }
 
