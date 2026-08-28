@@ -306,7 +306,17 @@ export async function applySelectionRound(
     trackEvent('selection_technical_failure', { stage: 'apply_failed' });
     throw new Error(error.message);
   }
-  trackEvent('selection_round_applied', { appliedCount: selections.length });
+  // requestedCount, NOT §11's applied_count — they are different numbers
+  // and this one is the only one available here. apply_selection_round
+  // returns the round row, not a count, and silently drops archived,
+  // deleted, duplicate, and already-planned recipes before inserting, so
+  // selections.length is an upper bound. It is also idempotent on an
+  // already-applied round, so a retry after a lost response emits this
+  // again having applied nothing. Read it as "rounds reached apply, and
+  // how many picks were carried in", never as recipes added to the plan.
+  // Reporting the real number needs the RPC to return it — see
+  // docs/roadmap.md's Not-yet-triaged (Codex, PR #115).
+  trackEvent('selection_round_applied', { requestedCount: selections.length });
 }
 
 export interface SelectionDecisionRecord {
