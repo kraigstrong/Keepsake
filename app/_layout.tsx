@@ -19,7 +19,7 @@ import {
   submitPendingOutboxItems,
   summarizeOutboxOutcomes,
 } from '../src/import/outboxEngine';
-import { initObservability, logError } from '../src/observability';
+import { initObservability, logError, trackEvent } from '../src/observability';
 import { sweepOrphanedOriginalPhotos } from '../src/photoImport/orphanedPhotoSweep';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
@@ -31,6 +31,13 @@ import { prefetchThisWeek, waitForThisWeekPrefetch } from '../src/thisWeek/prefe
 // render — because Sentry wants init() to run as early as possible so
 // it can catch startup errors.
 initObservability();
+
+// The denominator for every other event. Cold start here; resumes are
+// handled by AppOpenedLifecycle below, because iOS keeps the process
+// resident and module scope runs once per bundle load — counting only
+// cold starts would let a whole session of cooking and planning events
+// arrive with no open to divide by (Codex, PR #116).
+trackEvent('app_opened');
 
 export default function RootLayout() {
   return (
@@ -93,6 +100,7 @@ function ConnectivityAwareApp() {
         triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
       }}
     >
+      <AppOpenedLifecycle />
       <HouseholdSyncOnMount householdId={householdId} />
       <ImportOutboxLifecycle
         householdId={householdId}
@@ -236,6 +244,27 @@ function triggerImportOutboxWork(
       }
     })
     .catch((error) => logError(error, { context: 'importOutbox' }));
+}
+
+// Counts a resume as an open. Same "backgrounding, not quitting, is the
+// normal exit" reality the outbox lifecycles below are built around: iOS
+// keeps the process resident, so the module-scope emission at the top of
+// this file fires once per bundle load, not once per session. Only
+// background -> active transitions count; the launch itself is already
+// counted above, and iOS also passes through 'inactive' on things like
+// the app switcher and permission sheets, which are not new sessions.
+function AppOpenedLifecycle() {
+  useEffect(() => {
+    let previous = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && previous === 'background') {
+        trackEvent('app_opened');
+      }
+      previous = state;
+    });
+    return () => subscription.remove();
+  }, []);
+  return null;
 }
 
 // Cold launch alone isn't enough: the realistic path for a Share
