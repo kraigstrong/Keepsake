@@ -36,6 +36,8 @@ Journey 3 (shared household, two-actor walkthrough) still needs a live developer
 2. Weekly-plan locking — **closed** ([#113](https://github.com/kraigstrong/Keepsake/pull/113)), with the concurrency evidence gap recorded rather than pretended away.
 3. Telemetry — instrumentation done ([#115](https://github.com/kraigstrong/Keepsake/pull/115), [#116](https://github.com/kraigstrong/Keepsake/pull/116)); **waiting on a PostHog project key and a Sentry DSN**, expected 2026-08-28. Nothing can be verified end to end until those exist, since `trackEvent` is a no-op without a key.
 
+**Blocking, added 2026-08-28: "Help me choose" overlaps the add FAB on an empty week.** The overlap [#107](https://github.com/kraigstrong/Keepsake/pull/107) fixed for populated plans is still there in the empty state — which is the first screen a new user sees. Diagnosed and placement decided; see `docs/roadmap.md`'s milestone 5 entry rather than re-deriving it.
+
 **The long pole is now the real EAS/Xcode build**, and it is underweighted as a plain backlog item: you cannot put this on anyone else's phone without one, it has Apple-side lead times nobody here controls, and no CI job has ever built this app — so the first real build is also where you find out what is broken about building it.
 
 Two smaller things worth doing before invites: **Journey 3** (shared-household two-actor walkthrough, still never done — friends and family are exactly the people who will share a household), and the **repository-history secret scan** from milestone 3, which is cheap now and awkward to discover late.
