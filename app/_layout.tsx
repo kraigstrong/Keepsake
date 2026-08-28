@@ -32,11 +32,11 @@ import { prefetchThisWeek, waitForThisWeekPrefetch } from '../src/thisWeek/prefe
 // it can catch startup errors.
 initObservability();
 
-// The denominator for every other event: without it you can count cooks
-// and confirmed plans but not what fraction of sessions produce one.
-// Module scope, immediately after init, so it marks a cold start rather
-// than a re-render — 'app_opened' has been on the allowlist since Phase 0
-// and was never actually emitted from anywhere.
+// The denominator for every other event. Cold start here; resumes are
+// handled by AppOpenedLifecycle below, because iOS keeps the process
+// resident and module scope runs once per bundle load — counting only
+// cold starts would let a whole session of cooking and planning events
+// arrive with no open to divide by (Codex, PR #116).
 trackEvent('app_opened');
 
 export default function RootLayout() {
@@ -100,6 +100,7 @@ function ConnectivityAwareApp() {
         triggerCookingEventOutboxWork(householdId, getCurrentHouseholdId);
       }}
     >
+      <AppOpenedLifecycle />
       <HouseholdSyncOnMount householdId={householdId} />
       <ImportOutboxLifecycle
         householdId={householdId}
@@ -243,6 +244,27 @@ function triggerImportOutboxWork(
       }
     })
     .catch((error) => logError(error, { context: 'importOutbox' }));
+}
+
+// Counts a resume as an open. Same "backgrounding, not quitting, is the
+// normal exit" reality the outbox lifecycles below are built around: iOS
+// keeps the process resident, so the module-scope emission at the top of
+// this file fires once per bundle load, not once per session. Only
+// background -> active transitions count; the launch itself is already
+// counted above, and iOS also passes through 'inactive' on things like
+// the app switcher and permission sheets, which are not new sessions.
+function AppOpenedLifecycle() {
+  useEffect(() => {
+    let previous = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && previous === 'background') {
+        trackEvent('app_opened');
+      }
+      previous = state;
+    });
+    return () => subscription.remove();
+  }, []);
+  return null;
 }
 
 // Cold launch alone isn't enough: the realistic path for a Share
