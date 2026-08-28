@@ -8,8 +8,10 @@ import {
   reopenThisWeek,
   reorderThisWeek,
 } from './api';
+import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
+jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
 jest.mock('../supabase/instance', () => ({
   supabase: {
     from: jest.fn(),
@@ -19,6 +21,7 @@ jest.mock('../supabase/instance', () => ({
 
 const mockedFrom = supabase.from as jest.Mock;
 const mockedRpc = supabase.rpc as jest.Mock;
+const mockedTrackEvent = trackEvent as jest.Mock;
 
 afterEach(() => jest.clearAllMocks());
 
@@ -157,5 +160,26 @@ describe('mutations', () => {
   it('surfaces a Supabase error as a thrown Error', async () => {
     mockedRpc.mockResolvedValue({ error: new Error('nope') });
     await expect(confirmThisWeek('plan-1')).rejects.toThrow('nope');
+  });
+});
+
+describe('weekly_plan_confirmed analytics', () => {
+  it('reports a confirmed plan once the RPC succeeds', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await confirmThisWeek('plan-1');
+
+    expect(mockedTrackEvent).toHaveBeenCalledWith('weekly_plan_confirmed');
+  });
+
+  it('reports nothing when the RPC fails', async () => {
+    // The invariant worth pinning: this counts plans actually confirmed,
+    // not attempts. Placing trackEvent before the throw would inflate
+    // every funnel that reads it, silently and permanently.
+    mockedRpc.mockResolvedValue({ error: { message: 'nope' } });
+
+    await expect(confirmThisWeek('plan-1')).rejects.toThrow('nope');
+
+    expect(mockedTrackEvent).not.toHaveBeenCalled();
   });
 });

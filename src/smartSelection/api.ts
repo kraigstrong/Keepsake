@@ -1,5 +1,7 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
+import { trackEvent } from '../observability';
+
 import { supabase } from '../supabase/instance';
 
 export type SelectionRoundMode = 'solo' | 'group';
@@ -156,10 +158,20 @@ export async function startSelectionRound(
         // response body wasn't JSON — fall through to the generic message
       }
     }
+    trackEvent('selection_technical_failure', { stage: 'candidate_generation_failed' });
     throw new Error(specificMessage ?? error.message);
   }
 
-  return data as StartSelectionRoundResult;
+  const result = data as StartSelectionRoundResult;
+  // Props per the proposal's §11 — counts and enums only, no recipe
+  // data. deckSize is what makes a later selection_deck_exhausted
+  // interpretable: exhausting a 6-card deck is a library-size problem,
+  // exhausting 24 is a ranking problem.
+  trackEvent('selection_round_started', {
+    mode: request.mode,
+    deckSize: result.candidateCount,
+  });
+  return result;
 }
 
 export interface RefillSelectionRoundResult {
@@ -213,6 +225,9 @@ export async function getSelectionRound(roundId: string): Promise<SelectionRound
 export async function cancelSelectionRound(roundId: string): Promise<void> {
   const { error } = await supabase.rpc('cancel_selection_round', { round_id: roundId });
   if (error) throw new Error(error.message);
+  // Reached from "Start over" as well as abandoning a round, so this is
+  // "rounds that ended without being applied", not strictly a rejection.
+  trackEvent('selection_round_cancelled');
 }
 
 /**
@@ -285,7 +300,13 @@ export async function applySelectionRound(
     weekly_plan_id: weeklyPlanId,
     selections: selections.map((s) => ({ recipe_id: s.recipeId, multiplier: s.multiplier })),
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    // §11's coarse category, not the server message — an error string
+    // can carry arbitrary content and this is an allowlisted prop.
+    trackEvent('selection_technical_failure', { stage: 'apply_failed' });
+    throw new Error(error.message);
+  }
+  trackEvent('selection_round_applied', { appliedCount: selections.length });
 }
 
 export interface SelectionDecisionRecord {

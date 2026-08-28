@@ -28,6 +28,7 @@ import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
+import { trackEvent } from '../observability';
 import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 // Type-only import of a pure, database-free server module — same
 // established pattern as src/recipes/api.ts importing units types from
@@ -280,6 +281,19 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
     }
   }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
+
+  // Deck exhaustion is a screen-level fact with no API call behind it,
+  // so unlike the other selection events this one can't live in api.ts.
+  // Keyed on deckSize rather than a plain "already fired" flag so
+  // "Select more" — which lengthens the deck — can legitimately report
+  // exhausting the longer deck too, while a re-render cannot.
+  const reportedExhaustedSizeRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!atEndOfDeck || deckSize === 0) return;
+    if (reportedExhaustedSizeRef.current === deckSize) return;
+    reportedExhaustedSizeRef.current = deckSize;
+    trackEvent('selection_deck_exhausted', { deckSize, yesCount });
+  }, [atEndOfDeck, deckSize, yesCount]);
 
   function decide(decision: SelectionDecisionValue) {
     // No recentring needed on this path: currentCandidate is undefined

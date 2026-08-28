@@ -5,6 +5,7 @@ import {
   type GroceryItem,
   type PlanningEntryForGroceries,
 } from '../../server/groceries/generateGroceryList';
+import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
 export type { GroceryItem } from '../../server/groceries/generateGroceryList';
@@ -111,6 +112,14 @@ export async function fetchGroceryReview(
   }));
 
   const items = generateGroceryList(planningEntries, preferredUnitSystem);
+  // Counts only — item names are recipe-derived content, so they never
+  // leave the device (PRD §30, SEC-05). recipeCount alongside itemCount
+  // is what makes the number interpretable: 40 items off 2 recipes and
+  // off 8 recipes mean different things.
+  trackEvent('grocery_list_generated', {
+    itemCount: items.length,
+    recipeCount: planningEntries.length,
+  });
 
   const { data: selections, error: selectionsError } = await supabase
     .from('grocery_item_selections')
