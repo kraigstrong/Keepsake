@@ -42,6 +42,8 @@ A PR touching `supabase/migrations/` or `supabase/tests/database/` needs the las
 
 Deploying an Edge Function to staging (`supabase functions deploy`) is a separate, credentialed operation — see [`docs/deploying-edge-functions.md`](docs/deploying-edge-functions.md) before attempting it. It is not one of the canonical commands above and is not part of a normal PR.
 
+Rebuilding the native iOS app is likewise not one of these commands, and **none of them build it** — no CI job compiles this app at all. If a native dependency was bumped (Dependabot does this unprompted), the installed pods are stale and the next rebuild fails with a compile error that reads like a library bug. See [`docs/building-ios-locally.md`](docs/building-ios-locally.md) — it also covers the CocoaPods/Ruby incompatibility that makes `pod install` fail while appearing to succeed.
+
 Run the full sequence locally before every push, not a hand-picked subset — CI runs `typecheck`, `lint`, `format:check`, and `test` as four separate steps in that order, and any one of them failing burns a full CI run. Running only the test files you touched, or only `tsc`, is not a substitute for actually running `npm run lint` and `npm run format:check` too (found the hard way: a PR passed targeted tests and typecheck locally but failed CI on `format:check` alone).
 
 ## Current-state pointer

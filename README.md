@@ -25,6 +25,8 @@ npm start          # Expo dev server
 
 Backend-touching work also needs a local Supabase instance linked and (for AI import) an `ANTHROPIC_API_KEY` — see `CONTRIBUTING.md` and the relevant security notes in `docs/adr/` for secret handling; nothing goes in `.env` files committed to this repo.
 
+Rebuilding the **native** iOS app — needed after a native-dependency bump, including one from Dependabot — is a separate operation with two environment traps that don't announce themselves: see [`docs/building-ios-locally.md`](docs/building-ios-locally.md) before running `expo run:ios`. Day-to-day JS work needs none of it.
+
 Common commands (all in `package.json`):
 
 ```bash
