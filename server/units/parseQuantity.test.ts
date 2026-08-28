@@ -335,6 +335,47 @@ describe('parseQuantity — fixture corpus', () => {
       ingredientText: 'butter',
     },
 
+    // "cup(s)" — template pluralisation emitted verbatim by some recipe
+    // sites (found 2026-08-28 in real staging data, not a hypothetical).
+    // Left unhandled it stranded "(s)" at the front of the ingredient
+    // text AND blocked the parenthetical strip, since that needs a number
+    // right after the open paren — so this line showed both defects:
+    // "1 cup(s) (2 sticks) butter" doubled to "2 cups (s) (2 sticks) butter".
+    {
+      line: '1 cup(s) (2 sticks) butter or margarine, softened',
+      quantityMin: 1,
+      quantityMax: 1,
+      unit: 'cup',
+      ingredientText: 'butter or margarine, softened',
+    },
+    {
+      line: '2 cup(s) flour',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: 'cup',
+      ingredientText: 'flour',
+    },
+    // Abbreviated unit carrying both suffixes.
+    {
+      line: '3 tbsp(s). olive oil',
+      quantityMin: 3,
+      quantityMax: 3,
+      unit: 'tbsp',
+      ingredientText: 'olive oil',
+    },
+    // Must NOT over-match. Deliberately written without a space after the
+    // unit: with a space the suffix pattern can't match whatever follows,
+    // so a spaced example exercises nothing and passes even against a
+    // regex broad enough to swallow "(soup)". Found by mutating the
+    // pattern to /^\(s[^)]*\)/ and watching the spaced version still pass.
+    {
+      line: '2 cup(soup) base',
+      quantityMin: 2,
+      quantityMax: 2,
+      unit: 'cup',
+      ingredientText: '(soup) base',
+    },
+
     // The counterpart that must NOT change: "stick" is only ever matched
     // inside a parenthetical, so a line whose own quantity is in sticks
     // still parses with no unit and scales as plain text. Admitting it to

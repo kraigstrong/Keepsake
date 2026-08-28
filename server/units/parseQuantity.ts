@@ -170,6 +170,16 @@ function matchUnit(text: string): { unit: Unit; matchedLength: number } | null {
   // it here so it isn't left as a stray leading "." on whatever follows
   // (docs/roadmap.md's Not-yet-triaged backlog has the incident history).
   let matchedLength = match[0].length;
+  // "cup(s)", "tbsp(s)" — a template pluralisation some recipe sites emit
+  // verbatim. Consumed for the same reason as the period, plus a second
+  // one: left in place it isn't only a stray "(s)" at the front of the
+  // ingredient text, it also blocks stripParentheticalAlternateUnit,
+  // which needs a number directly after the open paren. So
+  // "1 cup(s) (2 sticks) butter" kept both defects at once.
+  const pluralSuffix = /^\(s\)/i.exec(text.slice(matchedLength));
+  if (pluralSuffix) {
+    matchedLength += pluralSuffix[0].length;
+  }
   if (text[matchedLength] === '.') {
     matchedLength += 1;
   }
