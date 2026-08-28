@@ -1,6 +1,8 @@
 # Building the iOS app locally
 
-Everyday work needs none of this — `npm start` serves JS to an already-installed build, and Fast Refresh covers any change to `src/`, `app/`, or `server/`. This file is for the times you need a **native rebuild**, which is a genuinely different operation and has two environment traps that cost about half an hour to diagnose the first time (2026-08-27).
+Everyday work needs none of this — `npm start` serves JS to an already-installed build, and Fast Refresh covers `src/`, `app/`, and the pure `server/` modules the client imports (`server/units`, `server/groceries`, `server/selection`). This file is for the times you need a **native rebuild**, which is a genuinely different operation and has two environment traps that cost about half an hour to diagnose the first time (2026-08-27).
+
+**Not everything under `server/` is served by Metro.** `server/ai/*` and the network-facing parts of `server/import/*` are imported only by `supabase/functions/import-recipe/index.ts` and execute in the deployed Deno Edge Function. Metro never loads them, so editing one and reloading the app tests the *previously deployed* implementation while looking like it picked the change up. Those need [`docs/deploying-edge-functions.md`](deploying-edge-functions.md), not a rebuild and not a reload. "Doesn't need a native rebuild" and "is actually running your edit" are two different questions.
 
 ## When you actually need a native rebuild
 
@@ -45,10 +47,22 @@ use of undeclared identifier 'RNSentryInternal'   RNSentry.mm
 
 ## The sequence that works
 
+For a dependency bump, where the native project itself is unchanged and only the pods are stale:
+
 ```bash
 cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install && cd ..
 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios --device "<simulator name or udid>"
 ```
+
+**If the rebuild is for a new native module, a new Expo config plugin, or a native-affecting `app.json` change, that sequence is not enough** — and it fails quietly, which is the dangerous part. `pod install` links pods; it does not re-run config plugins or propagate settings like entitlements, permission strings, or URL schemes into an `ios/` directory that already exists. You get a green build that simply lacks the change you made. Regenerate first:
+
+```bash
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo prebuild -p ios   # no --clean; updates in place
+cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install && cd ..
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios --device "<simulator name or udid>"
+```
+
+This is the repo's existing rule, not a new one: [`ADR-0009`](adr/0009-ink-and-paper-visual-direction.md) records `expo prebuild` + `pod install` as what a native-module addition needs, noting it's "easy to add a JS dependency and forget the native half needs relinking."
 
 Verify the lock actually moved before rebuilding:
 
@@ -59,7 +73,7 @@ node -p "require('./node_modules/@sentry/react-native/package.json').version"   
 
 Pass `--device` explicitly. With a physical iPhone connected, `expo run:ios` can select it, which pulls in code signing and provisioning — a completely different failure surface from a simulator build, and a misleading one when you were expecting a simulator.
 
-`npx expo prebuild --clean -p ios` regenerates the native project wholesale. It is a real reset, not a bigger `pod install`: it deletes `ios/`, **including any signing or team settings configured in Xcode for device builds**. Prefer deleting `ios/Pods` and `ios/Podfile.lock` and reinstalling, which keeps the Xcode project intact — and confirm `pod install` can actually succeed before removing what it is meant to replace.
+Note the `--clean` distinction. Plain `npx expo prebuild -p ios` updates the existing project in place and is what the config-plugin case above wants. `npx expo prebuild --clean -p ios` regenerates wholesale: it deletes `ios/`, **including any signing or team settings configured in Xcode for device builds**. Reach for `--clean` only when the project is genuinely broken, not as a bigger `pod install` — and for pod-level problems prefer deleting `ios/Pods` and `ios/Podfile.lock` and reinstalling, which keeps the Xcode project intact. Confirm `pod install` can actually succeed before removing what it is meant to replace.
 
 ## Related
 
