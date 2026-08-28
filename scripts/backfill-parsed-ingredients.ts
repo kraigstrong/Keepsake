@@ -30,13 +30,19 @@
 // migrations grant SELECT to authenticated and withhold writes), so this
 // cannot go through PostgREST at all and needs a direct connection.
 //
-//   PSQL='psql "$DATABASE_URL"'   # or: docker exec -i supabase_db_Keepsake psql -U postgres -d postgres
+// A shell function, not PSQL='psql "$DATABASE_URL"' — expanding that
+// passes the literal characters "$DATABASE_URL" as an argument, because
+// the shell does not re-interpret quotes introduced by parameter
+// expansion (Codex, PR #118).
 //
-//   $PSQL -At -c "select coalesce(json_agg(r),'[]') from (select id, line_text, quantity_min, quantity_max, unit, ingredient_text from public.recipe_ingredients) r" \
+//   psqlx() { psql "$DATABASE_URL" "$@"; }
+//   # local: psqlx() { docker exec -i supabase_db_Keepsake psql -U postgres -d postgres "$@"; }
+//
+//   psqlx -At -c "select coalesce(json_agg(r),'[]') from (select id, section_id, line_text, quantity_min, quantity_max, unit, ingredient_text from public.recipe_ingredients) r" \
 //     | node scripts/backfill-parsed-ingredients.ts > /tmp/backfill.sql
 //
 //   # read /tmp/backfill.sql, then:
-//   $PSQL -f /tmp/backfill.sql
+//   psqlx -v ON_ERROR_STOP=1 -f /tmp/backfill.sql
 
 import { parseQuantity } from '../server/units/parseQuantity.ts';
 
@@ -44,6 +50,7 @@ const SAMPLE_LIMIT = 15;
 
 interface Row {
   id: string;
+  section_id: string;
   line_text: string;
   quantity_min: number | string | null;
   quantity_max: number | string | null;
@@ -126,8 +133,24 @@ async function main(): Promise<void> {
         `where id = ${sqlLiteral(row.id)};`,
     );
   }
+  // Bump the parent recipes' updated_at, or already-synced devices never
+  // see any of this: fetchChangedRecipes pages on recipes.updated_at
+  // (ADR-0013's cursor, src/sync/remote.ts), so a change confined to
+  // recipe_ingredients never crosses a device's saved cursor and the
+  // stale text survives locally until the recipe is edited for some
+  // unrelated reason. Same reason confirm_weekly_plan stamps updated_at
+  // for a planned_count change (Codex, PR #36 — and PR #118 here).
+  const sectionIds = [...new Set(changes.map(({ row }) => row.section_id))];
+  console.log(
+    `update public.recipes set updated_at = now() where id in (` +
+      `select s.recipe_id from public.recipe_ingredient_sections s ` +
+      `where s.id in (${sectionIds.map(sqlLiteral).join(', ')}));`,
+  );
+
   console.log('commit;');
-  console.error(`\nWrote ${changes.length} UPDATE statements to stdout.`);
+  console.error(
+    `\nWrote ${changes.length} UPDATE statements to stdout, plus an updated_at bump across ${sectionIds.length} section(s).`,
+  );
 }
 
 main().catch((error: unknown) => {

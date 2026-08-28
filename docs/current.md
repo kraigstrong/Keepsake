@@ -8,7 +8,7 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 `docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — sequenced ahead of Friends & Family Preview.
 
-The full solo flow is merged and deployed: deck → shortlist → review → apply, plus "Select more". Staging is current with `main`. `FLAGS.smartMealSelection` still defaults to `false`.
+The full solo flow is merged and deployed: deck → shortlist → review → apply, plus "Select more". Staging is current with `main`. **`FLAGS.smartMealSelection` is on for everyone as of 2026-08-28** — the flag is kept, not deleted, as the rollback lever through the preview. Beta scope is settled: **solo-only, group is post-beta**, which is what the flip had been waiting on.
 
 Build history, review findings, and walkthrough notes: [`docs/history/phase-18-smart-meal-selection.md`](history/phase-18-smart-meal-selection.md).
 
@@ -18,26 +18,27 @@ Build history, review findings, and walkthrough notes: [`docs/history/phase-18-s
 
 What remains is evidence, not code, and it should not be quietly upgraded later: **the concurrency behaviour itself is not empirically verified.** pgTAP runs a file in one transaction and cannot express a two-session race, and three local reproduction attempts were inconclusive rather than negative — the naive "does it block?" test proves nothing, because the old `confirm_weekly_plan` blocks too, just late, at its final `update`, after counting from a stale snapshot. Verified instead: the lock is present, behaviour is otherwise unchanged (46 existing tests plus four new structural guards that fail if a redefinition drops a lock). This joins Reliability's existing "verify true two-connection concurrency" item rather than closing it.
 
-**Stale parsed ingredient text — decision needed, and it is what still gates the beta on the scaling bug.** Found by Codex on [PR #112](https://github.com/kraigstrong/Keepsake/pull/112), 2026-08-27, and verified against source. `parseQuantity` runs only at write time — `RecipeEditorScreen.tsx:304` and `import-recipe/index.ts:585` — and its output is persisted to `recipe_ingredients` (`quantity_min/max`, `unit`, `ingredient_text`). `src/sync/remote.ts:73-80` reads those columns verbatim and `src/recipes/scaling.ts` scales them **without ever reparsing**. So a parser fix reaches new saves and imports only; the chai loaf that prompted the report still shows `"2 cups (2 sticks) butter"` today. It self-heals if a recipe is edited and re-saved, which nobody will do deliberately.
+**Stale parsed ingredient text — resolved 2026-08-28, backfilled.** Found by Codex on [PR #112](https://github.com/kraigstrong/Keepsake/pull/112): `parseQuantity` runs only at write time and its output is persisted, so a parser fix reached new saves and imports only. Decision was *backfill*, chosen over reparse-on-read and over accepting it. `scripts/backfill-parsed-ingredients.ts` re-parses `line_text` with the real parser rather than re-implementing it as a SQL regex.
 
-Three options, and this is a developer decision because it mutates stored user content:
+Applied to staging 2026-08-28: 193 rows scanned, 7 corrected — one sticks case, one `oz.` trailing-period case (#83), five dual-unit parentheticals (#89). No quantity or unit changed on any row; only `ingredient_text`. Re-run reports zero.
 
-1. **Backfill migration** re-stripping affected `ingredient_text` in SQL. Reaches every existing row, but `parseQuantity` is TypeScript — SQL would re-implement a regex against real recipe text, with no way to preview per-row results before committing. Irreversible on user data.
-2. **Reparse on sync/read** in the client. No data mutation, self-correcting, but moves parsing onto a hot path it was deliberately kept off.
-3. **Accept it** and let recipes heal on next save. Cheapest; means a known-wrong number can persist for a beta tester, which is exactly what made this a gate.
+Two things learned that outlive this fix. `service_role` has **no SELECT or UPDATE** on `recipe_ingredients` (migrations grant SELECT to `authenticated` and withhold writes), so admin tooling needs a direct `postgres` connection, not PostgREST. And a child-table-only write is **invisible to already-synced devices** — `fetchChangedRecipes` pages on `recipes.updated_at` (ADR-0013), so the backfill also has to stamp the parent recipe, exactly as `confirm_weekly_plan` does for `planned_count`. That was missed on the first pass and corrected the same day (Codex, [PR #118](https://github.com/kraigstrong/Keepsake/pull/118)).
 
-Not attempted autonomously: option 1 is a destructive operation over real user content and wants a human's sign-off, and options 2 and 3 change what "done" means for the gate.
+**Open, found while backfilling: `cup(s)` is unhandled.** `1 cup(s) (2 sticks) butter` doubles to `2 cups (s) (2 sticks) butter` — the stray `(s)` also blocks the parenthetical strip, so both defects show at once. Same beta-gating class as the bug just fixed. The corpus cannot catch this: `parseQuantity.realWorld.test.ts` is `toMatchSnapshot()`, so it records wrong output as expected — which is why it missed this, the `oz.` period, and the dual-unit cases alike. Planned fix: consume an optional `(s)` in `matchUnit` next to the existing trailing-period handling, then a debris heuristic (leading `(`, `.`, `,`, `/` in `ingredientText` is essentially never legitimate) run over real data rather than more curated lines.
 
 Journey 3 (shared household, two-actor walkthrough) still needs a live developer session.
 
 ## Next action
 
-**Both Friends & Family Preview gates worked 2026-08-27** (developer direction). Neither needs more building; what's left on each is a developer call, both described under Blocked above:
+**All three Friends & Family Preview gates are now closed or waiting only on credentials** (2026-08-28):
 
-1. `"1 cup (2 sticks)"` scaling — parser fixed ([#112](https://github.com/kraigstrong/Keepsake/pull/112)), **gate still open**: parsing happens at write time and the result is persisted, so every recipe already stored still renders the stale parenthetical. Needs a decision between backfill / reparse-on-read / accept.
-2. Weekly-plan locking — fixed ([#113](https://github.com/kraigstrong/Keepsake/pull/113)), with the concurrency evidence gap noted rather than closed.
+1. `"1 cup (2 sticks)"` scaling — **closed.** Parser fixed ([#112](https://github.com/kraigstrong/Keepsake/pull/112)), stored data backfilled on staging (see Blocked above).
+2. Weekly-plan locking — **closed** ([#113](https://github.com/kraigstrong/Keepsake/pull/113)), with the concurrency evidence gap recorded rather than pretended away.
+3. Telemetry — instrumentation done ([#115](https://github.com/kraigstrong/Keepsake/pull/115), [#116](https://github.com/kraigstrong/Keepsake/pull/116)); **waiting on a PostHog project key and a Sentry DSN**, expected 2026-08-28. Nothing can be verified end to end until those exist, since `trackEvent` is a no-op without a key.
 
-So the next thing that needs *you* is those two calls; the next thing that needs a session is below.
+**The long pole is now the real EAS/Xcode build**, and it is underweighted as a plain backlog item: you cannot put this on anyone else's phone without one, it has Apple-side lead times nobody here controls, and no CI job has ever built this app — so the first real build is also where you find out what is broken about building it.
+
+Two smaller things worth doing before invites: **Journey 3** (shared-household two-actor walkthrough, still never done — friends and family are exactly the people who will share a household), and the **repository-history secret scan** from milestone 3, which is cheap now and awkward to discover late.
 
 Walkthrough #3 (2026-08-27) went well and its one finding — the deck's stale-image flash — is fixed and merged ([#110](https://github.com/kraigstrong/Keepsake/pull/110), [#111](https://github.com/kraigstrong/Keepsake/pull/111)); see the phase-18 history, which is worth reading for how the first two attempts were aimed at the wrong layer. Terminal states were judged fine as they are, with a look-and-feel pass logged to milestone 4's backlog instead.
 
