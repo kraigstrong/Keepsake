@@ -30,13 +30,12 @@ Journey 3 (shared household, two-actor walkthrough) still needs a live developer
 
 ## Next action
 
-**All three Friends & Family Preview gates are now closed or waiting only on credentials** (2026-08-28):
+**Four Friends & Family Preview gates. Three are closed or waiting only on credentials; one needs a code fix** (2026-08-28):
 
-1. `"1 cup (2 sticks)"` scaling — **closed.** Parser fixed ([#112](https://github.com/kraigstrong/Keepsake/pull/112)), stored data backfilled on staging (see Blocked above).
+1. `"1 cup (2 sticks)"` scaling — **closed.** Parser fixed ([#112](https://github.com/kraigstrong/Keepsake/pull/112), [#119](https://github.com/kraigstrong/Keepsake/pull/119)), stored data backfilled on staging (see Blocked above).
 2. Weekly-plan locking — **closed** ([#113](https://github.com/kraigstrong/Keepsake/pull/113)), with the concurrency evidence gap recorded rather than pretended away.
 3. Telemetry — instrumentation done ([#115](https://github.com/kraigstrong/Keepsake/pull/115), [#116](https://github.com/kraigstrong/Keepsake/pull/116)); **waiting on a PostHog project key and a Sentry DSN**, expected 2026-08-28. Nothing can be verified end to end until those exist, since `trackEvent` is a no-op without a key.
-
-**Blocking, added 2026-08-28: "Help me choose" overlaps the add FAB on an empty week.** The overlap [#107](https://github.com/kraigstrong/Keepsake/pull/107) fixed for populated plans is still there in the empty state — which is the first screen a new user sees. Diagnosed and placement decided; see `docs/roadmap.md`'s milestone 5 entry rather than re-deriving it.
+4. **"Help me choose" overlaps the add FAB on an empty week — open, needs a code fix.** The overlap [#107](https://github.com/kraigstrong/Keepsake/pull/107) fixed for populated plans is still there in the empty state, which is the first screen a new user sees. Diagnosed and placement decided; see `docs/roadmap.md`'s milestone 5 entry rather than re-deriving it. This one is not credential-blocked — it is the only gate with work left to do.
 
 **The long pole is now the real EAS/Xcode build**, and it is underweighted as a plain backlog item: you cannot put this on anyone else's phone without one, it has Apple-side lead times nobody here controls, and no CI job has ever built this app — so the first real build is also where you find out what is broken about building it.
 
