@@ -15,5 +15,8 @@
  *   someNewFeature: false, // remove once REC-01 ships in Phase 4
  */
 export const FLAGS: Record<string, boolean> = {
-  smartMealSelection: false, // remove once the swipe deck + shortlist/apply flow both ship and are validated live
+  // On for everyone as of 2026-08-28 (developer decision) — solo flow only;
+  // group is post-beta and does not gate this. Remove the flag entirely once
+  // the Friends & Family Preview has run and the feature is staying.
+  smartMealSelection: true,
 };
