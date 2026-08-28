@@ -19,7 +19,7 @@ import {
   submitPendingOutboxItems,
   summarizeOutboxOutcomes,
 } from '../src/import/outboxEngine';
-import { initObservability, logError } from '../src/observability';
+import { initObservability, logError, trackEvent } from '../src/observability';
 import { sweepOrphanedOriginalPhotos } from '../src/photoImport/orphanedPhotoSweep';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useDevAutoSignIn } from '../src/session/useDevAutoSignIn';
@@ -31,6 +31,13 @@ import { prefetchThisWeek, waitForThisWeekPrefetch } from '../src/thisWeek/prefe
 // render — because Sentry wants init() to run as early as possible so
 // it can catch startup errors.
 initObservability();
+
+// The denominator for every other event: without it you can count cooks
+// and confirmed plans but not what fraction of sessions produce one.
+// Module scope, immediately after init, so it marks a cold start rather
+// than a re-render — 'app_opened' has been on the allowlist since Phase 0
+// and was never actually emitted from anywhere.
+trackEvent('app_opened');
 
 export default function RootLayout() {
   return (
