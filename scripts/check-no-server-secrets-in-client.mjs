@@ -59,7 +59,12 @@ const DEV_ONLY_NAMES = {
   EXPO_PUBLIC_DEV_TEST_PASSWORD: DEV_AUTO_SIGN_IN_FILES,
 };
 
-const CLIENT_DIRS = ['src', 'app'];
+// Every source root Metro bundles, not just the two obvious ones:
+// src/appGroup/appGroupHandoff.ts imports modules/app-group-bridge, so
+// that module's code ships in the client bundle exactly like src/ does.
+// targets/ is deliberately absent — it's the Share Extension's Swift and
+// its Expo target config, compiled by Xcode, never bundled by Metro.
+const CLIENT_DIRS = ['src', 'app', 'modules'];
 const SCANNABLE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 function* walk(dir) {
