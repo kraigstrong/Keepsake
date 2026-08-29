@@ -65,6 +65,17 @@ yarn-error.log*
 # Build output
 build/
 
+# Xcode distribution output. Organizer defaults its export destination to
+# the last folder used, which lands these in the repo root — a timestamped
+# folder holding a ~25MB signed .ipa, matched by no pattern above. Keep
+# builds outside the repo (~/Developer/keepsake-builds); these are the
+# backstop for when Organizer defaults back.
+*.ipa
+*.xcarchive/
+DistributionSummary.plist
+ExportOptions.plist
+Packaging.log
+
 # Stray file from initial repo-init troubleshooting session (undeletable on this
 # sandbox's mount — harmless, ignored rather than fought)
 /testfile.txt
