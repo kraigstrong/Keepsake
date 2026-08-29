@@ -75,6 +75,39 @@ Pass `--device` explicitly. With a physical iPhone connected, `expo run:ios` can
 
 Note the `--clean` distinction. Plain `npx expo prebuild -p ios` updates the existing project in place and is what the config-plugin case above wants. `npx expo prebuild --clean -p ios` regenerates wholesale: it deletes `ios/`, **including any signing or team settings configured in Xcode for device builds**. Reach for `--clean` only when the project is genuinely broken, not as a bigger `pod install` — and for pod-level problems prefer deleting `ios/Pods` and `ios/Podfile.lock` and reinstalling, which keeps the Xcode project intact. Confirm `pod install` can actually succeed before removing what it is meant to replace.
 
+## Archiving for TestFlight
+
+Everything above is a *simulator or dev-device* build. A distribution archive adds one failure mode that neither trap covers, because it isn't about the native project at all — it's about which environment file Xcode reads.
+
+`babel-preset-expo` inlines every `EXPO_PUBLIC_*` variable into the bundle at build time, and Xcode's "Bundle React Native code and images" phase reads **`.env.local`** — not `client.env`. `client.env` is the 1Password mount and only ever holds genuinely shippable values; `.env.local` is populated by hand, which is where the `EXPO_PUBLIC_` prefix stops guaranteeing anything. Archiving with a day-to-day `.env.local` produces two silent failures at once:
+
+- `EXPO_PUBLIC_DEV_TEST_EMAIL`/`_PASSWORD` (`useDevAutoSignIn.ts`'s local convenience, deliberately never in `client.env`) ship a **working staging password inside the app**. The `__DEV__` guard makes the code path dead in a release build; it does nothing about the string being present.
+- A `.env.local` predating the telemetry keys yields an archive where `trackEvent`/`logError` are no-ops — found, at best, when you go looking for events that were never sent.
+
+Both produce a *successful* archive. Neither shows up until much later.
+
+```bash
+npm run archive:env      # snapshot client.env -> .env.local, assert no dev creds
+```
+
+It parks your development `.env.local` at `.env.local.bak`, refuses to run twice (so it can't clobber that backup), and prints the variable names it wrote — never values. It hard-fails if a `EXPO_PUBLIC_DEV_TEST_*` survives or a required Supabase var is missing, and warns if the PostHog/Sentry keys are absent, since that build would run fine while telling you nothing.
+
+Then the ordering that actually matters:
+
+```bash
+npm run archive:env
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo prebuild -p ios   # no --clean
+cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install && cd ..
+# Xcode: Product > Archive, then Distribute App > App Store Connect
+npm run archive:env:restore   # put your dev credentials back
+```
+
+`prebuild` is not optional here even when no native dependency changed: `app.json` carries the app-group entitlement, the `keepsake://` scheme, and three permission strings, and — per Trap 2 above — `pod install` alone propagates none of them into an existing `ios/`. That failure is quiet, producing a green archive simply missing the change.
+
+Run `npm run archive:env:restore` when the upload finishes. Until you do, local auto-sign-in stays off, which is a confusing thing to rediscover a week later.
+
+**The snapshot is point-in-time.** It goes stale the moment a value rotates in 1Password, so re-run it before each archive rather than trusting an old `.env.local`. And it is a snapshot rather than a symlink deliberately — `client.env` is a FIFO, and symlinking one into Metro's watcher has produced literally corrupted content before.
+
 ## Related
 
 - [`docs/deploying-edge-functions.md`](deploying-edge-functions.md) — the other credentialed, out-of-CI operation.
