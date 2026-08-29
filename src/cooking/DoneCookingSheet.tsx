@@ -24,6 +24,10 @@ export interface DoneCookingSheetProps {
   isSubmitting: boolean;
 }
 
+// Mirrors cooking_events_note_length_check (20260828100000). The server
+// bound is the real one; this only stops a typed note reaching it.
+const NOTE_MAX_LENGTH = 2000;
+
 /**
  * COOK-05/06: the richer Done Cooking confirmation, layered on top of
  * CookingModeScreen's own completion path (which this sheet's onConfirm
@@ -141,6 +145,7 @@ export function DoneCookingSheet({
         placeholderTextColor={colors.textTertiary}
         value={note}
         onChangeText={setNote}
+        maxLength={NOTE_MAX_LENGTH}
         multiline
       />
 
