@@ -25,6 +25,9 @@ expo-env.d.ts
 .env
 .env.local
 .env.*.local
+# scripts/prepare-archive-env.mjs parks your development .env.local here
+# while an archive-time snapshot is in place. Holds real credentials.
+.env.local.bak
 .env.example
 client.env
 server.env
