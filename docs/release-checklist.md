@@ -15,6 +15,7 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 - [ ] Staging and production point at genuinely separate Supabase projects, not the same project with different table prefixes.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` and `ANTHROPIC_API_KEY` are confirmed absent from the client bundle (this is also a Phase 0 CI check — "no server credential in client bundle" — but worth a manual spot-check before a real release, not just trusting the automated one blindly).
 - [ ] 1Password `Keepsake Server` values used for this build match what's actually deployed to Supabase's own secret store (`supabase secrets set` output, or equivalent) — not stale from a prior rotation.
+- [ ] `EXPO_PUBLIC_DEV_TEST_EMAIL` / `EXPO_PUBLIC_DEV_TEST_PASSWORD` are unset in the build environment. `babel-preset-expo` inlines `EXPO_PUBLIC_*` at build time, so a value present here is a real staging password in the shipped bundle regardless of `useDevAutoSignIn.ts`'s `__DEV__` guard. `check:client-secrets` covers the *other* half of this (a second file reading them); nothing automated covers the build environment until an `eas.json` exists to assert against.
 
 ## Security *(depth grows as phases land)*
 
