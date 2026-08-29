@@ -112,14 +112,29 @@ describe('loadThisWeekPlan', () => {
     expect(api.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(2);
   });
 
-  it('surfaces a rejected prefetch to the consumer, same as a normal fetch failure', async () => {
+  // Replaces a test that asserted the rejection was surfaced — that was
+  // the contract this changed deliberately, not a regression.
+  it('retries a rejected prefetch with a fresh fetch instead of surfacing it', async () => {
     const api = jest.requireMock('./api');
-    api.fetchCurrentWeeklyPlan.mockRejectedValue(new Error('boom'));
+    api.fetchCurrentWeeklyPlan
+      .mockRejectedValueOnce(new Error('caller does not belong to a household'))
+      .mockResolvedValueOnce(plan('recovered'));
     const { prefetchThisWeek, loadThisWeekPlan } = require('./prefetch');
 
     prefetchThisWeek('user-1');
 
-    await expect(loadThisWeekPlan('user-1')).rejects.toThrow('boom');
+    await expect(loadThisWeekPlan('user-1')).resolves.toEqual(plan('recovered'));
+    expect(api.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it('still surfaces the error when the retry fails too', async () => {
+    const api = jest.requireMock('./api');
+    api.fetchCurrentWeeklyPlan.mockRejectedValue(new Error('offline'));
+    const { prefetchThisWeek, loadThisWeekPlan } = require('./prefetch');
+
+    prefetchThisWeek('user-1');
+
+    await expect(loadThisWeekPlan('user-1')).rejects.toThrow('offline');
   });
 });
 

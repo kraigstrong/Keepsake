@@ -21,11 +21,9 @@ import { getHeroImageUrls } from '../recipes/heroImage';
  * correct result.
  *
  * Fired before household is confirmed to exist (deliberately — that's
- * what makes it early enough to matter), so a first-time user's
- * onboarding -> This Week transition can occasionally consume a
- * prefetch that was started before their household existed and
- * therefore failed. Accepted, self-correcting rough edge: ThisWeekScreen
- * already refetches on every focus and has its own error-state handling.
+ * what makes it early enough to matter), so a first-time user's prefetch
+ * can fail against a household that doesn't exist yet. loadThisWeekPlan
+ * retries rather than surfacing that.
  */
 let prefetchedForUserId: string | null = null;
 let prefetchedPlanPromise: Promise<ThisWeekPlan> | null = null;
@@ -51,9 +49,8 @@ export function prefetchThisWeek(userId: string): void {
   prefetchedForUserId = userId;
   prefetchedPlanResult = null;
   prefetchedPlanPromise = fetchCurrentWeeklyPlan();
-  // Swallowed here — a failed prefetch shouldn't surface on its own;
-  // loadThisWeekPlan below still surfaces it to whatever consumes it,
-  // same as a normal fetchCurrentWeeklyPlan() rejection would.
+  // Swallowed so a failed prefetch isn't an unhandled rejection. It is
+  // not lost: loadThisWeekPlan retries it against a fresh fetch.
   prefetchedPlanPromise
     .then((plan) => {
       if (token === requestToken) prefetchedPlanResult = plan;
@@ -93,10 +90,16 @@ function consumePrefetchedThisWeek(userId: string): Promise<ThisWeekPlan> | null
   return result;
 }
 
-/** What ThisWeekScreen's load() actually calls on every load. */
+/**
+ * What ThisWeekScreen's load() actually calls on every load. A rejected
+ * prefetch is retried against a fresh fetch rather than surfaced — it's
+ * an optimization that didn't pay off, not a diagnosis of the network.
+ * A failing retry still rejects.
+ */
 export function loadThisWeekPlan(userId: string | null): Promise<ThisWeekPlan> {
   const pending = userId ? consumePrefetchedThisWeek(userId) : null;
-  return pending ?? fetchCurrentWeeklyPlan();
+  if (!pending) return fetchCurrentWeeklyPlan();
+  return pending.catch(() => fetchCurrentWeeklyPlan());
 }
 
 /**

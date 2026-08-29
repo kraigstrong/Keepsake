@@ -133,7 +133,18 @@ export function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} testID="settings-placeholder">
+    // The password fields sit below Recipes, Household and Units, so the
+    // keyboard covers them on every phone — you cannot see what you are
+    // typing (developer device testing, 2026-08-29). automaticallyAdjust-
+    // KeyboardInsets makes the scroll view inset itself by the keyboard;
+    // keyboardShouldPersistTaps lets the Set-password button take the
+    // first tap instead of it being swallowed to dismiss the keyboard.
+    <ScrollView
+      style={styles.container}
+      testID="settings-placeholder"
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.sectionTitle}>Recipes</Text>
       <View testID="settings-recipes-list">
         <Row

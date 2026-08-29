@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, Text, TextInput } from 'react-native';
 
 import { useSession } from './SessionProvider';
 import { Button } from '../components/Button';
@@ -60,7 +60,13 @@ export function SignInScreen() {
   };
 
   return (
-    <View style={styles.container} testID="sign-in-screen">
+    // KeyboardAvoidingView, not the ScrollView inset SettingsScreen uses:
+    // this screen is a centred flex:1 View with nothing to scroll, so
+    // there is no content inset to adjust. "padding" shrinks the
+    // container by the keyboard's height, and centred content rises with
+    // it — which is what keeps "Sign in with password instead" reachable
+    // (developer device testing, 2026-08-29).
+    <KeyboardAvoidingView behavior="padding" style={styles.container} testID="sign-in-screen">
       <Text style={styles.title}>Sign in</Text>
 
       {step === 'email' ? (
@@ -169,7 +175,7 @@ export function SignInScreen() {
           {error}
         </Text>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
