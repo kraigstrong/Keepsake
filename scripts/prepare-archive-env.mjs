@@ -30,7 +30,7 @@
 // Never prints a value — only variable names.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -232,9 +232,34 @@ function prepare() {
 
   assertNoForbiddenElsewhere();
 
+  // Claim the backup slot atomically. The existsSync guard at the top of
+  // this function is a friendly early exit, not the actual guarantee — two
+  // overlapping runs both pass it, and a plain rename() would then let the
+  // second overwrite the first's backup, destroying the real .env.local.
+  //
+  // link() and wx both fail with EEXIST rather than clobbering, so whoever
+  // creates BACKUP first wins and the loser stops. link() also preserves
+  // the target's contents, which matters for the crash windows: interrupted
+  // between link and unlink leaves BACKUP and TARGET both holding the
+  // development env (--restore recovers it), and interrupted after the
+  // sentinel write leaves nothing to lose. No window destroys the original.
   const hadPriorEnvLocal = existsSync(TARGET);
-  if (hadPriorEnvLocal) renameSync(TARGET, BACKUP);
-  else writeFileSync(BACKUP, NO_PRIOR_ENV_SENTINEL, { mode: 0o600 });
+  try {
+    if (hadPriorEnvLocal) {
+      linkSync(TARGET, BACKUP);
+      unlinkSync(TARGET);
+    } else {
+      writeFileSync(BACKUP, NO_PRIOR_ENV_SENTINEL, { mode: 0o600, flag: 'wx' });
+    }
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      fail(
+        `${path.basename(BACKUP)} was created by another run while this one was\n` +
+          `  working. Nothing was changed. Run with --restore once that run is done.`,
+      );
+    }
+    throw error;
+  }
   writeFileSync(TARGET, contents, { mode: 0o600 });
 
   // Braces: verify what actually landed on disk, not what we believe we
@@ -249,9 +274,16 @@ function prepare() {
   console.log(`✓ .env.local snapshotted from client.env. Variables written:`);
   for (const name of writtenNames.sort()) console.log(`    ${name}`);
 
-  const absent = EXPECTED.filter((name) => !writtenNames.includes(name));
+  // Empty counts as absent here for the same reason it does for REQUIRED:
+  // initPostHog and initSentry both short-circuit on a falsy key, so a blank
+  // assignment is silently unobservable — precisely the case this warning
+  // exists to surface, and the one a name-only check would sail past.
+  const writtenValues = parseAssignments(readFileSync(TARGET, 'utf8'));
+  const absent = EXPECTED.filter(
+    (name) => !writtenValues.has(name) || isEmptyValue(writtenValues.get(name)),
+  );
   if (absent.length > 0) {
-    console.log(`\n⚠ Not present — this build will be silently unobservable:`);
+    console.log(`\n⚠ Missing or empty — this build will be silently unobservable:`);
     for (const name of absent) console.log(`    ${name}`);
     console.log(`  Add them to the Keepsake Client environment if that is not deliberate.`);
   }
