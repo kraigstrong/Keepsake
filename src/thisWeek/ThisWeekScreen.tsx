@@ -499,25 +499,31 @@ export function ThisWeekScreen() {
         )
       )}
 
-      {/* Positioned right below Add recipes/Edit Plan, not below the meal
-          list — the design handoff's own 1a placement ("below the meal
-          list") put this at the bottom of the screen, where it overlapped
-          the global add FAB (absolutely positioned, app/(tabs)/_layout.tsx)
-          on a real device (developer live-walkthrough feedback,
-          2026-08-26). Only for plans with entries; the empty-plan case
-          keeps the design's original placement below the empty state's own
-          Add recipes action, which never had this problem. */}
+      {/* Below Add recipes/Edit Plan, not below the meal list — the design
+          handoff's 1a placement put this at the bottom of the screen, where
+          it overlapped the global add FAB (absolutely positioned,
+          app/(tabs)/_layout.tsx). Developer feedback 2026-08-26.
+          The empty plan renders it inside `content` instead, under the
+          empty state's own Add recipes action. Both branches exist for the
+          same reason: anything trailing `content` (flex: 1) lands at the
+          bottom of the screen, which is where the FAB is. An earlier
+          version of this comment claimed the empty case "never had this
+          problem" — it did, and shipped that way, because the walkthrough
+          that found the overlap was driving a populated week (2026-08-28). */}
       {plan.entries.length > 0 && helpMeChoose}
 
       <View style={styles.content}>
         {plan.entries.length === 0 ? (
-          <EmptyState
-            title="Nothing planned yet"
-            message="Add a recipe to start planning this week's meals."
-            actionLabel="Add recipes"
-            onAction={goToAddRecipes}
-            testID="this-week-placeholder"
-          />
+          <>
+            <EmptyState
+              title="Nothing planned yet"
+              message="Add a recipe to start planning this week's meals."
+              actionLabel="Add recipes"
+              onAction={goToAddRecipes}
+              testID="this-week-placeholder"
+            />
+            {helpMeChoose}
+          </>
         ) : isConfirmed ? (
           <ScrollView testID="this-week-confirmed-list">
             {plan.entries.map((entry) => renderConfirmedItem(entry))}
@@ -530,8 +536,6 @@ export function ThisWeekScreen() {
           </ScrollView>
         )}
       </View>
-
-      {plan.entries.length === 0 && helpMeChoose}
 
       {removed && (
         <View style={styles.undoBanner} testID="this-week-undo-banner" role="alert" accessible>
