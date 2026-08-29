@@ -51,12 +51,49 @@ const REQUIRED = ['EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_
 // hard failure, so a deliberate no-telemetry build is still possible.
 const EXPECTED = ['EXPO_PUBLIC_POSTHOG_KEY', 'EXPO_PUBLIC_SENTRY_DSN'];
 
+// Writing a clean .env.local does not *unset* anything: Expo loads a chain
+// of dotenv files, and process.env beats all of them. So a forbidden name
+// living in any of these is inlined regardless of what this script wrote —
+// checking only the file it generated would be an assertion that passes
+// while the thing it asserts is false. Names are the standard Expo chain;
+// .env.example is absent deliberately, being a template Expo never loads.
+const OTHER_ENV_FILES = [
+  '.env',
+  '.env.production',
+  '.env.production.local',
+  '.env.development',
+  '.env.development.local',
+];
+
+// Marks "there was no .env.local before this ran", so --restore removes the
+// generated snapshot instead of failing and leaving it in place to be
+// mistaken for a development environment by the next prepare.
+const NO_PRIOR_ENV_SENTINEL = '#__KEEPSAKE_NO_PRIOR_ENV_LOCAL__\n';
+
+/** Name -> raw value. Values are used only for emptiness checks, never logged. */
+function parseAssignments(contents) {
+  const entries = new Map();
+  for (const line of contents.split('\n')) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line);
+    if (match) entries.set(match[1], match[2]);
+  }
+  return entries;
+}
+
 /** Variable names only. Values are never returned, logged, or stored. */
 function names(contents) {
-  return contents
-    .split('\n')
-    .map((line) => /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)?.[1])
-    .filter((name) => name !== undefined);
+  return [...parseAssignments(contents).keys()];
+}
+
+/** dotenv treats "", '' and bare whitespace as empty — so does startup code. */
+function isEmptyValue(raw) {
+  const trimmed = raw.trim();
+  const unquoted =
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)
+      ? trimmed.slice(1, -1)
+      : trimmed;
+  return unquoted.trim().length === 0;
 }
 
 function fail(message) {
@@ -64,10 +101,62 @@ function fail(message) {
   process.exit(1);
 }
 
+/**
+ * The other two ways a forbidden name reaches the bundle, neither of which
+ * writing .env.local affects.
+ *
+ * Scope, stated honestly: the process-environment check sees *this* Node
+ * process's environment. Xcode's build phase inherits from however Xcode
+ * itself was launched — from Dock or launchd, that is not this shell. So
+ * this catches the common case (an exported var in the terminal you work
+ * in) and cannot prove the absence of one in Xcode's. The durable answer
+ * is that these vars are never exported at all; see the doc section.
+ */
+function assertNoForbiddenElsewhere() {
+  const inProcessEnv = Object.keys(process.env).filter((name) => FORBIDDEN_PATTERN.test(name));
+  if (inProcessEnv.length > 0) {
+    fail(
+      `Development credentials are set in this shell's environment, which\n` +
+        `  overrides every dotenv file — writing a clean .env.local would not\n` +
+        `  unset them:\n` +
+        inProcessEnv.map((name) => `    ${name}`).join('\n') +
+        `\n  Unset them and archive from a shell that never exported them.`,
+    );
+  }
+
+  const inOtherFiles = [];
+  for (const fileName of OTHER_ENV_FILES) {
+    const filePath = path.join(rootDir, fileName);
+    if (!existsSync(filePath)) continue;
+    for (const name of names(readFileSync(filePath, 'utf8'))) {
+      if (FORBIDDEN_PATTERN.test(name)) inOtherFiles.push(`${fileName}: ${name}`);
+    }
+  }
+  if (inOtherFiles.length > 0) {
+    fail(
+      `Development credentials live in other dotenv files Expo also loads, so\n` +
+        `  a clean .env.local does not keep them out of the bundle:\n` +
+        inOtherFiles.map((entry) => `    ${entry}`).join('\n') +
+        `\n  Remove them before archiving.`,
+    );
+  }
+}
+
 function restore() {
   if (!existsSync(BACKUP)) {
     fail(`No ${path.basename(BACKUP)} to restore from — nothing to undo.`);
   }
+
+  // The no-prior-env case: there was nothing to put back, so restoring means
+  // removing the snapshot. Leaving it would let the next prepare back it up
+  // as though it were a development environment.
+  if (readFileSync(BACKUP, 'utf8') === NO_PRIOR_ENV_SENTINEL) {
+    if (existsSync(TARGET)) unlinkSync(TARGET);
+    unlinkSync(BACKUP);
+    console.log(`✓ Removed the archive .env.local. There was no development one to restore.`);
+    return;
+  }
+
   if (existsSync(TARGET)) unlinkSync(TARGET);
   renameSync(BACKUP, TARGET);
   console.log(`✓ Restored your development .env.local. Variables present:`);
@@ -125,15 +214,27 @@ function prepare() {
     );
   }
 
-  const missing = REQUIRED.filter((name) => !sourceNames.includes(name));
-  if (missing.length > 0) {
+  // Present-but-empty passes a name check and fails at runtime: instance.ts
+  // tests these for truthiness and throws, so the archive succeeds and the
+  // app dies on launch — the same silent-success shape this script exists
+  // to prevent.
+  const sourceValues = parseAssignments(contents);
+  const unusable = REQUIRED.filter(
+    (name) => !sourceValues.has(name) || isEmptyValue(sourceValues.get(name)),
+  );
+  if (unusable.length > 0) {
     fail(
-      `client.env is missing variables the app cannot start without:\n` +
-        missing.map((name) => `    ${name}`).join('\n'),
+      `client.env is missing, or has empty values for, variables the app cannot\n` +
+        `  start without (src/supabase/instance.ts throws on either):\n` +
+        unusable.map((name) => `    ${name}`).join('\n'),
     );
   }
 
-  if (existsSync(TARGET)) renameSync(TARGET, BACKUP);
+  assertNoForbiddenElsewhere();
+
+  const hadPriorEnvLocal = existsSync(TARGET);
+  if (hadPriorEnvLocal) renameSync(TARGET, BACKUP);
+  else writeFileSync(BACKUP, NO_PRIOR_ENV_SENTINEL, { mode: 0o600 });
   writeFileSync(TARGET, contents, { mode: 0o600 });
 
   // Braces: verify what actually landed on disk, not what we believe we
@@ -155,15 +256,19 @@ function prepare() {
     console.log(`  Add them to the Keepsake Client environment if that is not deliberate.`);
   }
 
-  if (existsSync(BACKUP)) {
-    console.log(
-      `\n  Your previous .env.local is at ${path.basename(BACKUP)}.` +
-        `\n  Run \`node scripts/prepare-archive-env.mjs --restore\` when the archive is done.`,
-    );
-  }
+  console.log(
+    hadPriorEnvLocal
+      ? `\n  Your previous .env.local is at ${path.basename(BACKUP)}.` +
+          `\n  Run \`npm run archive:env:restore\` when the archive is done.`
+      : `\n  There was no .env.local before this ran, so restore will remove the` +
+          `\n  snapshot rather than put one back. Still run \`npm run archive:env:restore\`.`,
+  );
   console.log(
     `\n  This is a point-in-time snapshot: it goes stale if a value rotates in\n` +
-      `  1Password. Re-run before each archive rather than trusting an old one.`,
+      `  1Password. Re-run before each archive rather than trusting an old one.\n` +
+      `\n  Scope: this asserts on dotenv files and this shell's environment. It\n` +
+      `  cannot see the environment Xcode itself was launched with — archive\n` +
+      `  from a shell that never exported EXPO_PUBLIC_DEV_TEST_*.`,
   );
 }
 

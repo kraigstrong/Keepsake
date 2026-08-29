@@ -90,7 +90,11 @@ Both produce a *successful* archive. Neither shows up until much later.
 npm run archive:env      # snapshot client.env -> .env.local, assert no dev creds
 ```
 
-It parks your development `.env.local` at `.env.local.bak`, refuses to run twice (so it can't clobber that backup), and prints the variable names it wrote — never values. It hard-fails if a `EXPO_PUBLIC_DEV_TEST_*` survives or a required Supabase var is missing, and warns if the PostHog/Sentry keys are absent, since that build would run fine while telling you nothing.
+It parks your development `.env.local` at `.env.local.bak`, refuses to run twice (so it can't clobber that backup), and prints the variable names it wrote — never values. It hard-fails if a required Supabase var is missing *or empty* (`src/supabase/instance.ts` throws on either, so an empty value means a clean archive and a dead launch), and warns if the PostHog/Sentry keys are absent, since that build would run fine while telling you nothing.
+
+**Writing a clean `.env.local` does not unset anything.** Expo loads a chain of dotenv files and `process.env` beats all of them, so the script also fails if a `EXPO_PUBLIC_DEV_TEST_*` is exported in your shell or present in `.env`, `.env.production`, `.env.production.local`, `.env.development`, or `.env.development.local`.
+
+One limit worth knowing rather than trusting past: it checks *its own* process environment. Xcode's build phase inherits from however Xcode was launched, which — started from the Dock — is not the shell you ran this in. So **archive from a shell that never exported those vars**, and treat "never export them at all" as the actual rule. The script catches the common case; it cannot prove the absence of the uncommon one.
 
 Then the ordering that actually matters:
 
