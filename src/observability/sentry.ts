@@ -23,6 +23,7 @@ export function initSentry(dsn: string | undefined): void {
     dsn,
     sendDefaultPii: false,
     beforeSend: redactSensitiveFields,
+    beforeBreadcrumb: stripBreadcrumbUrlQuery,
   });
   initialized = true;
 }
@@ -33,15 +34,38 @@ export function initSentry(dsn: string | undefined): void {
 // through under a key name that looks sensitive.
 const SENSITIVE_KEY_PATTERN = /password|token|credential|secret|recipe|note/i;
 
+// A bare `<thing>Id` is an opaque uuid, not content — redacting recipeId
+// costs the debuggability logError's callers pass it for and protects
+// nothing, since the id is meaningless without database access.
+const OPAQUE_ID_KEY_PATTERN = /^[a-z]+Id$/i;
+
 function redactSensitiveFields(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
   if (event.extra) {
     for (const key of Object.keys(event.extra)) {
-      if (SENSITIVE_KEY_PATTERN.test(key)) {
+      if (SENSITIVE_KEY_PATTERN.test(key) && !OPAQUE_ID_KEY_PATTERN.test(key)) {
         event.extra[key] = '[Redacted]';
       }
     }
   }
   return event;
+}
+
+/**
+ * Sentry's own HTTP breadcrumbs record request URLs, and beforeSend never
+ * sees them — it only covers `extra`. Every Supabase call this app makes
+ * today filters on uuids, so nothing sensitive is in a query string yet;
+ * this exists so that stays true without anyone having to remember it
+ * when the first `.ilike()` on recipe text gets written. Path is kept —
+ * that's what makes a breadcrumb worth having — and the query dropped.
+ */
+function stripBreadcrumbUrlQuery(breadcrumb: Sentry.Breadcrumb): Sentry.Breadcrumb {
+  const url = breadcrumb.data?.url;
+  if (typeof url !== 'string') return breadcrumb;
+
+  const queryStart = url.search(/[?#]/);
+  if (queryStart === -1) return breadcrumb;
+
+  return { ...breadcrumb, data: { ...breadcrumb.data, url: url.slice(0, queryStart) } };
 }
 
 export function captureException(error: unknown, context?: Record<string, unknown>): void {
