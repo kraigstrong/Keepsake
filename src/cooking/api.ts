@@ -52,17 +52,29 @@ export interface RecordCookingEventInput {
   clientEventId: string;
 }
 
+/** Mirrors cooking_events_note_length_check (migration 20260828100000). */
+export const COOKING_NOTE_MAX_LENGTH = 2000;
+
 /**
  * clientEventId is record_cooking_event()'s idempotency key (ADR-0024
  * decision 3) — callers (the cooking-event outbox engine, or a direct
  * online call) always pass one, generated once when the event is first
  * queued/attempted, so a retry is a safe replay rather than a duplicate.
+ *
+ * The note is clamped here rather than trusted from the caller because
+ * the outbox can hold rows queued before the cap existed, on a device
+ * that has not updated. Those predate DoneCookingSheet's maxLength, and
+ * outboxEngine.ts has no terminal failed state by design (ADR-0024's
+ * 2026-08-10 amendment) — so an over-long legacy note would be rejected
+ * by the check constraint on every drain, forever, losing a completion
+ * the user was already told had succeeded. Truncating costs the tail of
+ * one note; not truncating costs the cook.
  */
 export async function recordCookingEvent(input: RecordCookingEventInput): Promise<void> {
   const { error } = await supabase.rpc('record_cooking_event', {
     recipe_id: input.recipeId,
     cooked_at: input.cookedAt,
-    note: input.note,
+    note: input.note?.slice(0, COOKING_NOTE_MAX_LENGTH) ?? null,
     // Matches the RPC's client_event_id_param — the SQL parameter isn't
     // named client_event_id (an ON CONFLICT target ambiguity, see the
     // migration's own comment); PostgREST matches these keys by name.

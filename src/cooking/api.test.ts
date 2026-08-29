@@ -1,4 +1,4 @@
-import { getCookingHistory, recordCookingEvent } from './api';
+import { COOKING_NOTE_MAX_LENGTH, getCookingHistory, recordCookingEvent } from './api';
 import { supabase } from '../supabase/instance';
 
 jest.mock('../supabase/instance', () => ({
@@ -83,6 +83,35 @@ describe('recordCookingEvent', () => {
       note: 'Kids loved this.',
       client_event_id_param: 'event-1',
     });
+  });
+
+  // A note queued by a device that predates DoneCookingSheet's maxLength
+  // would otherwise be rejected by the check constraint on every drain,
+  // forever — outboxEngine.ts has no terminal failed state (ADR-0024).
+  it('clamps an over-long legacy note instead of letting the server reject it', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await recordCookingEvent({
+      recipeId: 'recipe-1',
+      cookedAt: '2026-08-10T18:00:00.000Z',
+      note: 'x'.repeat(2500),
+      clientEventId: 'event-1',
+    });
+
+    expect(mockedRpc.mock.calls[0][1].note).toBe('x'.repeat(COOKING_NOTE_MAX_LENGTH));
+  });
+
+  it('passes a null note through without clamping', async () => {
+    mockedRpc.mockResolvedValue({ error: null });
+
+    await recordCookingEvent({
+      recipeId: 'recipe-1',
+      cookedAt: '2026-08-10T18:00:00.000Z',
+      note: null,
+      clientEventId: 'event-1',
+    });
+
+    expect(mockedRpc.mock.calls[0][1].note).toBeNull();
   });
 
   it('surfaces a Supabase error as a thrown Error', async () => {

@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(18);
+select plan(20);
 
 insert into auth.users (id, email)
 values
@@ -204,6 +204,26 @@ select is(
   (select status from public.weekly_plans where id = (select id from plan_b)),
   'planning',
   'remove_confirmed_planning_entry: reopens once the last remaining entry is also removed'
+);
+
+-- cooking_events_note_length_check (threat-model.md T22). The bound is on
+-- the table, so it holds for record_cooking_event and any later write path
+-- alike — these two cases pin the boundary itself, not just "long fails".
+select lives_ok(
+  $$ select public.record_cooking_event(
+       '20000000-0000-0000-0000-000000000001', now(), repeat('x', 2000),
+       '40000000-0000-0000-0000-000000000009'
+     ) $$,
+  'record_cooking_event: accepts a note exactly at the 2000-char bound'
+);
+
+select throws_ok(
+  $$ select public.record_cooking_event(
+       '20000000-0000-0000-0000-000000000001', now(), repeat('x', 2001),
+       '40000000-0000-0000-0000-00000000000a'
+     ) $$,
+  'new row for relation "cooking_events" violates check constraint "cooking_events_note_length_check"',
+  'record_cooking_event: rejects a note one character over the bound'
 );
 
 select * from finish();

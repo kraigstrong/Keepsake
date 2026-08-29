@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, type GestureResponderEvent } from 'react-native';
 
+import { COOKING_NOTE_MAX_LENGTH } from './api';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { Sheet } from '../components/Sheet';
@@ -141,6 +142,7 @@ export function DoneCookingSheet({
         placeholderTextColor={colors.textTertiary}
         value={note}
         onChangeText={setNote}
+        maxLength={COOKING_NOTE_MAX_LENGTH}
         multiline
       />
 
