@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, type GestureResponderEvent } from 'react-native';
 
+import { COOKING_NOTE_MAX_LENGTH } from './api';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { Sheet } from '../components/Sheet';
@@ -23,10 +24,6 @@ export interface DoneCookingSheetProps {
   canRemoveFromPlan: boolean;
   isSubmitting: boolean;
 }
-
-// Mirrors cooking_events_note_length_check (20260828100000). The server
-// bound is the real one; this only stops a typed note reaching it.
-const NOTE_MAX_LENGTH = 2000;
 
 /**
  * COOK-05/06: the richer Done Cooking confirmation, layered on top of
@@ -145,7 +142,7 @@ export function DoneCookingSheet({
         placeholderTextColor={colors.textTertiary}
         value={note}
         onChangeText={setNote}
-        maxLength={NOTE_MAX_LENGTH}
+        maxLength={COOKING_NOTE_MAX_LENGTH}
         multiline
       />
 
