@@ -21,12 +21,9 @@ import { getHeroImageUrls } from '../recipes/heroImage';
  * correct result.
  *
  * Fired before household is confirmed to exist (deliberately — that's
- * what makes it early enough to matter), so a first-time user's
- * onboarding -> This Week transition can consume a prefetch that was
- * started before their household existed and therefore failed. That
- * used to be recorded here as an accepted, self-correcting rough edge;
- * it reached a real device on 2026-08-29 and was neither. See
- * loadThisWeekPlan below for what actually makes it self-correcting.
+ * what makes it early enough to matter), so a first-time user's prefetch
+ * can fail against a household that doesn't exist yet. loadThisWeekPlan
+ * retries rather than surfacing that.
  */
 let prefetchedForUserId: string | null = null;
 let prefetchedPlanPromise: Promise<ThisWeekPlan> | null = null;
@@ -52,9 +49,8 @@ export function prefetchThisWeek(userId: string): void {
   prefetchedForUserId = userId;
   prefetchedPlanResult = null;
   prefetchedPlanPromise = fetchCurrentWeeklyPlan();
-  // Swallowed here — a failed prefetch shouldn't surface on its own;
-  // loadThisWeekPlan below still surfaces it to whatever consumes it,
-  // same as a normal fetchCurrentWeeklyPlan() rejection would.
+  // Swallowed so a failed prefetch isn't an unhandled rejection. It is
+  // not lost: loadThisWeekPlan retries it against a fresh fetch.
   prefetchedPlanPromise
     .then((plan) => {
       if (token === requestToken) prefetchedPlanResult = plan;
@@ -95,21 +91,10 @@ function consumePrefetchedThisWeek(userId: string): Promise<ThisWeekPlan> | null
 }
 
 /**
- * What ThisWeekScreen's load() actually calls on every load.
- *
- * A rejected prefetch falls through to a real fetch rather than being
- * surfaced. This is what makes the "self-correcting" claim above
- * actually true: the prefetch fires before the household is confirmed
- * to exist, so a first-time user's very first load consumed a rejection
- * caused by a household that existed by the time they got here. The
- * screen then showed a full-screen error on the first thing a new user
- * ever sees, and recovered only when they tapped Try again — self-
- * correcting in the sense that a manual retry worked, which is not what
- * that phrase should mean (developer device testing, 2026-08-29).
- *
- * A failed prefetch carries no information worth surfacing: it is an
- * optimization that didn't pay off, not a diagnosis of the network. If
- * the real fetch fails too, that error surfaces exactly as before.
+ * What ThisWeekScreen's load() actually calls on every load. A rejected
+ * prefetch is retried against a fresh fetch rather than surfaced — it's
+ * an optimization that didn't pay off, not a diagnosis of the network.
+ * A failing retry still rejects.
  */
 export function loadThisWeekPlan(userId: string | null): Promise<ThisWeekPlan> {
   const pending = userId ? consumePrefetchedThisWeek(userId) : null;

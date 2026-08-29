@@ -112,12 +112,8 @@ describe('loadThisWeekPlan', () => {
     expect(api.fetchCurrentWeeklyPlan).toHaveBeenCalledTimes(2);
   });
 
-  // Replaces an earlier test that asserted the rejection was surfaced.
-  // That behaviour was the accepted risk in prefetchThisWeek's own
-  // comment, and it reached a device on 2026-08-29: the prefetch fires
-  // before the household exists, so a first-time user's first load
-  // consumed a stale rejection and got a full-screen error on the very
-  // first screen they ever see.
+  // Replaces a test that asserted the rejection was surfaced — that was
+  // the contract this changed deliberately, not a regression.
   it('retries a rejected prefetch with a fresh fetch instead of surfacing it', async () => {
     const api = jest.requireMock('./api');
     api.fetchCurrentWeeklyPlan
