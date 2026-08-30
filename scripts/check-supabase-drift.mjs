@@ -149,6 +149,26 @@ function loadProjectRef() {
 const { token, ref } = loadProjectRef();
 const toml = readToml(readFileSync(CONFIG, 'utf8'));
 
+// This script exists to prevent false greens, so it must not be capable of
+// producing one itself. devtools.env is a 1Password mount that could point
+// at a different or stale project; without this, the check would validate
+// whatever that ref names and report success while staging went unexamined.
+// config.toml already declares which project [remotes.staging] describes,
+// so there is something authoritative to compare against.
+const declaredRef = toml.get('remotes.staging.project_id');
+if (!declaredRef) {
+  fail(
+    '[remotes.staging] has no project_id, so there is nothing to verify the credentials against.',
+  );
+}
+if (declaredRef !== ref) {
+  fail(
+    `devtools.env points at project "${ref}", but [remotes.staging] declares\n` +
+      `  "${declaredRef}". Refusing to check a project this repo does not describe —\n` +
+      `  a green result here would say nothing about staging.`,
+  );
+}
+
 const response = await fetch(`https://api.supabase.com/v1/projects/${ref}/config/auth`, {
   headers: { Authorization: `Bearer ${token}` },
 });
@@ -183,7 +203,14 @@ for (const { api, expected, why } of ASSERTED) {
 }
 
 // Migrations: the third incident, and the one config push cannot see.
-let unapplied = [];
+// Both directions are drift. A local-only migration means the project is
+// missing a change the repo has — the 2026-08-29 case. A remote-only one
+// means the project has a change the repo does not, which matters more
+// here than it might elsewhere: migrations are forward-only (AGENTS.md),
+// so there is no mechanism that would legitimately produce one, and its
+// existence means something was applied out of band or a file was lost.
+let localOnly = [];
+let remoteOnly = [];
 try {
   const raw = execFileSync(
     'npx',
@@ -194,12 +221,20 @@ try {
     .split('\n')
     .filter((l) => l.trim().startsWith('{'))
     .pop();
-  unapplied = (JSON.parse(line).migrations ?? []).filter((m) => !m.remote).map((m) => m.local);
+  const rows = JSON.parse(line).migrations ?? [];
+  localOnly = rows.filter((m) => m.local && !m.remote).map((m) => m.local);
+  remoteOnly = rows.filter((m) => m.remote && !m.local).map((m) => m.remote);
 } catch {
   problems.push('  migrations: could not be listed — check the CLI and credentials');
 }
-for (const m of unapplied) {
+for (const m of localOnly) {
   problems.push(`  migration ${m} exists locally but has never been applied to the project`);
+}
+for (const m of remoteOnly) {
+  problems.push(
+    `  migration ${m} is applied on the project but does not exist in this repo —\n` +
+      `      applied out of band, or the file was lost; migrations are forward-only`,
+  );
 }
 
 if (problems.length > 0) {
