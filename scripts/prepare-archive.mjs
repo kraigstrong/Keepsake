@@ -19,13 +19,19 @@
 // Stops before Xcode. Prints the remaining manual steps.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INFO_PLIST = path.join(rootDir, 'ios', 'Keepsake', 'Info.plist');
 const ENTITLEMENTS = path.join(rootDir, 'ios', 'Keepsake', 'Keepsake.entitlements');
+// @bacons/apple-targets generates the Share Extension's own entitlements
+// here. Checked separately from the app's: targets/share/expo-target.config.js
+// gives the extension its own copy of the app group, so prebuild can
+// preserve one and drop the other — and an extension without it appears
+// in the share sheet and silently fails to reach the container.
+const TARGETS_DIR = path.join(rootDir, 'ios', '.targets');
 
 // CocoaPods 1.16.2 crashes on Homebrew Ruby 4.x unless the locale is
 // forced (docs/building-ios-locally.md, Trap 1).
@@ -101,7 +107,12 @@ step('Regenerating ios/ from app.json (expo prebuild)');
 run('npx', ['expo', 'prebuild', '-p', 'ios']);
 
 step('Installing pods');
-run('npx', ['pod-install']);
+// `pod` directly rather than `npx pod-install`: the latter is in neither
+// package.json nor the lockfile, so npx would fetch it from the registry
+// at archive time — unpinned, and broken behind a restricted registry.
+// CocoaPods is already a documented prerequisite with a known version
+// and its own locale workaround (docs/building-ios-locally.md, Trap 1).
+run('pod', ['install'], { cwd: path.join(rootDir, 'ios') });
 
 step('Verifying the generated project matches app.json');
 if (!existsSync(INFO_PLIST)) fail(`${INFO_PLIST} does not exist after prebuild.`);
@@ -143,6 +154,38 @@ if (appGroup) {
     problems.push('Keepsake.entitlements does not exist — the Share Extension handoff will fail.');
   } else if (!readFileSync(ENTITLEMENTS, 'utf8').includes(appGroup)) {
     problems.push(`The app group ${appGroup} is missing from Keepsake.entitlements.`);
+  }
+}
+
+// The extension's own entitlement, which the app's tells you nothing
+// about. No CI job compiles this app, so an archive is the first thing
+// that would notice — and it would not notice, it would just ship.
+if (appGroup) {
+  if (!existsSync(TARGETS_DIR)) {
+    problems.push(
+      `${path.relative(rootDir, TARGETS_DIR)} does not exist — the Share Extension was not generated.`,
+    );
+  } else {
+    const extensionEntitlements = readdirSync(TARGETS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .flatMap((dir) =>
+        readdirSync(path.join(TARGETS_DIR, dir.name))
+          .filter((file) => file.endsWith('.entitlements'))
+          .map((file) => path.join(TARGETS_DIR, dir.name, file)),
+      );
+    if (extensionEntitlements.length === 0) {
+      problems.push(
+        'No generated extension entitlements found — the Share Extension cannot reach the app group.',
+      );
+    }
+    for (const file of extensionEntitlements) {
+      if (!readFileSync(file, 'utf8').includes(appGroup)) {
+        problems.push(
+          `${path.relative(rootDir, file)} is missing the app group ${appGroup} — ` +
+            `the Share Extension would appear in the share sheet and silently fail.`,
+        );
+      }
+    }
   }
 }
 
