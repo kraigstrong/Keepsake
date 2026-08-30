@@ -21,6 +21,20 @@ const MAX_TOKEN_LENGTH = 128;
 // (e.g. crypto.randomBytes(32).toString('base64url')) actually looks like.
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+/**
+ * The shape half of parseInvitationLink, for callers that already hold a
+ * bare token rather than a URL — app/invite/[token].tsx gets one straight
+ * from the route param. Shared rather than duplicated so the two can't
+ * drift; still only judges shape, never validity (that stays server-side).
+ */
+export function isWellFormedInvitationToken(token: string): boolean {
+  return (
+    token.length >= MIN_TOKEN_LENGTH &&
+    token.length <= MAX_TOKEN_LENGTH &&
+    TOKEN_PATTERN.test(token)
+  );
+}
+
 export type ParsedInvitationLink = { ok: true; token: string } | { ok: false; reason: string };
 
 export function parseInvitationLink(rawUrl: string): ParsedInvitationLink {

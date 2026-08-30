@@ -65,6 +65,36 @@ describe('DeepLinkProvider / useDeepLink', () => {
     );
   });
 
+  // The route param path (app/invite/[token].tsx). Exists because
+  // getInitialURL() is async: on a cold launch the Linking capture can
+  // still be pending several renders in, and onboarding mounting without
+  // a token exposes the irreversible "Create a household" button.
+  it('capturePendingInvitationToken accepts a well-formed token synchronously', async () => {
+    const { result } = await renderHook(() => useDeepLink(), { wrapper: DeepLinkProvider });
+    await waitFor(() => expect(mockedLinking.getInitialURL).toHaveBeenCalled());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = result.current.capturePendingInvitationToken('abcdefghijklmnopqrstuvwxyz012345');
+    });
+
+    expect(accepted).toBe(true);
+    expect(result.current.pendingInvitationToken).toBe('abcdefghijklmnopqrstuvwxyz012345');
+  });
+
+  it('capturePendingInvitationToken rejects a malformed token and keeps the state null', async () => {
+    const { result } = await renderHook(() => useDeepLink(), { wrapper: DeepLinkProvider });
+    await waitFor(() => expect(mockedLinking.getInitialURL).toHaveBeenCalled());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = result.current.capturePendingInvitationToken('too-short');
+    });
+
+    expect(accepted).toBe(false);
+    expect(result.current.pendingInvitationToken).toBeNull();
+  });
+
   it('clearPendingInvitationToken resets the token to null', async () => {
     mockedLinking.getInitialURL.mockResolvedValue(
       'keepsake://invite/abcdefghijklmnopqrstuvwxyz012345',

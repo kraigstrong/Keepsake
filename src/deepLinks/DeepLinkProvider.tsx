@@ -1,11 +1,17 @@
 import * as Linking from 'expo-linking';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-import { parseInvitationLink } from './parseInvitationLink';
+import { isWellFormedInvitationToken, parseInvitationLink } from './parseInvitationLink';
 
 interface DeepLinkContextValue {
   pendingInvitationToken: string | null;
   clearPendingInvitationToken: () => void;
+  /**
+   * Capture a token already extracted from a route param, so a caller
+   * holding one need not wait on the asynchronous Linking path below.
+   * Returns whether the token was well-formed enough to keep.
+   */
+  capturePendingInvitationToken: (token: string) => boolean;
 }
 
 const DeepLinkContext = createContext<DeepLinkContextValue | null>(null);
@@ -40,8 +46,27 @@ export function DeepLinkProvider({ children }: { children: ReactNode }) {
 
   const clearPendingInvitationToken = () => setPendingInvitationToken(null);
 
+  // getInitialURL() above resolves a promise, so on a cold launch the
+  // token can still be null several renders in. app/invite/[token].tsx
+  // already holds it synchronously from the route param and uses this to
+  // put it here before handing control back to the router — without that,
+  // onboarding can mount with no token and expose "Create a household",
+  // which is the one irreversible action in the app (ADR-0004: no leaving).
+  // useCallback so the route's effect doesn't re-run every render.
+  const capturePendingInvitationToken = useCallback((token: string): boolean => {
+    if (!isWellFormedInvitationToken(token)) return false;
+    setPendingInvitationToken(token);
+    return true;
+  }, []);
+
   return (
-    <DeepLinkContext.Provider value={{ pendingInvitationToken, clearPendingInvitationToken }}>
+    <DeepLinkContext.Provider
+      value={{
+        pendingInvitationToken,
+        clearPendingInvitationToken,
+        capturePendingInvitationToken,
+      }}
+    >
       {children}
     </DeepLinkContext.Provider>
   );
