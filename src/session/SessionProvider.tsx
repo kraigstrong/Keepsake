@@ -26,10 +26,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setIsLoading(false);
+      })
+      // getSession() reads through LargeSecureStore, which AES-decrypts
+      // from AsyncStorage — a corrupt value or a failed storage read
+      // rejects here. Without this the app hung on StartupScreen forever,
+      // since isLoading gates it (developer cold launch, 2026-08-30).
+      // Falling through as "no session" is safe: the user lands on
+      // sign-in and signing in again recovers. That is deliberately
+      // different from HouseholdProvider, where the equivalent fallthrough
+      // would offer to create a household.
+      .catch((error) => {
+        logError(error, { context: 'sessionInitialLoad' });
+        setIsLoading(false);
+      });
 
     // Fires on sign-in, sign-out, and token refresh — the single source
     // of truth for session state; sendOtp/verifyOtp/signOut below don't

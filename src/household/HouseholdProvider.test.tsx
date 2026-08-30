@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { HouseholdProvider, useHousehold } from './HouseholdProvider';
 import * as api from './api';
+import { logError } from '../observability';
 import { useSession } from '../session/SessionProvider';
 
 jest.mock('./api');
@@ -12,9 +13,11 @@ jest.mock('../session/SessionProvider', () => ({
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
 // missing-env-var throw.
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+jest.mock('../observability', () => ({ logError: jest.fn() }));
 
 const mockedUseSession = useSession as jest.Mock;
 const mockedApi = api as jest.Mocked<typeof api>;
+const mockedLogError = logError as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -61,6 +64,58 @@ describe('HouseholdProvider / useHousehold', () => {
     expect(result.current.profile).toBeNull();
     expect(result.current.household).toBeNull();
     expect(mockedApi.fetchProfile).not.toHaveBeenCalled();
+  });
+
+  // The initial load used to have no .catch(), so any rejection left
+  // isLoading true forever — StartupScreen with no error, no retry and
+  // nothing logged (developer cold launch, 2026-08-30).
+  it('a failed initial load stops loading and reports an error instead of hanging', async () => {
+    mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
+    mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.loadError).toBe(true);
+    expect(mockedLogError).toHaveBeenCalled();
+  });
+
+  // The reason loadError exists at all rather than just clearing isLoading:
+  // household stays null on failure, and a null household is what routes to
+  // onboarding's irreversible "Create a household" button.
+  it('a failed initial load does not report the user as having no household', async () => {
+    mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
+    mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    // household is null either way — loadError is the only thing that
+    // distinguishes "we don't know" from "they genuinely have none".
+    expect(result.current.household).toBeNull();
+    expect(result.current.loadError).toBe(true);
+  });
+
+  it('retryLoad clears the error and recovers when the fetch succeeds', async () => {
+    mockedApi.fetchProfile.mockRejectedValueOnce(new Error('network down'));
+    mockedApi.fetchHousehold.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'metric',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1' });
+
+    await act(async () => {
+      result.current.retryLoad();
+    });
+
+    await waitFor(() => expect(result.current.loadError).toBe(false));
+    expect(result.current.household).toEqual({ id: 'household-1' });
   });
 
   it('setDisplayName creates the profile and refreshes state', async () => {

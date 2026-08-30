@@ -9,12 +9,22 @@ import {
   type Household,
   type Profile,
 } from './api';
+import { logError } from '../observability';
 import { useSession } from '../session/SessionProvider';
 
 interface HouseholdContextValue {
   profile: Profile | null;
   household: Household | null;
   isLoading: boolean;
+  /**
+   * The initial load failed, so profile/household say nothing about what
+   * this user actually has. Distinct from "loaded, and they have none" on
+   * purpose: collapsing the two routes a transient network failure into
+   * onboarding, which offers "Create a household" — irreversible, since
+   * ADR-0004 has no leave path.
+   */
+  loadError: boolean;
+  retryLoad: () => void;
   setDisplayName: (displayName: string) => Promise<{ error: string | null }>;
   createHousehold: () => Promise<{ error: string | null }>;
   acceptInvitation: (token: string) => Promise<{ error: string | null }>;
@@ -36,6 +46,9 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [household, setHousehold] = useState<Household | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  // Bumped by retryLoad to re-run the load effect below.
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Tracks which userId profile/household/isLoading currently reflect.
   // When userId changes, force isLoading back to true in this same
@@ -50,6 +63,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   if (userId !== loadedForUserId) {
     setLoadedForUserId(userId);
     setIsLoading(true);
+    setLoadError(false);
   }
 
   // No setState here — a pure fetch so both the mount/userId-change effect
@@ -78,16 +92,36 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadHouseholdState().then(({ profile: fetchedProfile, household: fetchedHousehold }) => {
-      if (cancelled) return;
-      setProfile(fetchedProfile);
-      setHousehold(fetchedHousehold);
-      setIsLoading(false);
-    });
+    loadHouseholdState()
+      .then(({ profile: fetchedProfile, household: fetchedHousehold }) => {
+        if (cancelled) return;
+        setProfile(fetchedProfile);
+        setHousehold(fetchedHousehold);
+        setLoadError(false);
+        setIsLoading(false);
+      })
+      // Without this the app hung on StartupScreen forever, silently, on
+      // any transient failure here — no error, no retry, nothing logged
+      // (developer cold launch, 2026-08-30). Deliberately sets loadError
+      // rather than just clearing isLoading: falling through with a null
+      // household reads as "new user" and routes to onboarding's
+      // "Create a household" button.
+      .catch((error) => {
+        if (cancelled) return;
+        logError(error, { context: 'householdInitialLoad' });
+        setLoadError(true);
+        setIsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [loadHouseholdState]);
+  }, [loadHouseholdState, loadAttempt]);
+
+  const retryLoad = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(false);
+    setLoadAttempt((attempt) => attempt + 1);
+  }, []);
 
   const setDisplayName = async (displayName: string): Promise<{ error: string | null }> => {
     if (!userId) return { error: 'not signed in' };
@@ -122,7 +156,16 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
   return (
     <HouseholdContext.Provider
-      value={{ profile, household, isLoading, setDisplayName, createHousehold, acceptInvitation }}
+      value={{
+        profile,
+        household,
+        isLoading,
+        loadError,
+        retryLoad,
+        setDisplayName,
+        createHousehold,
+        acceptInvitation,
+      }}
     >
       {children}
     </HouseholdContext.Provider>
