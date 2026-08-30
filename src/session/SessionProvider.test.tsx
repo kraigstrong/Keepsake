@@ -22,6 +22,7 @@ jest.mock('../supabase/instance', () => ({
   },
 }));
 jest.mock('../sync/wipeOfflineData', () => ({ wipeOfflineData: jest.fn() }));
+jest.mock('../observability', () => ({ logError: jest.fn() }));
 
 const mockedAuth = supabase.auth as jest.Mocked<typeof supabase.auth>;
 const mockedWipeOfflineData = wipeOfflineData as jest.Mock;
@@ -57,6 +58,15 @@ beforeEach(() => {
 });
 
 describe('SessionProvider / useSession', () => {
+  it('a rejected getSession stops loading instead of hanging the splash', async () => {
+    mockedAuth.getSession.mockRejectedValue(new Error('keychain unavailable'));
+
+    const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.session).toBeNull();
+  });
+
   it('resolves to null when there is no existing Supabase session', async () => {
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
 

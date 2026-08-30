@@ -26,10 +26,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setIsLoading(false);
+      })
+      // getSession() reads through LargeSecureStore, which AES-decrypts
+      // from AsyncStorage, so a corrupt value rejects here. Falling
+      // through as "no session" is safe — sign-in recovers.
+      .catch((error) => {
+        logError(error, { context: 'sessionInitialLoad' });
+        setIsLoading(false);
+      });
 
     // Fires on sign-in, sign-out, and token refresh — the single source
     // of truth for session state; sendOtp/verifyOtp/signOut below don't

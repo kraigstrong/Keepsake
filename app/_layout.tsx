@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectivityProvider, useConnectivity } from '../src/connectivity/ConnectivityProvider';
 import { BackIcon } from '../src/components/icons/BackIcon';
+import { ErrorState } from '../src/components/ErrorState';
 import { OfflineState } from '../src/components/OfflineState';
 import { StartupScreen } from '../src/components/StartupScreen';
 import { ToastProvider, useToast } from '../src/components/Toast';
@@ -330,7 +331,13 @@ const THIS_WEEK_PREFETCH_WAIT_MS = 2500;
 function AuthenticatedRouteBoundary() {
   const router = useRouter();
   const { session, isLoading: sessionLoading } = useSession();
-  const { profile, household, isLoading: householdLoading } = useHousehold();
+  const {
+    profile,
+    household,
+    isLoading: householdLoading,
+    loadError: householdLoadError,
+    retryLoad: retryHouseholdLoad,
+  } = useHousehold();
   useDevAutoSignIn();
 
   const userId = session?.user.id ?? null;
@@ -379,6 +386,29 @@ function AuthenticatedRouteBoundary() {
   }
   if (session !== null && householdLoading) {
     return <StartupScreen />;
+  }
+  // Must precede the onboarding branch: needsOnboarding cannot tell a
+  // failed load from a real new user (see HouseholdProvider's loadError).
+  if (session !== null && householdLoadError) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background,
+          paddingHorizontal: spacing.lg,
+        }}
+        testID="household-load-error"
+      >
+        <ErrorState
+          title="Couldn't load your household"
+          message="Check your connection and try again."
+          onRetry={retryHouseholdLoad}
+          testID="household-load-error-state"
+        />
+      </View>
+    );
   }
   if (isOnboarded && !thisWeekReady) {
     return <StartupScreen />;
