@@ -106,7 +106,11 @@ cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install && cd ..
 npm run archive:env:restore   # put your dev credentials back
 ```
 
-`prebuild` is not optional here even when no native dependency changed: `app.json` carries the app-group entitlement, the `keepsake://` scheme, and three permission strings, and — per Trap 2 above — `pod install` alone propagates none of them into an existing `ios/`. That failure is quiet, producing a green archive simply missing the change.
+**When `prebuild` is needed, precisely:** when `app.json`, a config plugin, or a native module has changed since `ios/` was last generated. Not on every archive. `app.json` and `ios/` are source and output — Xcode never reads `app.json`, only the generated `Info.plist`, `.entitlements` and `.pbxproj` — so editing one without regenerating the other gets you the old output, and `pod install` propagates none of it (Trap 2 above). That failure is quiet: a green archive simply missing the change.
+
+Both cases have now happened. Build 1 (2026-08-29) did **not** need it — `app.json` was unchanged since Aug 3 and `ios/` was generated Aug 27, verified by checking the entitlement, scheme and permission strings were already present. Build 2 the same day **did**, because `buildNumber` was added: without it the archive would have carried `CFBundleVersion 1` and been rejected at upload, after the full compile.
+
+If unsure, run it — plain `prebuild` is idempotent and cheap. But **re-check Signing & Capabilities on both targets afterwards**, since it regenerates the Xcode project where the team selection lives.
 
 Run `npm run archive:env:restore` when the upload finishes. Until you do, local auto-sign-in stays off, which is a confusing thing to rediscover a week later.
 
