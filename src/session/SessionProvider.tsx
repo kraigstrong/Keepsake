@@ -33,13 +33,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       })
       // getSession() reads through LargeSecureStore, which AES-decrypts
-      // from AsyncStorage — a corrupt value or a failed storage read
-      // rejects here. Without this the app hung on StartupScreen forever,
-      // since isLoading gates it (developer cold launch, 2026-08-30).
-      // Falling through as "no session" is safe: the user lands on
-      // sign-in and signing in again recovers. That is deliberately
-      // different from HouseholdProvider, where the equivalent fallthrough
-      // would offer to create a household.
+      // from AsyncStorage, so a corrupt value rejects here. Falling
+      // through as "no session" is safe — sign-in recovers.
       .catch((error) => {
         logError(error, { context: 'sessionInitialLoad' });
         setIsLoading(false);

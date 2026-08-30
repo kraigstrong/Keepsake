@@ -58,17 +58,12 @@ beforeEach(() => {
 });
 
 describe('SessionProvider / useSession', () => {
-  // getSession() reads through LargeSecureStore, which AES-decrypts from
-  // AsyncStorage — a corrupt value rejects here. Without a catch, isLoading
-  // stayed true and StartupScreen never dismissed (2026-08-30).
   it('a rejected getSession stops loading instead of hanging the splash', async () => {
     mockedAuth.getSession.mockRejectedValue(new Error('keychain unavailable'));
 
     const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    // Falls through as "no session" on purpose: the user lands on sign-in
-    // and signing in again recovers.
     expect(result.current.session).toBeNull();
   });
 

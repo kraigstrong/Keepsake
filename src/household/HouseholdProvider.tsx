@@ -18,10 +18,10 @@ interface HouseholdContextValue {
   isLoading: boolean;
   /**
    * The initial load failed, so profile/household say nothing about what
-   * this user actually has. Distinct from "loaded, and they have none" on
-   * purpose: collapsing the two routes a transient network failure into
-   * onboarding, which offers "Create a household" — irreversible, since
-   * ADR-0004 has no leave path.
+   * this user has. Kept distinct from "loaded, and they have none"
+   * because the two route differently: a null household means onboarding,
+   * which offers "Create a household" — irreversible under ADR-0004.
+   * This is the only place that reasoning lives; callers just branch.
    */
   loadError: boolean;
   retryLoad: () => void;
@@ -100,12 +100,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         setLoadError(false);
         setIsLoading(false);
       })
-      // Without this the app hung on StartupScreen forever, silently, on
-      // any transient failure here — no error, no retry, nothing logged
-      // (developer cold launch, 2026-08-30). Deliberately sets loadError
-      // rather than just clearing isLoading: falling through with a null
-      // household reads as "new user" and routes to onboarding's
-      // "Create a household" button.
+      // Sets loadError, not just isLoading — see the field's own comment.
       .catch((error) => {
         if (cancelled) return;
         logError(error, { context: 'householdInitialLoad' });

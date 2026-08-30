@@ -387,11 +387,8 @@ function AuthenticatedRouteBoundary() {
   if (session !== null && householdLoading) {
     return <StartupScreen />;
   }
-  // Before the onboarding branch below, deliberately. A failed load leaves
-  // household null, which needsOnboarding cannot distinguish from a real
-  // new user — so routing on would show someone whose network blipped the
-  // "Create a household" button, the one irreversible action in the app
-  // (ADR-0004: no leave path). "We don't know" is not "you have none".
+  // Must precede the onboarding branch: needsOnboarding cannot tell a
+  // failed load from a real new user (see HouseholdProvider's loadError).
   if (session !== null && householdLoadError) {
     return (
       <View

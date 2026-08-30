@@ -66,9 +66,6 @@ describe('HouseholdProvider / useHousehold', () => {
     expect(mockedApi.fetchProfile).not.toHaveBeenCalled();
   });
 
-  // The initial load used to have no .catch(), so any rejection left
-  // isLoading true forever — StartupScreen with no error, no retry and
-  // nothing logged (developer cold launch, 2026-08-30).
   it('a failed initial load stops loading and reports an error instead of hanging', async () => {
     mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
     mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
@@ -80,9 +77,6 @@ describe('HouseholdProvider / useHousehold', () => {
     expect(mockedLogError).toHaveBeenCalled();
   });
 
-  // The reason loadError exists at all rather than just clearing isLoading:
-  // household stays null on failure, and a null household is what routes to
-  // onboarding's irreversible "Create a household" button.
   it('a failed initial load does not report the user as having no household', async () => {
     mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
     mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
@@ -90,8 +84,6 @@ describe('HouseholdProvider / useHousehold', () => {
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    // household is null either way — loadError is the only thing that
-    // distinguishes "we don't know" from "they genuinely have none".
     expect(result.current.household).toBeNull();
     expect(result.current.loadError).toBe(true);
   });
