@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.kraigstrong.keepsake",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": false,
       "appleTeamId": "MKACSCQ588",
       "entitlements": {
