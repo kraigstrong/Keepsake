@@ -72,6 +72,7 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "check:client-secrets": "node scripts/check-no-server-secrets-in-client.mjs",
+    "check:drift": "node scripts/check-supabase-drift.mjs",
     "archive:env": "node scripts/prepare-archive-env.mjs",
     "archive:env:restore": "node scripts/prepare-archive-env.mjs --restore",
     "prepare": "husky"

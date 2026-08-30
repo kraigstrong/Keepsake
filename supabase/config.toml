@@ -438,6 +438,13 @@ project_id = "ntxkayfqdoivpbvqiqeo"
 
 [remotes.staging.auth]
 site_url = "keepsake://"
+# Declared here, not just set on the project: the hosted value sat at
+# Supabase's default of 6 until 2026-08-29 while docs/threat-model.md T11
+# claimed 8, because the local [auth] block never governed staging and
+# nothing here said otherwise. Raising it via the Management API fixed the
+# live value and left it undeclared, which is the same problem one step
+# smaller — scripts/check-supabase-drift.mjs now fails on exactly that.
+minimum_password_length = 8
 
 [remotes.staging.auth.rate_limit]
 email_sent = 30
