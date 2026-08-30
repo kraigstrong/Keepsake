@@ -452,6 +452,12 @@ function AuthenticatedRouteBoundary() {
       <Stack.Protected guard={session === null}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
+      {/* Reachable in all three states on purpose: an invitee can open the
+          link signed out, part-way through onboarding, or already in a
+          household. Declared here only so expo-router has a destination —
+          the screen itself immediately redirects to "/" and this boundary
+          routes as normal (see app/invite/[token].tsx). */}
+      <Stack.Screen name="invite" />
     </Stack>
   );
 }
