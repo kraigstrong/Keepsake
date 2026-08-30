@@ -457,7 +457,7 @@ function AuthenticatedRouteBoundary() {
           household. Declared here only so expo-router has a destination —
           the screen itself immediately redirects to "/" and this boundary
           routes as normal (see app/invite/[token].tsx). */}
-      <Stack.Screen name="invite" />
+      <Stack.Screen name="invite/[token]" />
     </Stack>
   );
 }

@@ -1,25 +1,37 @@
-import { Redirect } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
+
+import { StartupScreen } from '../../src/components/StartupScreen';
+import { useDeepLink } from '../../src/deepLinks/DeepLinkProvider';
+import { isWellFormedInvitationToken } from '../../src/deepLinks/parseInvitationLink';
 
 /**
- * Exists so expo-router has somewhere to send `keepsake:///invite/<token>`.
+ * Gives expo-router somewhere to send `keepsake:///invite/<token>`, and
+ * hands the token to DeepLinkProvider before letting routing continue.
  *
- * Two independent things consume an incoming URL: DeepLinkProvider's
- * Linking listener, which captures the token, and expo-router's own
- * file-based routing. The listener always worked — but with no file at
- * this path the router rendered its "Unmatched Route" screen over the
- * top, which is what a real invitee saw on 2026-08-29.
- *
- * So this screen deliberately does nothing with the token: by the time it
- * renders, getInitialURL/addEventListener have already handed it to
- * DeepLinkProvider, where it survives sign-in and is consumed by
- * app/onboarding.tsx's HouseholdSetupStep. Redirecting to "/" hands
- * control back to AuthenticatedRouteBoundary, which routes by session and
- * household state exactly as it would on any other launch — sign-in when
- * signed out, onboarding when signed in without a household.
- *
- * Reading the token here and re-dispatching it would duplicate a capture
- * path that already works, and add a second way for the two to disagree.
+ * The ordering is the point. Redirecting straight away would race
+ * getInitialURL()'s promise, and onboarding mounting without a token
+ * shows "Create a household" — irreversible, since ADR-0004 has no leave
+ * path. So this waits for the provider to actually hold this token, then
+ * redirects and lets AuthenticatedRouteBoundary route as normal.
  */
 export default function InviteDeepLinkRoute() {
+  const { token } = useLocalSearchParams<{ token: string }>();
+  const { pendingInvitationToken, capturePendingInvitationToken } = useDeepLink();
+  const usableToken =
+    typeof token === 'string' && isWellFormedInvitationToken(token) ? token : null;
+
+  useEffect(() => {
+    if (usableToken) capturePendingInvitationToken(usableToken);
+  }, [usableToken, capturePendingInvitationToken]);
+
+  // Nothing to wait for when there's no usable token — routing on and
+  // letting them sign in normally beats holding a splash forever.
+  if (!usableToken) return <Redirect href="/" />;
+
+  // Waiting on this exact token, not merely a non-null one, so a stale
+  // pending token can't wave this through before the effect runs.
+  if (pendingInvitationToken !== usableToken) return <StartupScreen />;
+
   return <Redirect href="/" />;
 }
