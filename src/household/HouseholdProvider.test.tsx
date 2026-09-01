@@ -24,6 +24,17 @@ beforeEach(() => {
   mockedUseSession.mockReturnValue({ session: { user: { id: 'user-1' } } });
 });
 
+// The load retries with real delays before giving up, so the tests that
+// drive it to failure run on fake timers rather than waiting ~1.2s each.
+afterEach(() => {
+  jest.useRealTimers();
+});
+
+// waitFor advances fake timers, but only within its own budget — the
+// default 1000ms stops short of the load's full 300ms+900ms retry chain,
+// which reads as "still loading" rather than as the timeout it is.
+const RETRY_BUDGET_MS = 5000;
+
 describe('HouseholdProvider / useHousehold', () => {
   it('resolves profile and household to null when the user has neither', async () => {
     mockedApi.fetchProfile.mockResolvedValue(null);
@@ -67,33 +78,36 @@ describe('HouseholdProvider / useHousehold', () => {
   });
 
   it('a failed initial load stops loading and reports an error instead of hanging', async () => {
+    jest.useFakeTimers();
     mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
     mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: RETRY_BUDGET_MS });
     expect(result.current.loadError).toBe(true);
     expect(mockedLogError).toHaveBeenCalled();
   });
 
   it('a failed initial load does not report the user as having no household', async () => {
+    jest.useFakeTimers();
     mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
     mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: RETRY_BUDGET_MS });
     expect(result.current.household).toBeNull();
     expect(result.current.loadError).toBe(true);
   });
 
   it('retryLoad clears the error and recovers when the fetch succeeds', async () => {
-    mockedApi.fetchProfile.mockRejectedValueOnce(new Error('network down'));
-    mockedApi.fetchHousehold.mockRejectedValueOnce(new Error('network down'));
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockRejectedValue(new Error('network down'));
+    mockedApi.fetchHousehold.mockRejectedValue(new Error('network down'));
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
-    await waitFor(() => expect(result.current.loadError).toBe(true));
+    await waitFor(() => expect(result.current.loadError).toBe(true), { timeout: RETRY_BUDGET_MS });
 
     mockedApi.fetchProfile.mockResolvedValue({
       id: 'user-1',
@@ -106,8 +120,49 @@ describe('HouseholdProvider / useHousehold', () => {
       result.current.retryLoad();
     });
 
-    await waitFor(() => expect(result.current.loadError).toBe(false));
+    await waitFor(() => expect(result.current.loadError).toBe(false), { timeout: RETRY_BUDGET_MS });
     expect(result.current.household).toEqual({ id: 'household-1' });
+  });
+
+  // The invitee case (2026-09-01): a first fetch that fails right after
+  // OTP sign-in must not put a brand-new user on an error screen when the
+  // very next attempt would have worked.
+  it('recovers from a transient first failure without surfacing an error', async () => {
+    jest.useFakeTimers();
+    const profile = { id: 'user-1', displayName: 'Alice', preferredUnitSystem: 'metric' as const };
+    mockedApi.fetchProfile
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(profile);
+    mockedApi.fetchHousehold
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue({ id: 'household-1' });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.loadError).toBe(false);
+    expect(result.current.household).toEqual({ id: 'household-1' });
+    expect(result.current.profile).toEqual(profile);
+    expect(mockedApi.fetchProfile).toHaveBeenCalledTimes(2);
+  });
+
+  // Without this the retry would hide the only evidence of why the first
+  // attempt failed, which is the open question the retry does not answer.
+  it('still reports a failed attempt that a retry then recovers from', async () => {
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockRejectedValueOnce(new Error('network down')).mockResolvedValue(null);
+    mockedApi.fetchHousehold
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(null);
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.loadError).toBe(false);
+    expect(mockedLogError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ context: 'householdLoadRetry' }),
+    );
   });
 
   it('setDisplayName creates the profile and refreshes state', async () => {
