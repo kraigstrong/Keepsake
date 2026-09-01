@@ -34,3 +34,21 @@ Two schema facts found while establishing the blast radius, both relevant to `do
 - **Fifteen columns reference `auth.users` without cascade** — `invitations.accepted_by`, `recipes.created_by`/`archived_by`/`deleted_by`/`restored_by`, `recipe_versions.created_by`, `recipe_drafts.user_id`, `deleted_recipes.deleted_by`, `import_jobs.created_by`, `import_batches.created_by`, `planning_entries.added_by`, `grocery_item_selections.updated_by`, `cooking_events.cooked_by`, `selection_rounds.created_by`/`applied_by`. Any row in any of them blocks deleting that user.
 
 Together these mean "delete a user and their household" is two deletes that can each fail for reasons the other doesn't cover, in an order where the second failing leaves the first already done. Real account deletion needs both handled, not just the cascades that happen to work.
+
+## Sequel: build 4 worked, and the invitee hit a second wall
+
+Build 4 (2026-09-01) fixed the blank screen — she opened the link and reached sign-in. She then got a full-screen "Couldn't load your household" straight after her OTP, cleared by one Try again. Fixed in [#141](https://github.com/kraigstrong/Keepsake/pull/141).
+
+**Diagnosed from telemetry rather than inferred**, which is what makes it worth recording:
+
+- `16:02:53.683` — the sign-in POST returns 200.
+- `16:02:53.727` — `GET /rest/v1/households?select=id` goes out, 44ms later.
+- `16:02:54.193` — that GET returns **401**.
+
+The request beat supabase-js's new access token onto the wire, and the token it did carry was stale: a cold-start `grant_type=refresh_token` had already failed **400** at `16:02:15`, before she signed in at all. Her account, the invitation, the household and the network were all fine — which is why one Try again worked, and why the screen's "Check your connection" copy was misleading. Left alone deliberately (developer, 2026-09-01) now that the retry makes that screen rare.
+
+The fix retries inside `HouseholdProvider`'s shared load, so `refresh()` is covered too. That path is the one that matters: `accept_invitation` succeeding and the refresh after it failing would clear the pending token and render **"Create a household"** to someone who had just joined one. `create_household` raises `P0001` on a second membership, so it was a confusing error rather than a split household — but not a screen an invitee should reach. The failed attempt is still logged when a retry recovers, so a recurrence leaves evidence.
+
+**This is also the first confirmed evidence that Sentry delivers events at all**, closing a Phase A question that had no other way to be answered — by an incident, not a test.
+
+**Found and not fixed:** Supabase errors are plain objects, not `Error` instances, so this one reached Sentry as `"Object captured as exception with keys: code, details, hint, message"` and the status code was only recoverable from an HTTP breadcrumb. Every `logError` forwarding a PostgREST error has this problem.
