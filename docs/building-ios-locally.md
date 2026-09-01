@@ -57,7 +57,7 @@ LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios --device "<simulator name o
 **If the rebuild is for a new native module, a new Expo config plugin, or a native-affecting `app.json` change, that sequence is not enough** — and it fails quietly, which is the dangerous part. `pod install` links pods; it does not re-run config plugins or propagate settings like entitlements, permission strings, or URL schemes into an `ios/` directory that already exists. You get a green build that simply lacks the change you made. Regenerate first:
 
 ```bash
-LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo prebuild -p ios   # no --clean; updates in place
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo prebuild -p ios   # regenerates ios/; see below
 cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install && cd ..
 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios --device "<simulator name or udid>"
 ```
@@ -73,7 +73,11 @@ node -p "require('./node_modules/@sentry/react-native/package.json').version"   
 
 Pass `--device` explicitly. With a physical iPhone connected, `expo run:ios` can select it, which pulls in code signing and provisioning — a completely different failure surface from a simulator build, and a misleading one when you were expecting a simulator.
 
-Note the `--clean` distinction. Plain `npx expo prebuild -p ios` updates the existing project in place and is what the config-plugin case above wants. `npx expo prebuild --clean -p ios` regenerates wholesale: it deletes `ios/`, **including any signing or team settings configured in Xcode for device builds**. Reach for `--clean` only when the project is genuinely broken, not as a bigger `pod install` — and for pod-level problems prefer deleting `ios/Pods` and `ios/Podfile.lock` and reinstalling, which keeps the Xcode project intact. Confirm `pod install` can actually succeed before removing what it is meant to replace.
+**`prebuild` regenerates `ios/` rather than updating it in place.** Observed on Expo 57.0.10, 2026-09-01: plain `npx expo prebuild -p ios` — no `--clean` — printed `Clearing ios` / `Cleared ios code` / `Creating native directory (./ios)`. Treat both forms as destroying the generated project.
+
+So **a setting survives only if it lives somewhere prebuild reads.** `app.json`'s `ios.appleTeamId` is why `DEVELOPMENT_TEAM` came back on all four build configurations; anything configured only in Xcode has no such source. Re-checking Signing & Capabilities on both targets after a prebuild is therefore the expected step, not a precaution.
+
+For pod-level problems prefer deleting `ios/Pods` and `ios/Podfile.lock` and reinstalling rather than reaching for `--clean`, and confirm `pod install` can actually succeed before removing what it is meant to replace. What `--clean` still does beyond the above was not established — one run, and whether prebuild always clears on this version was not tested.
 
 ## Archiving for TestFlight
 
