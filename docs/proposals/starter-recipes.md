@@ -1,6 +1,6 @@
 # Starter Recipes — Implementation Proposal
 
-**Status:** Proposed, not scheduled. **Not an ADR** — this is a pre-work-item pass; the two consequential decisions inside it (the `seed_starter_recipes` RPC shape, and the empty-state gate replacing an onboarding step) are recorded here rather than in `docs/adr/` because neither is committed to yet. If this is picked up, re-read §2 and §3 before writing code — the decisions are recorded, not ratified.
+**Status:** Accepted 2026-09-01; in build. §3's three open decisions are now decided, all taking the recommendation. **Not an ADR** — this is a pre-work-item pass; the two consequential decisions inside it (the `seed_starter_recipes` RPC shape, and the empty-state gate replacing an onboarding step) are recorded here rather than in `docs/adr/` because neither is committed to yet. If this is picked up, re-read §2 and §3 before writing code — the decisions are recorded, not ratified.
 
 **Corresponds to** `docs/roadmap.md`'s Unplaced item "Starter recipes for a new library."
 
@@ -92,15 +92,15 @@ Recommendation is (1), with (2) recorded as the better shape if `save_recipe` is
 
 ## 3. Decisions
 
-Four product calls, put to the developer 2026-08-30. Three are recorded as recommendations awaiting a decision; the fourth is settled.
+Four product calls. Three were put to the developer 2026-08-30 and **decided 2026-09-01, all three taking the recommendation**; the fourth was settled when this was written.
 
-**A. Where the offer lives — recommended, not yet decided.** Library's empty state only in v1. This Week is the screen a new user actually lands on, and a second entry point is roughly six lines (the same handler, a second call site) — but its empty state already had a FAB-overlap bug, and two competing calls-to-action there is a decision better made after looking at a real first launch on a device. Adding it later costs nothing.
+**A. Where the offer lives — decided 2026-09-01: Library's empty state only in v1.** This Week is the screen a new user actually lands on, and a second entry point is roughly six lines (the same handler, a second call site) — but its empty state already had a FAB-overlap bug, and two competing calls-to-action there is a decision better made after looking at a real first launch on a device. Adding it later costs nothing.
 
 **B. Hero images — decided 2026-08-30: ship without, shoot them later.** See §4.
 
-**C. Whether to add categories — recommended, not yet decided.** No new categories. The seeded taxonomy has no Breakfast, Sheet Pan, One Pan or Taco, and adding values is "a plain migration" by ADR-0010's own words — but it is not free: the URL-import extraction prompt carries the seeded list as a *closed set* (fixed 2026-08-19 precisely so Claude stops free-associating), so any new value must reach that prompt too, or imports will never assign it. Use free-form `tags` for those dimensions; they are already FTS-indexed and already feed Help Me Choose's diversity scoring. The starter set in §5 fits the existing eleven values comfortably, which is a signal rather than a coincidence.
+**C. Whether to add categories — decided 2026-09-01: no new categories.** The seeded taxonomy has no Breakfast, Sheet Pan, One Pan or Taco, and adding values is "a plain migration" by ADR-0010's own words — but it is not free: the URL-import extraction prompt carries the seeded list as a *closed set* (fixed 2026-08-19 precisely so Claude stops free-associating), so any new value must reach that prompt too, or imports will never assign it. Use free-form `tags` for those dimensions; they are already FTS-indexed and already feed Help Me Choose's diversity scoring. The starter set in §5 fits the existing eleven values comfortably, which is a signal rather than a coincidence.
 
-**D. Whether an existing library ever gets a second chance — recommended, not yet decided.** No Settings entry and no re-offer. A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
+**D. Whether an existing library ever gets a second chance — decided 2026-09-01: no Settings entry and no re-offer.** A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
 
 But the first draft of this decision said that when a household empties its library again, "the stamp makes the tap a harmless no-op." **It is not harmless** (Codex, PR #138): a household that seeds and then archives or deletes all ten lands back on an empty Library, sees the offer again, taps it, gets `(false, 0)`, syncs nothing, and is left looking at a button that does nothing — permanently, with no error to explain it.
 
