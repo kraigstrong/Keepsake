@@ -32,7 +32,9 @@ Ten things checked before proposing anything.
 
 **Shared households.** Falls out for free. The stamp is on `households`, not `profiles`, so the second member of a seeded household is never re-offered, and two members tapping at the same moment serialize on the row lock — one seeds, one no-ops.
 
-**New vs. existing empty libraries.** Gate on **"the library is empty"**, not "the household is new". That serves both populations with one condition, needs no new routing, and — the part that matters most — **declining needs no persisted state at all**. "Start with my own" is just the existing add-recipe action; the offer disappears the moment the library isn't empty, because that is literally the condition it renders under.
+**New vs. existing empty libraries.** Gate on **"the library is empty"**, not "the household is new". That serves both populations with one condition and needs no new routing, and declining needs no *dismissal* state — "Start with my own" is just the existing add-recipe action, and the offer disappears the moment the library isn't empty.
+
+Two corrections to the first draft of this section, both from Codex on [PR #138](https://github.com/kraigstrong/Keepsake/pull/138) and both verified against the code. **"The library is empty" is not the same condition as "the household has no recipes."** `LibraryScreen` calls `setRecipes(local)` from the local mirror *before* awaiting `syncHousehold` (`src/recipes/LibraryScreen.tsx:143` vs `:147`), so a fresh install, a reinstall, or a cleared local database shows an empty Library for an established household — which is not a rare state here, since the roadmap already records that a dev build and a TestFlight build cannot coexist on one device. And the offer **does** need to read persisted state after all, just not a dismissal flag: see §2 and decision D.
 
 **Images.** Recipe images are private Storage objects under `<household_id>/`, uploaded per-household, read via short-lived signed URLs (ADR-0008, `src/recipes/heroImage.ts`). There is no shared or public path and no bundled-asset path — `assets/` holds an app icon and a favicon. Every surface already handles a null `hero_image_path` via `ImagePlaceholder`, and Library rows are title-only by design (PRD §14). See §4.
 
@@ -52,16 +54,38 @@ The offer itself is the Library empty state, given a secondary action. No new sc
 
 **Category UUIDs are environment-specific.** `public.categories` uses `default gen_random_uuid()` and is seeded by an `insert … values` in `20260803100000_recipe_schema.sql`, so "Chicken" has a different id locally, on staging, and in production. Starter content must therefore reference categories as `{ group: 'protein', value: 'Chicken' }` and let the RPC resolve them by join. Hardcoding ids would pass every local test and silently attach zero categories on staging.
 
-### A real data-loss path, worth six lines
+### Emptiness must be enforced server-side, not inferred from the client
 
-`save_recipe`'s create branch ends with `delete from recipe_drafts where user_id = auth.uid() and household_id = … and recipe_id is null` — it clears the caller's unsaved *new-recipe* draft, because normally the create it just performed *was* that draft. Seeding calls that branch ten times, so it would silently destroy a genuine in-progress draft.
+The client's "library is empty" is a local-mirror read, and per §1 that is not the same thing as the household having no recipes. If the offer is tapped on a reinstalled device belonging to an established household, a stamp-only guard happily adds ten starters to a library that already has fifty — and because the stamp is then set, there is no second chance to get it right.
 
-The path is reachable: start a recipe, back out (autosave keeps the draft), return to a still-empty Library, tap the offer. The RPC should capture that one draft row before the loop and re-insert it after, with a pgTAP case pinning the behaviour.
+So the RPC must check the actual invariant, not the proxy: **refuse when the household already has any recipe**, alongside the stamp check, inside the same locked transaction.
+
+```sql
+if exists (select 1 from public.recipes where household_id = caller_household_id) then
+  return (false, 0);
+end if;
+```
+
+This is `AGENTS.md`'s durable invariant applied literally — never rely on client-side filtering as the actual boundary. It also makes the client-side gate what it should have been all along: an optimisation for what to render, not the authorization for what to write. The UI should still avoid offering during an unsettled first sync (PR 4), but that becomes a presentation bug rather than a data one.
+
+### The draft-preservation problem is not solved yet
+
+`save_recipe`'s create branch ends with `delete from recipe_drafts where user_id = auth.uid() and household_id = … and recipe_id is null` — it clears the caller's unsaved *new-recipe* draft, because normally the create it just performed *was* that draft. Seeding calls that branch ten times, so it would silently destroy a genuine in-progress draft. The path is reachable: start a recipe, back out (autosave keeps the draft), return to a still-empty Library, tap the offer.
+
+The first draft of this proposal said "capture the row before the loop and re-insert it after." **That is a read-then-write with no lock, and it is not safe** — Codex, PR #138. A plain `select` takes no row lock, so an autosave (or another signed-in device) committing between the capture and the nested delete gets deleted by the loop, and the final insert restores the *older* captured payload. Silent lost update, and exactly the defect class `AGENTS.md`'s review priority 3 names: a concurrency claim not backed by a lock.
+
+Three candidate fixes, to be resolved at PR 2 rather than pre-decided here:
+
+1. **`select … for update` at capture.** One keyword. A concurrent `upsert_draft` blocks until the seed commits, then proceeds. Worth noting *why* this works rather than merely narrowing the window: `upsert_draft` matches on the predicate `user_id = auth.uid() and recipe_id is null`, not on a row id (`20260804090400_draft_rpcs.sql`), so the blocked autosave re-finds the reinserted row and updates it correctly. Had it been id-keyed, the delete-and-reinsert would have orphaned it.
+2. **Don't let the nested saves delete it at all** — Codex's own recommendation, and the cleanest in principle. It means an optional "skip the draft delete" parameter on `save_recipe`, which collides with this proposal's stated non-goal of not changing that function, and touches every other caller's shared code path.
+3. **Accept and document** the loss, on the grounds that the overlap between "has an in-progress draft" and "taps a starter offer on an empty library" is small. Weakest option: data loss that is rare is still silent.
+
+Recommendation is (1), with (2) recorded as the better shape if `save_recipe` is being touched anyway for another reason.
 
 ### Three things the existing architecture makes free
 
 - **Sync survives ten identical timestamps.** Checked, because a keyset cursor over `updated_at` is a classic place for this to break. `afterCursorFilter` (`src/sync/remote.ts`) emits `updated_at.gt.X,and(updated_at.eq.X,id.gt.Y)` and orders by both columns, so ties are handled correctly — and `SYNC_PAGE_SIZE` is 200 anyway.
-- **`households` is already select-only for clients** — no insert/update/delete policy or grant, all writes through `security definer` RPCs (`20260802120300`). A new column on it is safe by construction, and the client never needs to read it (the UI gates on an empty library, not on the stamp).
+- **`households` is already select-only for clients** — no insert/update/delete policy or grant, all writes through `security definer` RPCs (`20260802120300`). A new column on it is safe by construction: readable by members, writable only by the seed RPC. (The first draft of this bullet added "and the client never needs to read it." That was wrong — see decision D. `fetchHousehold` selects `id` alone today and will need the stamp too.)
 - **The stamp is its own abuse control.** An operation that can succeed once per household forever needs no cooldown or rolling-window cap, unlike `create_import_job` or `create_invitation`.
 
 ---
@@ -76,7 +100,11 @@ Four product calls, put to the developer 2026-08-30. Three are recorded as recom
 
 **C. Whether to add categories — recommended, not yet decided.** No new categories. The seeded taxonomy has no Breakfast, Sheet Pan, One Pan or Taco, and adding values is "a plain migration" by ADR-0010's own words — but it is not free: the URL-import extraction prompt carries the seeded list as a *closed set* (fixed 2026-08-19 precisely so Claude stops free-associating), so any new value must reach that prompt too, or imports will never assign it. Use free-form `tags` for those dimensions; they are already FTS-indexed and already feed Help Me Choose's diversity scoring. The starter set in §5 fits the existing eleven values comfortably, which is a signal rather than a coincidence.
 
-**D. Whether an existing library ever gets a second chance — recommended, not yet decided.** No Settings entry and no re-offer. Once someone adds one recipe of their own, the offer is gone; if they later delete it, the empty state returns and the offer with it, and the stamp makes the tap a harmless no-op. A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
+**D. Whether an existing library ever gets a second chance — recommended, not yet decided.** No Settings entry and no re-offer. A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
+
+But the first draft of this decision said that when a household empties its library again, "the stamp makes the tap a harmless no-op." **It is not harmless** (Codex, PR #138): a household that seeds and then archives or deletes all ten lands back on an empty Library, sees the offer again, taps it, gets `(false, 0)`, syncs nothing, and is left looking at a button that does nothing — permanently, with no error to explain it.
+
+So the offer must be suppressed once the household has seeded, falling back to the plain "No recipes yet" empty state. That is what forces the client to read `starter_recipes_seeded_at`: one extra column on `fetchHousehold`'s select and one field on the `Household` type. Cheap, but it is a real correction — the proposal previously claimed the client never needed the column at all.
 
 ### Related, already recorded elsewhere
 
@@ -495,10 +523,11 @@ Four PRs, in order, plus one optional follow-on. Each is reviewable on its own t
 
 - `alter table public.households add column starter_recipes_seeded_at timestamptz`. No policy or grant change needed — `households` already has select-only access for `authenticated` and no write path outside `security definer` RPCs.
 - **Lock first, read second.** `select … from households where id = caller_household_id for update` before any other read, per `20260827120000`'s discipline. Then `if starter_recipes_seeded_at is not null then return (false, 0)`.
+- **Guard on real emptiness, not just the stamp.** Also `return (false, 0)` if any `recipes` row exists for the household, inside the same locked transaction — see §2. This is what stops a reinstalled device with a cold local mirror from seeding into a fifty-recipe library.
 - **Returns, never raises, on a repeat call.** Returns `(seeded boolean, recipe_count int)`. A lost response followed by a retry gets `(false, 0)`, which the client treats as success — the recipes are there.
 - **Calls `save_recipe` in a loop** rather than re-implementing its inserts. Nested `security definer` shares the outer transaction, so it is genuinely all-or-nothing, and versioning/snapshot behaviour stays identical to a user-created recipe. This is the ADR-0020 pattern `AGENTS.md` names as canonical.
 - **Category resolution by join.** The payload carries `categories: [{group, value}]`; the RPC translates to ids and passes `categoryIds` to `save_recipe`. An unresolvable pair is skipped, not raised — a renamed category should cost one chip, not ten recipes. PR 1's test is what stops that happening silently.
-- **Draft preservation.** Capture the caller's `recipe_drafts` row where `recipe_id is null` before the loop and re-insert it after — see §2.
+- **Draft preservation — unresolved, decide here.** Capture-and-reinsert is not safe as a plain read-then-write; §2 sets out the race and three candidate fixes, recommending `select … for update` at capture. Whichever is chosen, the pgTAP case below must actually exercise it rather than asserting the happy path.
 - **Payload cap.** Reject a payload with more than 20 recipes outright. The stamp already limits this to once per household forever, so no cooldown or window cap is warranted; the cap exists so a malformed call fails fast rather than doing arbitrary work.
 - `revoke all … from public; grant execute … to authenticated;` as every other RPC in the repo does.
 
@@ -509,12 +538,13 @@ Four PRs, in order, plus one optional follow-on. Each is reviewable on its own t
 - A caller with no household is rejected with the standard message.
 - A member of household B cannot see or affect household A's seeded recipes (the existing `recipe_isolation` shape).
 - A second member of an already-seeded household gets `(false, 0)`.
+- **A household with an existing recipe and a null stamp gets `(false, 0)`** and gains nothing — the reinstall case. This is the one new test that matters most; it is the case a client-side-only gate would have shipped broken.
 - Categories resolve: a recipe referencing `protein/Chicken` ends up with the right `recipe_categories` row; an unknown pair is skipped without failing the call.
 - A failure mid-payload rolls back every recipe — assert zero rows and a null stamp after a deliberately invalid recipe (an empty title trips `save_recipe`'s own check constraint).
-- An existing null-`recipe_id` draft survives the call.
-- A structural guard that fails if a future redefinition drops the `for update`, matching the four guards added in `20260827120000`.
+- An existing null-`recipe_id` draft survives the call, **and survives it under the chosen concurrency fix** — not merely in a single-session happy path. pgTAP runs one file in one transaction and cannot express a two-session race (see `docs/current.md`'s standing note on this), so what is testable here is the structural guard: assert the lock or the parameter is present, and record the empirical gap rather than pretending it was closed.
+- A structural guard that fails if a future redefinition drops either `for update`, matching the four guards added in `20260827120000`.
 
-**Acceptance criteria.** `npm run db:reset && npm run db:test` passes for real, not just written. Two calls produce ten recipes, not twenty. No service-role usage anywhere in the path. `.claude/skills/security-check` run — this touches a household boundary and an RPC, so it is in scope by its own trigger list.
+**Acceptance criteria.** `npm run db:reset && npm run db:test` passes for real, not just written. Two calls produce ten recipes, not twenty. A household with any existing recipe gets none. No service-role usage anywhere in the path. `.claude/skills/security-check` run — this touches a household boundary and an RPC, so it is in scope by its own trigger list.
 
 ### PR 3 — Client seeding path
 
@@ -542,22 +572,27 @@ Four PRs, in order, plus one optional follow-on. Each is reviewable on its own t
 
 **Scope.** An optional secondary action on the shared `EmptyState`, and Library's empty branch using it.
 
-**Files.** Edit: `src/components/EmptyState.tsx` (+ `secondaryActionLabel` / `onSecondaryAction`), `src/components/EmptyState.test.tsx`, `src/recipes/LibraryScreen.tsx` (the `recipes.length === 0` branch), `src/recipes/LibraryScreen.test.tsx`, `docs/current.md`, `docs/prd-traceability.md`.
+**Files.** Edit: `src/components/EmptyState.tsx` (+ `secondaryActionLabel` / `onSecondaryAction`), `src/components/EmptyState.test.tsx`, `src/recipes/LibraryScreen.tsx` (the `recipes.length === 0` branch), `src/recipes/LibraryScreen.test.tsx`, `src/household/api.ts` (+ `starter_recipes_seeded_at` on `fetchHousehold`'s select and the `Household` type), `docs/current.md`, `docs/prd-traceability.md`.
 
 **Key decisions.**
 
 - Copy: title **"Start your Keepsake"**, message *"Ten favourites to explore with — edit or delete any of them."*, primary **Add starter recipes**, secondary **Start with my own**.
-- **The secondary action is the existing `openAddSheet`.** Declining is not a state, it is the other button — which is why this feature needs no dismissal flag.
+- **The secondary action is the existing `openAddSheet`.** Declining is not a dismissal state, it is the other button.
 - Renders under the existing `recipes.length === 0` branch only, which already sits below `loadError` and `recipes === null` — so the offer can never flash during a load or replace an error.
+- **Two further conditions on the offer, both from §1 and §2** — without them the empty branch renders the offer in states where it is wrong:
+  - **Not until the first sync of this session has settled.** `LibraryScreen` paints from the local mirror before awaiting `syncHousehold`, so a cold mirror shows an empty Library for a household that has recipes. The plain "No recipes yet" state is fine to show meanwhile; only the *offer* needs to wait. The server guard makes this cosmetic rather than load-bearing, which is the right division.
+  - **Not once `household.starterRecipesSeededAt` is set.** Otherwise a household that emptied its library is left tapping a button that can only ever no-op (decision D).
 - While seeding, the primary button shows a working label and is disabled, addressing the same "button only disables, reads as dead" complaint the roadmap logs against Create a household. On failure, an inline message with the offer still tappable — never a navigation away.
 - `starter_recipes_offered` fires once per mount of the empty branch, not per render, so the conversion denominator means something.
 - Once seeding succeeds, the existing focus-driven reload path repaints the list. No new refresh mechanism.
 
-**Tests.** `EmptyState` renders and wires a secondary action, and omits it when not given; Library shows the offer on zero recipes and not otherwise; tapping **Add starter recipes** calls the seeding function and the list repaints with ten titles; tapping **Start with my own** opens the add sheet and calls nothing else; a seeding failure shows an inline error and leaves the offer usable; the offer does not render while `recipes === null` or on `loadError`.
+**Tests.** `EmptyState` renders and wires a secondary action, and omits it when not given; Library shows the offer on zero recipes and not otherwise; tapping **Add starter recipes** calls the seeding function and the list repaints with ten titles; tapping **Start with my own** opens the add sheet and calls nothing else; a seeding failure shows an inline error and leaves the offer usable; the offer does not render while `recipes === null` or on `loadError`. Plus the two guard cases: **the offer does not render before the first sync settles** (a cold mirror on a populated household shows the plain empty state, not the offer), and **does not render when `starterRecipesSeededAt` is set** (an emptied library falls back to "No recipes yet" rather than a dead button).
 
 **Acceptance criteria.**
 
 - A brand-new household sees the offer; tapping it produces ten browsable, searchable recipes.
+- Reinstalling on an established household never offers, and could not seed even if it did.
+- A household that seeds and then archives or deletes all ten sees the plain empty state, not a button that does nothing.
 - Editing, archiving and deleting a starter recipe behaves exactly like any other — **verified once on a device**, not just in tests, since the whole claim of this feature is "they are normal recipes."
 - Help Me Choose starts a round and This Week can plan from the seeded set on that same device pass.
 - A household that declined and then added its own recipe never sees the offer again.
@@ -580,7 +615,7 @@ Four PRs, in order, plus one optional follow-on. Each is reviewable on its own t
 
 **Easier than it sounds.**
 
-- **Declining costs nothing.** Gating on "library is empty" collapses the offer, the dismissal, the re-entry question and the existing-empty-library question into one condition that was already being evaluated.
+- **Declining costs nothing.** "Start with my own" is the existing add-recipe action, so there is no dismissal flag to design, persist or reason about across household members. (The first draft claimed more than this — that the empty-library condition needed *no* persisted state at all. Not true; see the two corrections below.)
 - **One write boundary already does all the work.** `save_recipe` handles children, versions, snapshots and category links. The new RPC is a loop and a guard, not a second implementation.
 - **Nothing downstream needs to know.** Search, scaling, planning, Help Me Choose, archive and delete all key off ordinary rows. There is no starter-recipe concept for them to learn.
 - **The offline mirror and its FTS index update themselves** through the existing `syncHousehold`, including the trigram index and the category-label flattening.
@@ -588,7 +623,9 @@ Four PRs, in order, plus one optional follow-on. Each is reviewable on its own t
 **Harder, or at least sharper, than it sounds.**
 
 - **Environment-specific category ids** — the one thing here that would pass every local test and be wrong in production (§2).
-- **`save_recipe` clears the caller's unsaved new-recipe draft** on every create. Reachable, silent, and worth six lines to fix (§2).
+- **"The library is empty" is a local-mirror read, not a fact about the household.** A reinstall or cleared database shows an empty Library for an established household, so emptiness has to be enforced in the RPC and merely *presented* by the client (§2). This is the finding that most changes the design: it turns the client gate from the authorization into an optimisation.
+- **The offer has to know it has already been used.** Otherwise an emptied library gets a permanently dead button, which is why the client ends up reading `starter_recipes_seeded_at` after all (decision D).
+- **`save_recipe` clears the caller's unsaved new-recipe draft** on every create. Reachable, silent, and — unlike the first draft of this document assumed — **not fixable by a plain capture-and-reinsert**, which is itself a lost-update race (§2).
 - **Onboarding has no seam for a third step.** A full-screen "Start your Keepsake" moment is not a small change — it needs a new gate condition, a persisted dismissal, and a decision about what a joining member of an established household sees. That is the reason for the empty-state recommendation, not aesthetics.
 - **Ten identical `updated_at` values** would break a naive keyset cursor. This one is fine — `afterCursorFilter` handles ties — but it is worth re-checking if the sync query is ever rewritten.
 - **Searching "keepsake" will return all ten**, because `source_attribution` is an indexed FTS column. Harmless, arguably useful, but it will look like a bug to whoever finds it first if it is not written down.
