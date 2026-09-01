@@ -32,6 +32,15 @@ interface HouseholdContextValue {
 
 const HouseholdContext = createContext<HouseholdContextValue | null>(null);
 
+// The first fetch after sign-in can go out before supabase-js has the new
+// access token on it: observed 2026-09-01, a GET /households 40ms after
+// verifyOtp returned 200 came back 401, and a brand-new invitee got a
+// full-screen error instead of her household. Retrying inside the shared
+// load, not just the mount effect, also covers refresh(): a failure there
+// after accept_invitation had already succeeded would clear the pending
+// token and render "Create a household" to someone who just joined one.
+const LOAD_RETRY_DELAYS_MS = [300, 900];
+
 /**
  * Only meaningful once signed in — mounted unconditionally alongside
  * SessionProvider (not just when session !== null) so app/_layout.tsx
@@ -76,11 +85,26 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     household: Household | null;
   }> => {
     if (!userId) return { profile: null, household: null };
-    const [fetchedProfile, fetchedHousehold] = await Promise.all([
-      fetchProfile(userId),
-      fetchHousehold(),
-    ]);
-    return { profile: fetchedProfile, household: fetchedHousehold };
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= LOAD_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        const [fetchedProfile, fetchedHousehold] = await Promise.all([
+          fetchProfile(userId),
+          fetchHousehold(),
+        ]);
+        return { profile: fetchedProfile, household: fetchedHousehold };
+      } catch (error) {
+        lastError = error;
+        const retryDelay = LOAD_RETRY_DELAYS_MS[attempt];
+        if (retryDelay === undefined) break;
+        // Logged even though the retry may well succeed: the retry is a
+        // UX fix, not a diagnosis, and swallowing the attempt that failed
+        // would destroy the only evidence of why it did.
+        logError(error, { context: 'householdLoadRetry', attempt });
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
+    }
+    throw lastError;
   }, [userId]);
 
   const refresh = useCallback(async () => {
