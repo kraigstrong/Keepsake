@@ -8,33 +8,26 @@ import { useHousehold } from '../../src/household/HouseholdProvider';
 import { useSession } from '../../src/session/SessionProvider';
 
 /**
- * Gives expo-router somewhere to send `keepsake:///invite/<token>`, and
- * hands the token to DeepLinkProvider before letting routing continue.
+ * Gives expo-router somewhere to send `keepsake:///invite/<token>`, then
+ * hands off to AuthenticatedRouteBoundary's branches. Two invariants,
+ * both load-bearing; the incident that produced them is in
+ * `docs/history/cross-cutting-invite-blank-screen.md`.
  *
- * The ordering is the point. Redirecting straight away would race
- * getInitialURL()'s promise, and onboarding mounting without a token
- * shows "Create a household" — irreversible, since ADR-0004 has no leave
- * path. So this waits for the provider to actually hold this token, then
- * redirects.
+ * 1. Capture the token before routing on. Redirecting first races
+ *    getInitialURL(), and onboarding mounting without a token shows
+ *    "Create a household" — irreversible under ADR-0004.
  *
- * It has to redirect to the route the invitee's *current* state can
- * actually reach, not a fixed "/". AuthenticatedRouteBoundary's three
- * branches are `Stack.Protected` guards, and a runtime navigation to a
- * screen whose guard is false is silently dropped — unlike the initial
- * URL, which expo-router resolves against the available screens and
- * falls back for. "/" is `(tabs)`, guarded on being fully onboarded, so
- * for the two states an invitee is actually in — signed out, or signed
- * in mid-onboarding — the replace did nothing, this screen stayed
- * mounted, and `Redirect` renders null: a blank screen (live test,
- * 2026-08-31). It looked verified because it was only ever tapped from
- * an already-onboarded device, the one state where "/" exists.
+ * 2. Redirect into a branch this invitee's state can actually reach, not
+ *    a fixed "/". A runtime navigation to a `Stack.Protected` screen
+ *    whose guard is false is silently dropped (unlike the initial URL,
+ *    which expo-router resolves against the screens that exist), and
+ *    "/" is `(tabs)`, guarded on being onboarded.
  *
- * The three branches below mirror that boundary's three guards, and
- * `src/navigation/inviteRoute.*.test.tsx` pins each one so they can't
- * drift apart silently. Loading and load-error states are deliberately
- * absent: the boundary returns StartupScreen / ErrorState *instead of*
- * the Stack, so this screen only ever renders once session and household
- * have settled.
+ * The three branches mirror that boundary's three guards;
+ * `src/navigation/inviteRoute.*.test.tsx` pins each so they can't drift.
+ * Loading and load-error are deliberately absent — the boundary returns
+ * StartupScreen/ErrorState *instead of* the Stack, so this renders only
+ * once session and household have settled.
  */
 export default function InviteDeepLinkRoute() {
   const { token } = useLocalSearchParams<{ token: string }>();
