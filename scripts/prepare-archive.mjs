@@ -102,8 +102,9 @@ step('Snapshotting client.env into .env.local (archive:env)');
 run('node', [path.join(rootDir, 'scripts', 'prepare-archive-env.mjs')]);
 
 step('Regenerating ios/ from app.json (expo prebuild)');
-// Not --clean: that deletes ios/ including the signing and team settings
-// configured in Xcode. Plain prebuild updates in place.
+// Regenerates ios/ wholesale, --clean or not (Expo 57 — see
+// docs/building-ios-locally.md). Signing survives only because app.json
+// carries appleTeamId, which is why the closing steps re-check both targets.
 run('npx', ['expo', 'prebuild', '-p', 'ios']);
 
 step('Installing pods');
