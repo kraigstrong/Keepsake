@@ -10,6 +10,8 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 **Next action: the device pass** — the last acceptance criterion, and nothing in the suite substitutes for it. A brand-new household sees the offer and tapping it produces ten browsable, searchable recipes; editing, archiving and deleting a starter behaves exactly like any other recipe; Help Me Choose starts a round off the seeded set; This Week can plan from it.
 
+**The device pass is parked, not dropped** (2026-09-02) — the developer had no device time, and deliberately did not want another build cut yet. Two code-only backlog items were taken instead, both merged: [#148](https://github.com/kraigstrong/Keepsake/pull/148) makes forwarded Supabase errors readable in Sentry, and [#149](https://github.com/kraigstrong/Keepsake/pull/149) unfreezes Dependabot. Nothing about the device pass changed; it is still the last acceptance criterion.
+
 Expect two things on that pass, neither a defect: the seeded recipes have **no photos** (PR 5 is a strictly additive follow-on, shot by the developer), so the deck and This Week will look bare — whether that reads as unfinished is one of the questions the pass answers; and searching **"keepsake" returns all ten**, because `source_attribution` is an indexed FTS column.
 
 Two limitations are accepted rather than fixed and should not be re-reported — a second member's mounted Library picks up the seed stamp on next launch rather than live, and a scaled recipe with an unparseable yield shows a stale yield (logged in `docs/roadmap.md`). Reasoning for both is in the history file.
