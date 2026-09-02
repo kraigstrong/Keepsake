@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Category, CategoryGroup } from './api';
@@ -23,6 +23,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useImportActivity } from '../import/ImportActivityContext';
+import { trackEvent } from '../observability';
 import type { SearchResult } from '../search/search';
 import { searchRecipes } from '../search/search';
 import {
@@ -30,6 +31,7 @@ import {
   readLocalLibraryRecipes,
   type LibraryRecipe,
 } from '../sync/offlineRecipes';
+import { seedStarterRecipes } from '../starterRecipes/api';
 import { syncHousehold } from '../sync/syncEngine';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -86,6 +88,14 @@ export function LibraryScreen() {
   const [recipes, setRecipes] = useState<LibraryRecipe[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadError, setLoadError] = useState(false);
+  // An empty local mirror is not the same fact as an empty household:
+  // this screen paints `local` before awaiting syncHousehold below, so a
+  // reinstall or a cleared database shows an empty Library for an
+  // established household. The plain "No recipes yet" state is fine to
+  // show meanwhile; only the starter offer has to wait for the truth.
+  const [hasSyncSettled, setHasSyncSettled] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedError, setSeedError] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -150,6 +160,11 @@ export function LibraryScreen() {
             // whatever was already cached locally.
           });
           if (cancelled) return;
+          // Settled means "we tried", not "it succeeded". An offline
+          // first launch would otherwise never show the offer at all,
+          // and the RPC is the real guard against seeding into a
+          // library that only looks empty.
+          setHasSyncSettled(true);
 
           const [refreshed, refreshedCategories] = await Promise.all([
             readLocalLibraryRecipes(household.id).catch(() => null),
@@ -173,6 +188,44 @@ export function LibraryScreen() {
   function chooseSort(mode: SortMode) {
     setSortMode(mode);
     writeSortPreference(mode);
+  }
+
+  // Three conditions, and only the first is about what to render. The
+  // household must not have seeded before (decision D: otherwise a
+  // household that emptied its library is left tapping a button that can
+  // only ever no-op), and the first sync must have settled (an empty
+  // local mirror is not an empty household). The RPC enforces the real
+  // invariant either way — this decides what to show, not what may be
+  // written.
+  const canOfferStarters =
+    hasSyncSettled && household != null && household.starterRecipesSeededAt == null;
+
+  // Once per mount of the offer, not per render, so the conversion
+  // denominator means something.
+  const hasReportedOffer = useRef(false);
+  const offerVisible = canOfferStarters && !loadError && recipes !== null && recipes.length === 0;
+  useEffect(() => {
+    if (offerVisible && !hasReportedOffer.current) {
+      hasReportedOffer.current = true;
+      trackEvent('starter_recipes_offered');
+    }
+  }, [offerVisible]);
+
+  async function addStarterRecipes() {
+    if (!household || isSeeding) return;
+    setIsSeeding(true);
+    setSeedError(false);
+    try {
+      await seedStarterRecipes(household.id);
+      const refreshed = await readLocalLibraryRecipes(household.id);
+      setRecipes(refreshed);
+    } catch {
+      // Inline, with the offer still tappable — never a navigation away
+      // from a screen the user is standing on.
+      setSeedError(true);
+    } finally {
+      setIsSeeding(false);
+    }
   }
 
   const isSearching = query.trim().length > 0;
@@ -239,6 +292,18 @@ export function LibraryScreen() {
           />
         ) : recipes === null ? (
           <LoadingState label="Loading recipes…" testID="library-loading" />
+        ) : recipes.length === 0 && canOfferStarters ? (
+          <EmptyState
+            title="Start your Keepsake"
+            message="Ten favourites to explore with — edit or delete any of them."
+            actionLabel={isSeeding ? 'Adding recipes…' : 'Add starter recipes'}
+            onAction={addStarterRecipes}
+            actionDisabled={isSeeding}
+            secondaryActionLabel="Start with my own"
+            onSecondaryAction={openAddSheet}
+            errorMessage={seedError ? "Couldn't add the starter recipes. Try again." : undefined}
+            testID="library-starter-offer"
+          />
         ) : recipes.length === 0 ? (
           <EmptyState
             title="No recipes yet"

@@ -6,11 +6,13 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — sequenced ahead of Friends & Family Preview.
+**Starter recipes for a new library** (`docs/roadmap.md`'s Unplaced item), selected 2026-09-01. Plan: [`docs/proposals/starter-recipes.md`](proposals/starter-recipes.md), whose three open product decisions were decided that day, all taking the recommendation — Library's empty state only, no new category values, no re-offer once seeded.
 
-The full solo flow is merged and deployed: deck → shortlist → review → apply, plus "Select more". Staging is current with `main`. **`FLAGS.smartMealSelection` is on for everyone as of 2026-08-28** — the flag is kept, not deleted, as the rollback lever through the preview. Beta scope is settled: **solo-only, group is post-beta**, which is what the flip had been waiting on.
+Four PRs, all open and stacked in review order: [#143](https://github.com/kraigstrong/Keepsake/pull/143) content → [#144](https://github.com/kraigstrong/Keepsake/pull/144) RPC → [#145](https://github.com/kraigstrong/Keepsake/pull/145) client path → [#146](https://github.com/kraigstrong/Keepsake/pull/146) the offer. **#144's migration is deliberately not on staging** — that needs an explicit go.
 
-Build history, review findings, and walkthrough notes: [`docs/history/phase-18-smart-meal-selection.md`](history/phase-18-smart-meal-selection.md).
+Two things to carry rather than rediscover. **Stacked PRs get no CI**: the workflow triggers on `pull_request: branches: [main]` only, and GitHub's default event types exclude `edited`, so retargeting on merge may not fire it either. And `save_recipe`'s draft-clearing race is **narrowed, not closed** — `for update` can only lock a draft row that already exists, so one created mid-seed by a second device is still lost; closing it means `save_recipe` not deleting at all.
+
+Previously active, now merged and deployed: **milestone 4, Smart Meal Selection** — full solo flow, `FLAGS.smartMealSelection` on for everyone since 2026-08-28, flag kept as the rollback lever. Beta scope settled solo-only. History: [`docs/history/phase-18-smart-meal-selection.md`](history/phase-18-smart-meal-selection.md).
 
 ## Blocked / open follow-ups
 

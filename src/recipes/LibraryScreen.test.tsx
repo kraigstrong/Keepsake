@@ -13,6 +13,8 @@ import { useHousehold } from '../household/HouseholdProvider';
 import { useImportActivity } from '../import/ImportActivityContext';
 import { searchRecipes } from '../search/search';
 import { readLocalCategories, readLocalLibraryRecipes } from '../sync/offlineRecipes';
+import { trackEvent } from '../observability';
+import { seedStarterRecipes } from '../starterRecipes/api';
 import { syncHousehold } from '../sync/syncEngine';
 
 jest.mock('../sync/offlineRecipes');
@@ -38,6 +40,8 @@ jest.mock('expo-router', () => ({
 // ../supabase/instance — mocked so loading it doesn't trip the
 // missing-env-var throw or touch native modules.
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+jest.mock('../starterRecipes/api', () => ({ seedStarterRecipes: jest.fn() }));
+jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
 
 function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
   return {
@@ -60,6 +64,8 @@ const mockedUseRouter = useRouter as jest.Mock;
 const mockedUseFocusEffect = useFocusEffect as jest.Mock;
 const mockedUseAddSheet = useAddSheet as jest.Mock;
 const mockedUseImportActivity = useImportActivity as jest.Mock;
+const mockedSeedStarterRecipes = seedStarterRecipes as jest.Mock;
+const mockedTrackEvent = trackEvent as jest.Mock;
 
 const push = jest.fn();
 const openAddSheet = jest.fn();
@@ -68,20 +74,27 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
   mockedUseFocusEffect.mockImplementation((effect: () => void) => effect());
-  mockedUseHousehold.mockReturnValue({ household: { id: 'h1' } });
+  mockedUseHousehold.mockReturnValue({
+    household: { id: 'h1', starterRecipesSeededAt: null },
+  });
   mockedSyncHousehold.mockResolvedValue(undefined);
   mockedUseAddSheet.mockReturnValue({ open: openAddSheet, close: jest.fn(), isVisible: false });
   mockedUseImportActivity.mockReturnValue({ version: 0, notifyImportCompleted: jest.fn() });
   mockedReadLocalCategories.mockResolvedValue([]);
   mockedSearchRecipes.mockResolvedValue([]);
+  mockedSeedStarterRecipes.mockResolvedValue({ seeded: true, recipeCount: 10 });
 });
 
-it('shows an empty state whose add action opens the shared add sheet, not manual create directly', async () => {
+it('shows the plain empty state, whose add action opens the shared add sheet, once the household has seeded', async () => {
+  mockedUseHousehold.mockReturnValue({
+    household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+  });
   mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
   await render(<LibraryScreen />);
 
   await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+  expect(screen.queryByTestId('library-starter-offer')).toBeNull();
 
   await fireEvent.press(screen.getByText('Add a recipe'));
   expect(openAddSheet).toHaveBeenCalled();
@@ -269,4 +282,132 @@ it('preserves search text and filters across a focus-triggered reload (search-st
   mockedUseFocusEffect.mock.calls[0]![0]();
 
   await waitFor(() => expect(input.props.value).toBe('chicken'));
+});
+
+describe('starter recipe offer', () => {
+  it('offers the starter recipes on an empty library the household has never seeded', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+    expect(screen.getByText('Start your Keepsake')).toBeTruthy();
+    expect(screen.queryByTestId('library-placeholder')).toBeNull();
+  });
+
+  it('does not offer once the household has already seeded', async () => {
+    // Otherwise a household that seeds and then archives or deletes all
+    // ten is left tapping a button that can only ever no-op.
+    mockedUseHousehold.mockReturnValue({
+      household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+    });
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+  });
+
+  it('does not offer before the first sync has settled', async () => {
+    // A cold local mirror on an established household reads as empty.
+    // The plain empty state is fine meanwhile; the offer is not.
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+    mockedSyncHousehold.mockReturnValue(new Promise(() => {}));
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+  });
+
+  it('does not offer when the local read failed outright', async () => {
+    mockedReadLocalLibraryRecipes.mockRejectedValue(new Error('disk error'));
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-load-error')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+  });
+
+  it('seeds and repaints the list when the offer is taken', async () => {
+    // Keyed off whether the seed has run rather than a call count: the
+    // focus effect reads local recipes more than once per render, so
+    // counting calls makes this test depend on render bookkeeping.
+    let hasSeeded = false;
+    // Stable array instances, not fresh ones per call. The useFocusEffect
+    // mock at the top of this file re-runs the effect on every render, so
+    // a new array reference each time means setRecipes never reaches a
+    // fixed point and the render loop never settles. A harness artifact,
+    // not a product one -- the real useFocusEffect fires on focus only.
+    const emptyLibrary: LibraryRecipe[] = [];
+    const seededLibrary = [recipe({ id: 'r1', title: 'Weeknight Bolognese' })];
+    mockedReadLocalLibraryRecipes.mockImplementation(() =>
+      Promise.resolve(hasSeeded ? seededLibrary : emptyLibrary),
+    );
+    mockedSeedStarterRecipes.mockImplementation(() => {
+      hasSeeded = true;
+      return Promise.resolve({ seeded: true, recipeCount: 10 });
+    });
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('library-starter-offer-action'));
+
+    expect(mockedSeedStarterRecipes).toHaveBeenCalledWith('h1');
+    await waitFor(() => expect(screen.getByText('Weeknight Bolognese')).toBeTruthy());
+  });
+
+  it('declining opens the add sheet and seeds nothing', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('library-starter-offer-secondary-action'));
+
+    expect(openAddSheet).toHaveBeenCalled();
+    expect(mockedSeedStarterRecipes).not.toHaveBeenCalled();
+  });
+
+  it('shows an inline error and leaves the offer usable when seeding fails', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+    mockedSeedStarterRecipes.mockRejectedValue(new Error('offline'));
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('library-starter-offer-action'));
+
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer-error')).toBeTruthy());
+    // Never a navigation away from the screen the user is standing on.
+    expect(push).not.toHaveBeenCalled();
+    // And still tappable for a retry.
+    expect(screen.getByTestId('library-starter-offer-action')).toBeTruthy();
+  });
+
+  it('reports the offer once, not on every render', async () => {
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+
+    const { rerender } = await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+    await rerender(<LibraryScreen />);
+
+    expect(
+      mockedTrackEvent.mock.calls.filter(([n]) => n === 'starter_recipes_offered'),
+    ).toHaveLength(1);
+  });
+
+  it('reports nothing when the offer never renders', async () => {
+    mockedUseHousehold.mockReturnValue({
+      household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+    });
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
+  });
 });
