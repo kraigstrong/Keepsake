@@ -84,7 +84,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 export function LibraryScreen() {
   const router = useRouter();
   const { open: openAddSheet } = useAddSheet();
-  const { household } = useHousehold();
+  const { household, refreshHousehold } = useHousehold();
   const [recipes, setRecipes] = useState<LibraryRecipe[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadError, setLoadError] = useState(false);
@@ -96,13 +96,6 @@ export function LibraryScreen() {
   const [hasSyncSettled, setHasSyncSettled] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedError, setSeedError] = useState(false);
-  // The household snapshot in context still carries the pre-seed stamp,
-  // and nothing refetches it here. Without this, seeding and then
-  // archiving or deleting all ten inside one session returns to an empty
-  // Library with the offer still eligible — the dead button decision D
-  // exists to prevent (Codex, PR #146). The next launch reads the real
-  // stamp; this only has to cover the session that did the seeding.
-  const [hasSeededThisSession, setHasSeededThisSession] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -162,9 +155,16 @@ export function LibraryScreen() {
           setCategories(localCategories);
           setLoadError(false);
 
+          // Tracked rather than swallowed: the offer must not appear on
+          // the strength of a sync that failed. A cold mirror plus a
+          // failed sync looks exactly like an empty household, which is
+          // how an established one gets offered starters it can only be
+          // refused (Codex, PR #146).
+          let syncSucceeded = true;
           await syncHousehold(household.id).catch(() => {
             // Offline or a transient failure — the list stays at
             // whatever was already cached locally.
+            syncSucceeded = false;
           });
           if (cancelled) return;
 
@@ -177,16 +177,14 @@ export function LibraryScreen() {
           if (refreshedCategories) setCategories(refreshedCategories);
           // Last, and deliberately after setRecipes rather than before
           // the await above: these batch into one commit, so the offer
-          // can never render against the pre-sync list. Setting it
-          // earlier left a window where an established household with a
-          // cold mirror saw settled === true and a stale empty array,
-          // which is the exact state condition 3 exists to exclude
-          // (Codex, PR #146).
+          // can never be judged against the pre-sync list.
           //
-          // Settled still means "we tried", not "it succeeded" — the
-          // sync's failure is swallowed above, so an offline first
-          // launch still reaches the offer.
-          setHasSyncSettled(true);
+          // Gated on the sync having succeeded, not merely finished.
+          // Costs nothing real — seeding needs the network anyway, so an
+          // offer that appears offline could only ever fail — and it
+          // closes the case where a failed sync leaves a cold mirror
+          // indistinguishable from an empty household.
+          if (syncSucceeded) setHasSyncSettled(true);
         })
         .catch(() => {
           if (!cancelled) setLoadError(true);
@@ -212,10 +210,7 @@ export function LibraryScreen() {
   // invariant either way — this decides what to show, not what may be
   // written.
   const canOfferStarters =
-    hasSyncSettled &&
-    household != null &&
-    household.starterRecipesSeededAt == null &&
-    !hasSeededThisSession;
+    hasSyncSettled && household != null && household.starterRecipesSeededAt == null;
 
   // Once per mount of the offer, not per render, so the conversion
   // denominator means something.
@@ -244,7 +239,15 @@ export function LibraryScreen() {
     setSeedError(false);
     try {
       await seedStarterRecipes(household.id);
-      setHasSeededThisSession(true);
+      // Refresh the shared household rather than recording the seed in
+      // this screen's own state. A screen-local flag leaves every other
+      // mounted reader on the pre-seed snapshot — including the other
+      // member's Library, which would show the dead offer again if the
+      // library were later emptied (Codex, PR #146).
+      await refreshHousehold().catch(() => {
+        // The recipes are in and the list is about to repaint; a stale
+        // stamp is not worth failing the seed the user just completed.
+      });
       const refreshed = await readLocalLibraryRecipes(household.id);
       setRecipes(refreshed);
     } catch {

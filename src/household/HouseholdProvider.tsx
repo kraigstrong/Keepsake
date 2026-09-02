@@ -25,6 +25,13 @@ interface HouseholdContextValue {
    */
   loadError: boolean;
   retryLoad: () => void;
+  /**
+   * Refetch profile and household. Exposed for callers that change
+   * household-level state the server owns — seeding the starter recipes
+   * sets `starter_recipes_seeded_at`, and every screen reading it needs
+   * the new value, not the snapshot from load time.
+   */
+  refreshHousehold: () => Promise<void>;
   setDisplayName: (displayName: string) => Promise<{ error: string | null }>;
   createHousehold: () => Promise<{ error: string | null }>;
   acceptInvitation: (token: string) => Promise<{ error: string | null }>;
@@ -181,6 +188,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
         isLoading,
         loadError,
         retryLoad,
+        refreshHousehold: refresh,
         setDisplayName,
         createHousehold,
         acceptInvitation,

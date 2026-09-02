@@ -76,6 +76,7 @@ beforeEach(() => {
   mockedUseFocusEffect.mockImplementation((effect: () => void) => effect());
   mockedUseHousehold.mockReturnValue({
     household: { id: 'h1', starterRecipesSeededAt: null },
+    refreshHousehold: jest.fn(() => Promise.resolve()),
   });
   mockedSyncHousehold.mockResolvedValue(undefined);
   mockedUseAddSheet.mockReturnValue({ open: openAddSheet, close: jest.fn(), isVisible: false });
@@ -88,6 +89,7 @@ beforeEach(() => {
 it('shows the plain empty state, whose add action opens the shared add sheet, once the household has seeded', async () => {
   mockedUseHousehold.mockReturnValue({
     household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+    refreshHousehold: jest.fn(() => Promise.resolve()),
   });
   mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
@@ -300,6 +302,7 @@ describe('starter recipe offer', () => {
     // ten is left tapping a button that can only ever no-op.
     mockedUseHousehold.mockReturnValue({
       household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+      refreshHousehold: jest.fn(() => Promise.resolve()),
     });
     mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
@@ -402,6 +405,7 @@ describe('starter recipe offer', () => {
   it('reports nothing when the offer never renders', async () => {
     mockedUseHousehold.mockReturnValue({
       household: { id: 'h1', starterRecipesSeededAt: '2026-09-01T00:00:00.000Z' },
+      refreshHousehold: jest.fn(() => Promise.resolve()),
     });
     mockedReadLocalLibraryRecipes.mockResolvedValue([]);
 
@@ -469,6 +473,22 @@ describe('starter recipe offer — regressions found by review', () => {
     expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
   });
 
+  it('does not offer when the sync failed, however empty the mirror looks', async () => {
+    // A cold mirror plus a failed sync is indistinguishable from an
+    // empty household — which is how an established one gets offered
+    // starters the server can only refuse. Costs nothing to exclude:
+    // seeding needs the network anyway, so an offer shown offline could
+    // never have succeeded.
+    mockedReadLocalLibraryRecipes.mockResolvedValue([]);
+    mockedSyncHousehold.mockRejectedValue(new Error('offline'));
+
+    await render(<LibraryScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
+  });
+
   it('does not re-offer after seeding and then emptying the library in one session', async () => {
     // The household snapshot in context still carries the pre-seed
     // stamp, so without a local record this returns to a dead button.
@@ -482,6 +502,17 @@ describe('starter recipe offer — regressions found by review', () => {
     mockedSeedStarterRecipes.mockImplementation(() => {
       hasSeeded = true;
       return Promise.resolve({ seeded: true, recipeCount: 10 });
+    });
+    // The provider refetch is what makes the stamp visible to every
+    // reader, so the mock has to actually move it — a jest.fn() that
+    // resolves would let a screen-local flag pass this test too.
+    const household = { id: 'h1', starterRecipesSeededAt: null as string | null };
+    mockedUseHousehold.mockReturnValue({
+      household,
+      refreshHousehold: jest.fn(() => {
+        household.starterRecipesSeededAt = '2026-09-01T00:00:00.000Z';
+        return Promise.resolve();
+      }),
     });
 
     await render(<LibraryScreen />);
