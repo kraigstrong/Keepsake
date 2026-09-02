@@ -1,6 +1,6 @@
 begin;
 
-select plan(28);
+select plan(34);
 
 insert into auth.users (id, email)
 values
@@ -133,6 +133,33 @@ select is(
    where id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'),
   null,
   'seed_starter_recipes: an over-cap payload does not stamp the household'
+);
+
+
+-- ---------------------------------------------------------------------
+-- An empty payload must be rejected, not stamped. Without this the loop
+-- saves nothing, falls through to the stamp, reports (true, 0), and the
+-- household can never take the starter recipes again (Codex, PR #144).
+-- ---------------------------------------------------------------------
+select throws_ok(
+  $$ select * from public.seed_starter_recipes(jsonb_build_object('recipes', '[]'::jsonb)) $$,
+  'P0001',
+  'starter recipe payload is empty',
+  'seed_starter_recipes: rejects an empty recipes array'
+);
+
+select throws_ok(
+  $$ select * from public.seed_starter_recipes('{}'::jsonb) $$,
+  'P0001',
+  'starter recipe payload is empty',
+  'seed_starter_recipes: rejects a payload with no recipes key at all'
+);
+
+select is(
+  (select starter_recipes_seeded_at from public.households
+   where id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'),
+  null,
+  'seed_starter_recipes: an empty payload does not burn the household''s one shot'
 );
 
 
@@ -314,6 +341,33 @@ select is(
 );
 
 
+-- The opt-out must stay opt-in: an ordinary create still clears the
+-- draft, which is what every other caller depends on. Runs here rather
+-- than beside the seed's draft assertion because it adds a recipe, and
+-- the count above must not see it.
+select pg_temp.become('11111111-1111-1111-1111-111111111111');
+
+select lives_ok(
+  $$
+    select public.save_recipe(jsonb_build_object(
+      'title', 'An Ordinary Recipe',
+      'tags', jsonb_build_array(),
+      'categoryIds', jsonb_build_array(),
+      'ingredientSections', jsonb_build_array(),
+      'instructionSections', jsonb_build_array()
+    ))
+  $$,
+  'setup: alice saves a recipe the ordinary way'
+);
+
+select is(
+  (select count(*)::int from public.recipe_drafts
+   where user_id = '11111111-1111-1111-1111-111111111111' and recipe_id is null),
+  0,
+  'save_recipe: an ordinary create still clears the new-recipe draft'
+);
+
+
 -- ---------------------------------------------------------------------
 -- Isolation: carol cannot see what alice's household seeded.
 -- ---------------------------------------------------------------------
@@ -383,10 +437,19 @@ select matches(
   'seed_starter_recipes: still takes the household row lock before reading the stamp'
 );
 
+-- Replaces the old "still locks the captured draft" guard: there is no
+-- capture any more. What must not silently regress is that the seed opts
+-- out of the draft delete, and that save_recipe still honours the opt-out.
 select matches(
   (select prosrc from pg_proc where proname = 'seed_starter_recipes'),
-  'from public\.recipe_drafts(.|\n)*for update',
-  'seed_starter_recipes: still locks the captured draft row'
+  'preserveNewRecipeDraft',
+  'seed_starter_recipes: still opts out of save_recipe''s draft delete'
+);
+
+select matches(
+  (select prosrc from pg_proc where proname = 'save_recipe'),
+  'preserveNewRecipeDraft',
+  'save_recipe: still honours the draft-preservation opt-out'
 );
 
 select * from finish();
