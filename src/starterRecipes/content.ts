@@ -11,13 +11,9 @@ import type { StarterRecipe } from './types';
  */
 
 /**
- * Set as `source_attribution` on every seeded recipe. `source_url`
- * stays null: a fake URL would collide with the
- * `(household_id, source_url)` partial unique index and show as a
- * real link in the UI.
- *
- * Worth knowing before it looks like a bug: `source_attribution` is an
- * indexed FTS column, so searching "keepsake" returns all ten.
+ * Set as `source_attribution` on every seeded recipe; `source_url` stays
+ * null. Reasoning for both, and for the searchable side effect, is in
+ * `docs/proposals/starter-recipes.md` §1.
  */
 export const STARTER_SOURCE_ATTRIBUTION = 'Keepsake starter recipe';
 
@@ -145,6 +141,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
           '1/3 cup water',
           '8 corn tortillas',
           'Crumbled cotija or sour cream, for serving',
+          'Lime wedges, for serving',
         ],
       },
     ],
@@ -158,7 +155,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
           'Stir in the chili powder, cumin, garlic powder and salt and cook 30 seconds, until fragrant.',
           'Add the water and simmer 3 to 4 minutes, until glossy rather than wet.',
           'Warm the tortillas in a dry pan.',
-          'Fill, top with slaw and cheese, and squeeze more lime over.',
+          'Fill, top with slaw and your cotija or sour cream, and squeeze a lime wedge over.',
         ],
       },
     ],
