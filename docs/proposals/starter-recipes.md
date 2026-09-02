@@ -1,6 +1,6 @@
 # Starter Recipes — Implementation Proposal
 
-**Status:** Proposed, not scheduled. **Not an ADR** — this is a pre-work-item pass; the two consequential decisions inside it (the `seed_starter_recipes` RPC shape, and the empty-state gate replacing an onboarding step) are recorded here rather than in `docs/adr/` because neither is committed to yet. If this is picked up, re-read §2 and §3 before writing code — the decisions are recorded, not ratified.
+**Status:** Accepted 2026-09-01; in build. §3's three open decisions are now decided, all taking the recommendation. **Not an ADR** — this is a pre-work-item pass; the two consequential decisions inside it (the `seed_starter_recipes` RPC shape, and the empty-state gate replacing an onboarding step) are recorded here rather than in `docs/adr/` because neither is committed to yet. If this is picked up, re-read §2 and §3 before writing code — the decisions are recorded, not ratified.
 
 **Corresponds to** `docs/roadmap.md`'s Unplaced item "Starter recipes for a new library."
 
@@ -92,15 +92,15 @@ Recommendation is (1), with (2) recorded as the better shape if `save_recipe` is
 
 ## 3. Decisions
 
-Four product calls, put to the developer 2026-08-30. Three are recorded as recommendations awaiting a decision; the fourth is settled.
+Four product calls. Three were put to the developer 2026-08-30 and **decided 2026-09-01, all three taking the recommendation**; the fourth was settled when this was written.
 
-**A. Where the offer lives — recommended, not yet decided.** Library's empty state only in v1. This Week is the screen a new user actually lands on, and a second entry point is roughly six lines (the same handler, a second call site) — but its empty state already had a FAB-overlap bug, and two competing calls-to-action there is a decision better made after looking at a real first launch on a device. Adding it later costs nothing.
+**A. Where the offer lives — decided 2026-09-01: Library's empty state only in v1.** This Week is the screen a new user actually lands on, and a second entry point is roughly six lines (the same handler, a second call site) — but its empty state already had a FAB-overlap bug, and two competing calls-to-action there is a decision better made after looking at a real first launch on a device. Adding it later costs nothing.
 
 **B. Hero images — decided 2026-08-30: ship without, shoot them later.** See §4.
 
-**C. Whether to add categories — recommended, not yet decided.** No new categories. The seeded taxonomy has no Breakfast, Sheet Pan, One Pan or Taco, and adding values is "a plain migration" by ADR-0010's own words — but it is not free: the URL-import extraction prompt carries the seeded list as a *closed set* (fixed 2026-08-19 precisely so Claude stops free-associating), so any new value must reach that prompt too, or imports will never assign it. Use free-form `tags` for those dimensions; they are already FTS-indexed and already feed Help Me Choose's diversity scoring. The starter set in §5 fits the existing eleven values comfortably, which is a signal rather than a coincidence.
+**C. Whether to add categories — decided 2026-09-01: no new categories.** The seeded taxonomy has no Breakfast, Sheet Pan, One Pan or Taco, and adding values is "a plain migration" by ADR-0010's own words — but it is not free: the URL-import extraction prompt carries the seeded list as a *closed set* (fixed 2026-08-19 precisely so Claude stops free-associating), so any new value must reach that prompt too, or imports will never assign it. Use free-form `tags` for those dimensions; they are already FTS-indexed and already feed Help Me Choose's diversity scoring. The starter set in §5 fits the existing eleven values comfortably, which is a signal rather than a coincidence.
 
-**D. Whether an existing library ever gets a second chance — recommended, not yet decided.** No Settings entry and no re-offer. A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
+**D. Whether an existing library ever gets a second chance — decided 2026-09-01: no Settings entry and no re-offer.** A permanent way back in is the "demo recipes" product concept this feature is explicitly avoiding.
 
 But the first draft of this decision said that when a household empties its library again, "the stamp makes the tap a harmless no-op." **It is not harmless** (Codex, PR #138): a household that seeds and then archives or deletes all ten lands back on an empty Library, sees the offer again, taps it, gets `(false, 0)`, syncs nothing, and is left looking at a button that does nothing — permanently, with no error to explain it.
 
@@ -152,334 +152,50 @@ The same reasoning rules out importing the ten **recipes** from published source
 
 Original formulations, written to be cooked rather than to demonstrate anything.
 
+**The recipes themselves live in [`src/starterRecipes/content.ts`](../../src/starterRecipes/content.ts), which is the source of truth.** This section originally carried them in full; that copy drifted the moment the shipped data was corrected, and anyone reading §5 as the implementation reference would have copied known-bad instructions (Codex, PR #143). What stays here is the part a proposal is actually for — why each recipe earns its place in a set of ten.
+
 Coverage across the existing taxonomy: Chicken ×2, Beef ×2, Pork ×1, Seafood ×1, Vegetarian ×4; Pasta ×2, Soup ×1, Dessert ×1; Slow Cooker ×1, Grill ×1. **Air Fryer is deliberately unused** — a starter set should not assume an appliance.
 
 Two inclusions are deliberate on technical grounds as well as culinary ones, noted in place: the tacos are the only recipe with two named ingredient sections, and the cookies are the only one whose yield `parseServings` correctly declines to read.
-
 ### 1. Sheet-Pan Chicken Thighs with Potatoes and Lemon
 
-Crisp-skinned thighs and browned potatoes off one pan, with lemon slices that soften into the juices.
-
-**Serves 4** · active 15m · total 55m · `protein:Chicken` · tags: `sheet pan`, `weeknight`, `one pan`
-
-Ingredients:
-
-- 8 bone-in, skin-on chicken thighs
-- 1 1/2 lb baby potatoes, halved
-- 1 lemon, thinly sliced
-- 4 cloves garlic, smashed
-- 3 tbsp olive oil
-- 1 tsp kosher salt
-- 1/2 tsp black pepper
-- 1 tsp dried oregano
-- 2 tbsp chopped parsley
-
-Instructions:
-
-1. Heat the oven to 425°F.
-2. Toss the potatoes and garlic with 2 tbsp of the oil and half the salt and pepper directly on a rimmed sheet pan. Spread them to the edges.
-3. Pat the thighs dry and rub with the remaining oil, salt, pepper and the oregano.
-4. Nestle the thighs skin-side up among the potatoes and tuck the lemon slices between them.
-5. Roast 40 to 45 minutes, until the skin is crisp and the thighs read 175°F at the bone.
-6. Rest 5 minutes. Scatter the parsley and spoon the pan juices over everything.
-
-**Why it belongs:** the single most useful shape a weeknight recipe can have — one pan, one temperature, no technique. It anchors chicken, sheet-pan and weeknight at once, and its 45-minute total makes it a realistic Tuesday rather than an aspiration.
+**Why it belongs:** the single most useful shape a weeknight recipe can have — one pan, one temperature, no technique. It anchors chicken, sheet-pan and weeknight at once, and its roughly one-hour total makes it a realistic Tuesday rather than an aspiration.
 
 ### 2. Weeknight Bolognese
-
-A short-simmer meat sauce built on milk and tomato paste — an hour, not an afternoon, and it freezes well.
-
-**Serves 6** · active 20m · total 75m · `protein:Beef`, `dish_type:Pasta` · tags: `pasta`, `comfort food`, `freezer friendly`
-
-Ingredients:
-
-- 2 tbsp olive oil
-- 1 yellow onion, finely chopped
-- 1 carrot, finely chopped
-- 1 celery stalk, finely chopped
-- 3 cloves garlic, minced
-- 1 1/2 lb ground beef
-- 1/4 cup tomato paste
-- 1 cup whole milk
-- 1 (28 oz) can crushed tomatoes
-- 1 tsp kosher salt
-- 1/2 tsp black pepper
-- 1 lb rigatoni
-- Grated Parmesan, for serving
-
-Instructions:
-
-1. Heat the oil in a Dutch oven over medium. Cook the onion, carrot and celery 8 minutes, until soft and just starting to colour.
-2. Add the garlic and cook 1 minute.
-3. Add the beef, break it up, and brown 8 to 10 minutes.
-4. Stir in the tomato paste and cook 2 minutes, until it darkens.
-5. Pour in the milk and simmer about 5 minutes, until mostly absorbed.
-6. Add the crushed tomatoes, salt and pepper. Simmer partly covered 45 minutes, stirring now and then.
-7. Cook the pasta to al dente and reserve 1 cup of the water.
-8. Toss the pasta with the sauce, loosening with pasta water until it coats. Serve with Parmesan.
 
 **Why it belongs:** the archetypal "make a lot, eat it twice" recipe, and the best demonstration of scaling in the set — doubling it is a real thing a household does, and every quantity here parses cleanly.
 
 ### 3. Ground Beef Tacos with Quick Cabbage Slaw
 
-Skillet beef with a proper spice mix instead of a packet, and a sharp lime slaw that comes together while it simmers.
-
-**Serves 4** (8 tacos) · active 25m · total 25m · `protein:Beef` · tags: `tacos`, `weeknight`, `family favorite`
-
-Ingredients — Slaw:
-
-- 3 cups shredded green cabbage
-- 1/4 cup chopped cilantro
-- 2 tbsp lime juice
-- 1 tbsp olive oil
-- 1/4 tsp kosher salt
-
-Ingredients — Tacos:
-
-- 1 tbsp neutral oil
-- 1 small white onion, chopped
-- 1 lb ground beef
-- 1 tbsp chili powder
-- 1 tsp ground cumin
-- 1/2 tsp garlic powder
-- 1/2 tsp kosher salt
-- 1/3 cup water
-- 8 corn tortillas
-- Crumbled cotija or sour cream, for serving
-
-Instructions:
-
-1. Toss all the slaw ingredients together and set aside — it improves while everything else cooks.
-2. Heat the oil in a skillet over medium and cook the onion 4 minutes.
-3. Add the beef and brown 6 to 8 minutes, breaking it up as it goes.
-4. Stir in the chili powder, cumin, garlic powder and salt and cook 30 seconds, until fragrant.
-5. Add the water and simmer 3 to 4 minutes, until glossy rather than wet.
-6. Warm the tortillas in a dry pan.
-7. Fill, top with slaw and cheese, and squeeze more lime over.
-
 **Why it belongs:** covers the taco dimension without leaning on a seasoning packet, and it is the one recipe in the set with **two named ingredient sections** — so the seeded library exercises the sectioned-ingredient model rather than leaving that path untried until someone imports a recipe that uses it.
 
 ### 4. Garlic Shrimp and Broccoli Stir-Fry
-
-Twenty minutes start to finish, one pan, and a sauce whisked together before anything hits the heat.
-
-**Serves 4** · active 20m · total 20m · `protein:Seafood` · tags: `quick`, `one pan`, `weeknight`
-
-Ingredients:
-
-- 1 lb large shrimp, peeled and deveined
-- 1 lb broccoli florets
-- 2 tbsp neutral oil
-- 4 cloves garlic, minced
-- 1 tbsp grated fresh ginger
-- 3 tbsp soy sauce
-- 1 tbsp honey
-- 1 tsp toasted sesame oil
-- 1 tsp cornstarch
-- 1/4 cup water
-- Steamed rice, for serving
-
-Instructions:
-
-1. Whisk the soy sauce, honey, sesame oil, cornstarch and water together and set the bowl by the stove.
-2. Pat the shrimp very dry.
-3. Heat 1 tbsp of the oil in a large skillet over high. Sear the shrimp 1 minute per side and move them to a plate — they will finish later.
-4. Add the remaining oil and the broccoli and cook 3 minutes without moving it much, to get some colour.
-5. Add 2 tbsp water, cover, and steam 2 minutes.
-6. Add the garlic and ginger and cook 30 seconds.
-7. Return the shrimp, pour in the sauce, and toss about 1 minute until it thickens and coats. Serve over rice.
 
 **Why it belongs:** the fastest thing in the set and the only seafood. It also proves the app is useful for something other than long-simmer cooking, which matters when the library is being judged in the first two minutes.
 
 ### 5. Slow Cooker Pulled Pork
 
-Fifteen minutes of work, eight hours of nothing, and enough for a crowd or a week of leftovers.
-
-**Serves 8** · active 15m · total 8h 15m · `protein:Pork`, `preparation:Slow Cooker` · tags: `slow cooker`, `make ahead`, `crowd`
-
-Ingredients:
-
-- 4 lb boneless pork shoulder
-- 1 tbsp kosher salt
-- 2 tsp smoked paprika
-- 1 tsp black pepper
-- 1 tsp garlic powder
-- 1 tsp onion powder
-- 1 tsp brown sugar
-- 1 yellow onion, sliced
-- 1 cup chicken broth
-- 2 tbsp apple cider vinegar
-- Buns and pickles, for serving
-
-Instructions:
-
-1. Pat the pork dry and cut it into three large pieces.
-2. Combine the salt, paprika, pepper, garlic powder, onion powder and brown sugar and rub it over every surface.
-3. Scatter the onion in the slow cooker, add the pork, and pour the broth around the meat rather than over it, so the rub stays put.
-4. Cover and cook on Low 8 hours, until it pulls apart with a fork.
-5. Move the pork to a board, shred it, and discard any large pieces of fat.
-6. Skim the fat from the cooking liquid and stir in the vinegar.
-7. Return the pork to the liquid and toss to coat. Serve on buns with pickles.
-
 **Why it belongs:** the low-effort slot, and the only recipe whose `total_time_minutes` is measured in hours — exactly the case where This Week's planning view earns its keep. It also fills `preparation:Slow Cooker`, giving the library filter something real to filter on.
 
 ### 6. Black Bean and Sweet Potato Chili
-
-One pot, pantry ingredients, and better the next day. Mash some of the sweet potato at the end and it thickens itself.
-
-**Serves 6** · active 15m · total 45m · `protein:Vegetarian`, `dish_type:Soup` · tags: `one pot`, `vegetarian`, `freezer friendly`
-
-Ingredients:
-
-- 2 tbsp olive oil
-- 1 yellow onion, chopped
-- 1 red bell pepper, chopped
-- 2 medium sweet potatoes, peeled and cut into 1/2-inch cubes
-- 3 cloves garlic, minced
-- 2 tbsp chili powder
-- 2 tsp ground cumin
-- 1/2 tsp smoked paprika
-- 1 (28 oz) can diced tomatoes
-- 2 (15 oz) cans black beans, drained and rinsed
-- 2 cups vegetable broth
-- 1 tsp kosher salt
-- Lime wedges, sour cream and cilantro, for serving
-
-Instructions:
-
-1. Heat the oil in a large pot over medium and cook the onion and bell pepper 6 minutes.
-2. Add the sweet potato and garlic and cook 2 minutes.
-3. Stir in the chili powder, cumin and paprika and cook 1 minute.
-4. Add the tomatoes, beans, broth and salt.
-5. Bring to a simmer and cook uncovered 25 to 30 minutes, until the sweet potato is tender.
-6. Mash some of the sweet potato against the side of the pot to thicken the chili.
-7. Taste for salt and serve with lime, sour cream and cilantro.
 
 **Why it belongs:** a vegetarian main that is not a compromise, and the set's only `dish_type:Soup`. It is also the cheapest recipe here, which is a real dimension a household starter set should cover.
 
 ### 7. Skillet Mac and Cheese
 
-The pasta cooks in the milk, so the starch does the thickening and there is no roux and no second pot.
-
-**Serves 4** · active 25m · total 25m · `protein:Vegetarian`, `dish_type:Pasta` · tags: `comfort food`, `one pan`, `kid friendly`
-
-Ingredients:
-
-- 3 cups water
-- 2 cups whole milk
-- 12 oz elbow macaroni
-- 1 tsp kosher salt
-- 1/2 tsp mustard powder
-- 8 oz sharp cheddar, grated
-- 2 oz Parmesan, grated
-- 2 tbsp unsalted butter
-- Black pepper
-
-Instructions:
-
-1. Combine the water, milk, macaroni and salt in a wide skillet or saucepan.
-2. Bring to a boil, then drop to a strong simmer.
-3. Cook uncovered 10 to 12 minutes, stirring often, until the pasta is tender and the liquid has gone thick and starchy.
-4. Off the heat, stir in the mustard powder and butter, then the cheeses a handful at a time until smooth.
-5. Season with pepper and serve straight away — it thickens as it sits, so loosen with a splash of milk if needed.
-
 **Why it belongs:** the comfort-food slot, and deliberately unlike the Bolognese — no oven, no tomato, no long simmer. It is the recipe most likely to be cooked on the day someone installs the app.
 
 ### 8. Buttermilk Pancakes
-
-A standard batter that rests ten minutes while the pan heats, which is most of the difference between good and great.
-
-**Serves 4** (about 12) · active 15m · total 30m · `protein:Vegetarian` · tags: `breakfast`, `weekend`, `kid friendly`
-
-Ingredients:
-
-- 2 cups all-purpose flour
-- 2 tbsp granulated sugar
-- 2 tsp baking powder
-- 1/2 tsp baking soda
-- 1/2 tsp kosher salt
-- 2 cups buttermilk
-- 2 large eggs
-- 3 tbsp unsalted butter, melted, plus more for the pan
-- Butter and maple syrup, for serving
-
-Instructions:
-
-1. Whisk the flour, sugar, baking powder, baking soda and salt in a large bowl.
-2. In a second bowl, whisk the buttermilk, eggs and melted butter.
-3. Pour the wet into the dry and stir just until combined. Lumps are fine; overmixing is what makes them tough.
-4. Rest the batter 10 minutes while the pan heats.
-5. Heat a griddle or skillet over medium and brush with butter.
-6. Pour 1/4-cup scoops and cook 2 to 3 minutes, until bubbles come up and the edges set.
-7. Flip and cook 1 to 2 minutes more.
-8. Hold finished pancakes on a rack in a 200°F oven while you cook the rest.
 
 **Why it belongs:** the breakfast slot, and the one recipe in the set that is not dinner — which is what makes the library read as a real household's collection rather than a dinner-rotation demo.
 
 ### 9. Brown Butter Chocolate Chip Cookies
 
-Browning the butter first is seven extra minutes and the only thing that separates these from any other cookie.
-
-**Makes about 24 cookies** · active 25m · total 1h 30m · `protein:Vegetarian`, `dish_type:Dessert` · tags: `baking`, `dessert`, `make ahead`
-
-Ingredients:
-
-- 1 cup unsalted butter
-- 1 1/4 cups packed brown sugar
-- 1/2 cup granulated sugar
-- 2 large eggs
-- 2 tsp vanilla extract
-- 2 1/2 cups all-purpose flour
-- 1 tsp baking soda
-- 1 tsp kosher salt
-- 10 oz semisweet chocolate, chopped
-- Flaky sea salt, for finishing
-
-Instructions:
-
-1. Melt the butter in a light-coloured saucepan over medium, swirling, 5 to 7 minutes — until the milk solids are golden and it smells nutty.
-2. Pour it into a large bowl and cool 15 minutes.
-3. Whisk in both sugars, then the eggs and vanilla, until smooth and glossy.
-4. Stir in the flour, baking soda and salt just until no dry streaks remain.
-5. Fold in the chocolate.
-6. Chill the dough at least 30 minutes, or overnight.
-7. Heat the oven to 375°F.
-8. Scoop 2-tbsp balls onto parchment-lined sheets, 2 inches apart.
-9. Bake 10 to 12 minutes, until the edges are set and the centres still look slightly underdone.
-10. Finish with flaky salt and cool on the pan 5 minutes before moving them.
-
 **Why it belongs:** baking and dessert in one, and a deliberate technical choice. Its yield is `"Makes about 24 cookies"`, which `parseServings` correctly declines to read as a serving count — so the seeded library contains a live example of the null-`servingsCount` path (the ½×–4× presets with no stepper) instead of that branch first appearing on a real user's recipe.
 
 ### 10. Grilled Lemon-Herb Chicken
 
-A marinade you can mix in a minute and leave for eight hours, and it works just as well in a grill pan indoors.
-
-**Serves 4** · active 15m · total 45m · `protein:Chicken`, `preparation:Grill` · tags: `grill`, `make ahead`, `summer`
-
-Ingredients:
-
-- 2 lb boneless skinless chicken thighs
-- 1/4 cup olive oil
-- 1/4 cup lemon juice
-- 3 cloves garlic, minced
-- 1 tbsp chopped fresh oregano
-- 1 tbsp chopped fresh parsley
-- 1 tsp kosher salt
-- 1/2 tsp black pepper
-- Lemon wedges, for serving
-
-Instructions:
-
-1. Whisk the oil, lemon juice, garlic, oregano, parsley, salt and pepper together in a bowl or zip-top bag.
-2. Add the chicken and turn to coat.
-3. Marinate 30 minutes at room temperature, or up to 8 hours refrigerated.
-4. Heat a grill or grill pan to medium-high and oil the grates.
-5. Grill the thighs 5 to 6 minutes per side, until they read 165°F at the thickest point.
-6. Rest 5 minutes before slicing. Serve with lemon wedges.
-
 **Why it belongs:** fills `preparation:Grill`, the last taxonomy value worth covering, and it is the set's second make-ahead — the marinade is the kind of thing you set up in the morning, which is precisely the behaviour This Week is for.
-
----
 
 ## 6. Proposed PR sequence
 
