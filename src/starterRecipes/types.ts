@@ -1,13 +1,9 @@
 import type { CategoryGroup, RecipeSection } from '../recipes/api';
 
 /**
- * A category referenced by (group, value) rather than by id.
- *
- * `public.categories` ids are `gen_random_uuid()` defaults seeded by
- * `20260803100000_recipe_schema.sql`, so "Chicken" has a different id
- * locally, on staging and in production. A hardcoded id would pass
- * every local test and silently attach zero categories on staging —
- * the seed RPC resolves these pairs by join instead.
+ * A category referenced by (group, value) rather than by id, because
+ * category ids differ per environment. Reasoning:
+ * `docs/proposals/starter-recipes.md` §2. The seed RPC resolves the pair.
  */
 export interface StarterCategoryRef {
   group: CategoryGroup;
