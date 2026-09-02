@@ -452,13 +452,12 @@ select matches(
   'save_recipe: still honours the draft-preservation opt-out'
 );
 
--- pgTAP runs one file in one transaction and cannot commit a concurrent
--- insert mid-seed, so the re-verify before stamping is only assertable
--- structurally — same limitation, and same honesty, as the lock guards.
+-- pgTAP runs one file in one transaction and cannot express the race, so
+-- what is assertable is that the fence is still on both sides of it.
 select matches(
-  (select prosrc from pg_proc where proname = 'seed_starter_recipes'),
-  'household gained a recipe while seeding',
-  'seed_starter_recipes: still re-verifies emptiness before stamping'
+  (select prosrc from pg_proc where proname = 'save_recipe'),
+  'from public\.households where id = caller_household_id for share',
+  'save_recipe: creates still take the shared household lock'
 );
 
 select * from finish();

@@ -147,30 +147,12 @@ begin
     saved_count := saved_count + 1;
   end loop;
 
-  -- Re-verify before stamping. The emptiness guard above is a read, and
-  -- ordinary creates do not take the household lock, so a save_recipe or
-  -- finalize_import_job committing during the loop is invisible to that
-  -- first check (Codex, PR #144). Counting again here sees it — each
-  -- statement takes a fresh snapshot — and aborts the whole seed rather
-  -- than mixing starters into a library that just gained its first real
-  -- recipe.
-  --
-  -- Narrows the window to the instant between this count and commit; it
-  -- does not close it. Closing it means every recipe-creation path
-  -- taking the household row (`for share` in save_recipe's create branch
-  -- would do it, and would not serialise creates against each other) --
-  -- deliberately not done here, because that puts a lock on this app's
-  -- hottest write path and needs its own lock-ordering review rather
-  -- than riding along in a starter-recipes change. The residual harm is
-  -- bounded: ten extra recipes the user can delete, no loss, no
-  -- corruption, and the reinstall case this guard exists for is
-  -- unaffected -- an established household has committed rows, so the
-  -- first check already sees them.
-  if (
-    select count(*) from public.recipes where household_id = caller_household_id
-  ) <> saved_count then
-    raise exception 'household gained a recipe while seeding' using errcode = 'P0001';
-  end if;
+  -- Emptiness is this RPC's product invariant, so it is fenced rather
+  -- than merely re-read: save_recipe's create branch takes the same
+  -- household row `for share`, which the `for update` above excludes.
+  -- A create in flight when the seed started has therefore committed
+  -- before that lock was granted, so the guard above already saw it.
+  -- Rationale and the alternatives: docs/proposals/starter-recipes.md §2.
 
   update public.households
   set starter_recipes_seeded_at = now()
@@ -229,6 +211,13 @@ begin
   is_create := target_recipe_id is null;
 
   if is_create then
+    -- Shared, not exclusive: creates never block each other, only the
+    -- seed's `for update`. That is what makes seed_starter_recipes'
+    -- emptiness check linearizable instead of a racy read
+    -- (Codex, PR #144). Nothing else in the schema locks households, so
+    -- this adds one edge to the lock graph and no cycle.
+    perform 1 from public.households where id = caller_household_id for share;
+
     insert into public.recipes (
       household_id, title, hero_image_path, original_photo_path, active_time_minutes,
       total_time_minutes, yield_text, servings_count, permanent_notes, source_url,
