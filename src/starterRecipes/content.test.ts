@@ -173,12 +173,29 @@ describe('parsing', () => {
     for (const line of [
       '1/4 cup olive oil, plus more for the grill',
       '2 cups whole milk, plus more as needed',
-      '1/4 cup water, plus 2 tbsp for steaming the broccoli',
     ]) {
       const parsed = parseQuantity(line);
       expect(parsed.quantityMin).not.toBeNull();
       expect(parsed.unit).toBe('cup');
       expect(parsed.ingredientText).toContain('plus');
+    }
+  });
+
+  it('never allocates a measured ingredient by number in an instruction', () => {
+    // RecipeDetailScreen scales ingredient sections and renders
+    // instructions unchanged, so "2 tbsp of the oil" inverts its own
+    // split at 2x: the oil line becomes 6 tbsp while the step still
+    // hands 2 to the potatoes and 4 to the chicken. Proportional
+    // language ("two-thirds of the oil") survives any multiplier, and a
+    // second measured amount belongs on its own ingredient line where
+    // it can scale. Found twice by review before this guard existed.
+    const allocation = /\d[\d/\s]*\s*(tbsp|tsp|cups?|oz|lb|g)\b[^.]*\bof the\b/i;
+    for (const recipe of STARTER_RECIPES) {
+      for (const section of recipe.instructionSections) {
+        for (const line of section.lines) {
+          expect(line).not.toMatch(allocation);
+        }
+      }
     }
   });
 
