@@ -452,12 +452,20 @@ select matches(
   'save_recipe: still honours the draft-preservation opt-out'
 );
 
--- pgTAP runs one file in one transaction and cannot express the race, so
--- what is assertable is that the fence is still on both sides of it.
-select matches(
-  (select prosrc from pg_proc where proname = 'save_recipe'),
-  'from public\.households where id = caller_household_id for share',
-  'save_recipe: creates still take the shared household lock'
+-- The emptiness fence is the foreign key: an insert into recipes takes
+-- `for key share` on its households row, which conflicts with the
+-- `for update` this RPC opens with. pgTAP cannot express the two-session
+-- race (that was verified live instead, both directions), but it can
+-- assert the constraint the fence depends on still exists.
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.recipes'::regclass
+      and confrelid = 'public.households'::regclass
+      and contype = 'f'
+  ),
+  'recipes still has a foreign key to households, which is what fences the seed'
 );
 
 select * from finish();

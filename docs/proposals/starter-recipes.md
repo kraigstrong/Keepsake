@@ -68,19 +68,26 @@ end if;
 
 This is `AGENTS.md`'s durable invariant applied literally — never rely on client-side filtering as the actual boundary. It also makes the client-side gate what it should have been all along: an optimisation for what to render, not the authorization for what to write. The UI should still avoid offering during an unsettled first sync (PR 4), but that becomes a presentation bug rather than a data one.
 
-### Emptiness has to be fenced, not just re-read
+### Emptiness is fenced by the foreign key, and that was verified live
 
-Codex raised this twice on PR #144, escalating to P1 the second time, and was right both times.
+Codex raised this twice on PR #144, escalating to P1, arguing that ordinary creates take no household lock so a create in flight during the seed is invisible to the emptiness guard and both commit.
 
-The emptiness guard is a read. Ordinary creates — `save_recipe` directly, and `finalize_import_job` through it — take no household lock, so a create that is in flight during the seed is invisible to that check and commits afterwards, leaving the household with both its first real recipe and ten starters.
+**That turned out to be wrong, and the reason is worth keeping.** `recipes.household_id` references `households(id)`, so every insert into `recipes` takes `for key share` on its parent household row to validate the constraint — and `for key share` conflicts with `for update`, which this RPC takes before it reads anything.
 
-Re-counting before the stamp does **not** fix it, which was the first attempt: an uncommitted row is invisible to the recount too, whenever it started. The window is not "count to commit", it is "any create in flight during the seed".
+Verified with two live psql sessions rather than reasoned about, both directions:
 
-The fix is a shared lock. `save_recipe`'s create branch takes `select … from households … for share`; the seed already holds `for update`, which excludes it. Shared locks are compatible with each other, so ordinary creates never block one another — only the seed, which happens once per household ever.
+| Ordering | Observed |
+| --- | --- |
+| Seed holds `for update`, then a recipe insert runs | the insert blocks — `while locking tuple (0,1) in relation "households"`, inside `SELECT 1 FROM ONLY "public"."households" x WHERE "id" = $1 FOR KEY SHARE OF x` |
+| A create is in flight and uncommitted, then the seed takes `for update` | the seed blocks |
 
-Two things make this cheaper than it sounds. `save_recipe` has exactly two other callers (`restore_recipe_version`, which takes the update branch, and `finalize_import_job`). And **nothing else in the schema locks `households` at all**, so this adds a single edge to the lock graph from a node that is otherwise only a source — there is no cycle to create and no ordering to negotiate.
+So a create in flight blocks the seed *before* it reads, and by the time the lock is granted its recipe is committed and the guard sees it. A create starting after the seed waits, then lands afterwards — which is just "seeded, then added a recipe", not a violated invariant.
 
-### The draft-preservation problem is not solved yet
+Two intermediate fixes were made against the phantom and then removed: a `count(*)` re-verify before stamping (which was not a fence at all — an uncommitted row is invisible to it too), and an explicit `for share` in `save_recipe`'s create branch. The second is the more useful lesson: it covered strictly *less* than the foreign key already did, since the FK fences every insert path and the explicit lock only fenced `save_recipe`. Unearned complexity in the hottest write path, added to solve a race that could not happen.
+
+This is also the repo's first real two-connection concurrency evidence — `docs/current.md` has carried a standing note that pgTAP cannot express such a race and that none had been empirically verified. It still cannot; two psql sessions can.
+
+### The draft-preservation problem is not solved yet### The draft-preservation problem is not solved yet
 
 `save_recipe`'s create branch ends with `delete from recipe_drafts where user_id = auth.uid() and household_id = … and recipe_id is null` — it clears the caller's unsaved *new-recipe* draft, because normally the create it just performed *was* that draft. Seeding calls that branch ten times, so it would silently destroy a genuine in-progress draft. The path is reachable: start a recipe, back out (autosave keeps the draft), return to a still-empty Library, tap the offer.
 

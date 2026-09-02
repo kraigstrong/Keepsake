@@ -147,12 +147,13 @@ begin
     saved_count := saved_count + 1;
   end loop;
 
-  -- Emptiness is this RPC's product invariant, so it is fenced rather
-  -- than merely re-read: save_recipe's create branch takes the same
-  -- household row `for share`, which the `for update` above excludes.
-  -- A create in flight when the seed started has therefore committed
-  -- before that lock was granted, so the guard above already saw it.
-  -- Rationale and the alternatives: docs/proposals/starter-recipes.md §2.
+  -- The guard above is fenced, not racy, and the fence is the foreign
+  -- key: every insert into recipes takes `for key share` on its
+  -- households row to validate recipes_household_id_fkey, which
+  -- conflicts with the `for update` taken at the top. So a create in
+  -- flight blocks this function before it reads, and a create starting
+  -- after it blocks until it commits. Verified with two live sessions,
+  -- both directions -- see docs/proposals/starter-recipes.md §2.
 
   update public.households
   set starter_recipes_seeded_at = now()
@@ -211,13 +212,6 @@ begin
   is_create := target_recipe_id is null;
 
   if is_create then
-    -- Shared, not exclusive: creates never block each other, only the
-    -- seed's `for update`. That is what makes seed_starter_recipes'
-    -- emptiness check linearizable instead of a racy read
-    -- (Codex, PR #144). Nothing else in the schema locks households, so
-    -- this adds one edge to the lock graph and no cycle.
-    perform 1 from public.households where id = caller_household_id for share;
-
     insert into public.recipes (
       household_id, title, hero_image_path, original_photo_path, active_time_minutes,
       total_time_minutes, yield_text, servings_count, permanent_notes, source_url,
