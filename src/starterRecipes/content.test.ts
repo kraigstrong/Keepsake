@@ -164,6 +164,24 @@ describe('parsing', () => {
     expect(unreadable.map((r) => r.title)).toEqual(['Brown Butter Chocolate Chip Cookies']);
   });
 
+  it('keeps the leading quantity readable on "plus more" lines', () => {
+    // Three recipes need an amount beyond the measured one — oil for the
+    // grates, milk to loosen, water to steam. Written as "X, plus more
+    // ..." so the line stays scalable: the leading quantity parses, and
+    // the qualitative remainder rides along in ingredientText without
+    // being multiplied.
+    for (const line of [
+      '1/4 cup olive oil, plus more for the grill',
+      '2 cups whole milk, plus more as needed',
+      '1/4 cup water, plus 2 tbsp for steaming the broccoli',
+    ]) {
+      const parsed = parseQuantity(line);
+      expect(parsed.quantityMin).not.toBeNull();
+      expect(parsed.unit).toBe('cup');
+      expect(parsed.ingredientText).toContain('plus');
+    }
+  });
+
   it('parses a known quantity, unit and ingredient correctly', () => {
     // Pins the content, not the parser: if someone reformats this line
     // into something parseQuantity can't read, scaling silently stops

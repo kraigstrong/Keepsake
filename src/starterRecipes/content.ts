@@ -23,7 +23,9 @@ export const STARTER_RECIPES: StarterRecipe[] = [
     permanentNotes:
       'Crisp-skinned thighs and browned potatoes off one pan, with lemon slices that soften into the juices.',
     activeTimeMinutes: 15,
-    totalTimeMinutes: 55,
+    // 15 prep + 40-45 roast + 5 rest. Was 55, which the roast alone
+    // nearly consumed.
+    totalTimeMinutes: 65,
     yieldText: 'Serves 4',
     categories: [{ group: 'protein', value: 'Chicken' }],
     tags: ['sheet pan', 'weeknight', 'one pan'],
@@ -182,7 +184,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
           '1 tbsp honey',
           '1 tsp toasted sesame oil',
           '1 tsp cornstarch',
-          '1/4 cup water',
+          '1/4 cup water, plus 2 tbsp for steaming the broccoli',
           'Steamed rice, for serving',
         ],
       },
@@ -311,7 +313,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
         title: null,
         lines: [
           '3 cups water',
-          '2 cups whole milk',
+          '2 cups whole milk, plus more as needed',
           '12 oz elbow macaroni',
           '1 tsp kosher salt',
           '1/2 tsp mustard powder',
@@ -372,6 +374,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
           'Pour 1/4-cup scoops and cook 2 to 3 minutes, until bubbles come up and the edges set.',
           'Flip and cook 1 to 2 minutes more.',
           'Hold finished pancakes on a rack in a 200°F oven while you cook the rest.',
+          'Serve warm, with butter and maple syrup.',
         ],
       },
     ],
@@ -432,7 +435,9 @@ export const STARTER_RECIPES: StarterRecipe[] = [
     permanentNotes:
       'A marinade you can mix in a minute and leave for eight hours, and it works just as well in a grill pan indoors.',
     activeTimeMinutes: 15,
-    totalTimeMinutes: 45,
+    // 5 prep + 30 marinating + 10-12 grilling + 5 rest. Was 45, on the
+    // same optimistic arithmetic as the sheet-pan chicken.
+    totalTimeMinutes: 55,
     yieldText: 'Serves 4',
     categories: [
       { group: 'protein', value: 'Chicken' },
@@ -444,7 +449,10 @@ export const STARTER_RECIPES: StarterRecipe[] = [
         title: null,
         lines: [
           '2 lb boneless skinless chicken thighs',
-          '1/4 cup olive oil',
+          // "plus more" matters here for a reason beyond completeness:
+          // the marinade has held raw chicken and must not go near the
+          // grates.
+          '1/4 cup olive oil, plus more for the grill',
           '1/4 cup lemon juice',
           '3 cloves garlic, minced',
           '1 tbsp chopped fresh oregano',
