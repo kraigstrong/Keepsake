@@ -44,7 +44,10 @@ export type AnalyticsEvent =
   | 'selection_round_applied'
   | 'selection_round_cancelled'
   | 'selection_deck_exhausted'
-  | 'selection_technical_failure';
+  | 'selection_technical_failure'
+  // Starter recipes. `starter_recipes_offered` lands with PR 4, which is
+  // where it can actually fire — this file's own rule.
+  | 'starter_recipes_added';
 
 export function trackEvent(
   name: AnalyticsEvent,
