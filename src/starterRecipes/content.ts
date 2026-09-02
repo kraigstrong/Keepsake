@@ -101,7 +101,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
           'Stir in the tomato paste and cook 2 minutes, until it darkens.',
           'Pour in the milk and simmer about 5 minutes, until mostly absorbed.',
           'Add the crushed tomatoes, salt and pepper. Simmer partly covered 45 minutes, stirring now and then.',
-          'Cook the pasta to al dente and reserve 1 cup of the water.',
+          'In the last 15 minutes of the simmer, cook the pasta to al dente and reserve 1 cup of the water.',
           'Toss the pasta with the sauce, loosening with pasta water until it coats. Serve with Parmesan.',
         ],
       },
