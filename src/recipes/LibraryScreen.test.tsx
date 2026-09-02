@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 // Jest's module-factory hoisting only allows referencing out-of-scope
@@ -409,5 +409,118 @@ describe('starter recipe offer', () => {
 
     await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
     expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
+  });
+});
+
+// Re-fires the most recent useFocusEffect closure, the way returning to
+// this tab does — the same trick the search-state-restoration test uses,
+// but always taking the latest call so it closes over current state.
+async function refireFocusEffect() {
+  const calls = mockedUseFocusEffect.mock.calls;
+  const latest = calls[calls.length - 1]![0] as () => void;
+  await act(async () => {
+    latest();
+  });
+}
+
+describe('starter recipe offer — regressions found by review', () => {
+  it('never flashes the offer for an established household with a cold mirror', async () => {
+    // The reinstall case as it actually arrives: the local read returns
+    // empty, the sync pulls the real library into SQLite, and the
+    // *re-read* then returns it. The re-read is deliberately left
+    // pending here — with instantly-resolving mocks React batches the
+    // whole chain into one commit and the bug is invisible, which is
+    // exactly how the first version of this test passed against the
+    // broken code.
+    const cold: LibraryRecipe[] = [];
+    const real = [recipe({ id: 'r1', title: 'Chili' })];
+    let resolveRefresh: (value: LibraryRecipe[]) => void = () => {};
+    const pendingRefresh = new Promise<LibraryRecipe[]>((resolve) => {
+      resolveRefresh = resolve;
+    });
+
+    let syncDone = false;
+    mockedSyncHousehold.mockImplementation(() => {
+      syncDone = true;
+      return Promise.resolve(undefined);
+    });
+    mockedReadLocalLibraryRecipes.mockImplementation(() =>
+      syncDone ? pendingRefresh : Promise.resolve(cold),
+    );
+
+    await render(<LibraryScreen />);
+    // Sync has finished; the refreshed list has not landed yet. This is
+    // the whole window — settling here means judging the offer against
+    // the pre-sync empty array.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
+
+    await act(async () => {
+      resolveRefresh(real);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText('Chili')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+    expect(mockedTrackEvent).not.toHaveBeenCalledWith('starter_recipes_offered');
+  });
+
+  it('does not re-offer after seeding and then emptying the library in one session', async () => {
+    // The household snapshot in context still carries the pre-seed
+    // stamp, so without a local record this returns to a dead button.
+    let hasSeeded = false;
+    let emptied = false;
+    const empty: LibraryRecipe[] = [];
+    const seeded = [recipe({ id: 'r1', title: 'Weeknight Bolognese' })];
+    mockedReadLocalLibraryRecipes.mockImplementation(() =>
+      Promise.resolve(hasSeeded && !emptied ? seeded : empty),
+    );
+    mockedSeedStarterRecipes.mockImplementation(() => {
+      hasSeeded = true;
+      return Promise.resolve({ seeded: true, recipeCount: 10 });
+    });
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('library-starter-offer-action'));
+    await waitFor(() => expect(screen.getByText('Weeknight Bolognese')).toBeTruthy());
+
+    // The user archives or deletes all ten and comes back.
+    emptied = true;
+    await refireFocusEffect();
+
+    await waitFor(() => expect(screen.getByTestId('library-placeholder')).toBeTruthy());
+    expect(screen.queryByTestId('library-starter-offer')).toBeNull();
+  });
+
+  it('reports a second impression when the offer returns', async () => {
+    // Decline, add a recipe, delete it, come back — Library never
+    // unmounts, so a guard keyed to the screen would swallow this while
+    // starter_recipes_added could still fire.
+    let populated = false;
+    const empty: LibraryRecipe[] = [];
+    const one = [recipe({ id: 'r1', title: 'Chili' })];
+    mockedReadLocalLibraryRecipes.mockImplementation(() =>
+      Promise.resolve(populated ? one : empty),
+    );
+
+    await render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+
+    populated = true;
+    await refireFocusEffect();
+    await waitFor(() => expect(screen.getByText('Chili')).toBeTruthy());
+
+    populated = false;
+    await refireFocusEffect();
+    await waitFor(() => expect(screen.getByTestId('library-starter-offer')).toBeTruthy());
+
+    expect(
+      mockedTrackEvent.mock.calls.filter(([n]) => n === 'starter_recipes_offered'),
+    ).toHaveLength(2);
   });
 });

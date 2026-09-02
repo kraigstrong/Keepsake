@@ -96,6 +96,13 @@ export function LibraryScreen() {
   const [hasSyncSettled, setHasSyncSettled] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedError, setSeedError] = useState(false);
+  // The household snapshot in context still carries the pre-seed stamp,
+  // and nothing refetches it here. Without this, seeding and then
+  // archiving or deleting all ten inside one session returns to an empty
+  // Library with the offer still eligible — the dead button decision D
+  // exists to prevent (Codex, PR #146). The next launch reads the real
+  // stamp; this only has to cover the session that did the seeding.
+  const [hasSeededThisSession, setHasSeededThisSession] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -160,11 +167,6 @@ export function LibraryScreen() {
             // whatever was already cached locally.
           });
           if (cancelled) return;
-          // Settled means "we tried", not "it succeeded". An offline
-          // first launch would otherwise never show the offer at all,
-          // and the RPC is the real guard against seeding into a
-          // library that only looks empty.
-          setHasSyncSettled(true);
 
           const [refreshed, refreshedCategories] = await Promise.all([
             readLocalLibraryRecipes(household.id).catch(() => null),
@@ -173,6 +175,18 @@ export function LibraryScreen() {
           if (cancelled) return;
           if (refreshed) setRecipes(refreshed);
           if (refreshedCategories) setCategories(refreshedCategories);
+          // Last, and deliberately after setRecipes rather than before
+          // the await above: these batch into one commit, so the offer
+          // can never render against the pre-sync list. Setting it
+          // earlier left a window where an established household with a
+          // cold mirror saw settled === true and a stale empty array,
+          // which is the exact state condition 3 exists to exclude
+          // (Codex, PR #146).
+          //
+          // Settled still means "we tried", not "it succeeded" — the
+          // sync's failure is swallowed above, so an offline first
+          // launch still reaches the offer.
+          setHasSyncSettled(true);
         })
         .catch(() => {
           if (!cancelled) setLoadError(true);
@@ -198,14 +212,27 @@ export function LibraryScreen() {
   // invariant either way — this decides what to show, not what may be
   // written.
   const canOfferStarters =
-    hasSyncSettled && household != null && household.starterRecipesSeededAt == null;
+    hasSyncSettled &&
+    household != null &&
+    household.starterRecipesSeededAt == null &&
+    !hasSeededThisSession;
 
   // Once per mount of the offer, not per render, so the conversion
   // denominator means something.
   const hasReportedOffer = useRef(false);
   const offerVisible = canOfferStarters && !loadError && recipes !== null && recipes.length === 0;
   useEffect(() => {
-    if (offerVisible && !hasReportedOffer.current) {
+    // Reset on disappearance: the offer can unmount and come back while
+    // Library stays mounted (decline, add a recipe, delete it, return),
+    // and a guard keyed to the screen would swallow the second
+    // impression while a second `starter_recipes_added` could still
+    // fire — undercounting the denominator the pair exists to measure
+    // (Codex, PR #146).
+    if (!offerVisible) {
+      hasReportedOffer.current = false;
+      return;
+    }
+    if (!hasReportedOffer.current) {
       hasReportedOffer.current = true;
       trackEvent('starter_recipes_offered');
     }
@@ -217,6 +244,7 @@ export function LibraryScreen() {
     setSeedError(false);
     try {
       await seedStarterRecipes(household.id);
+      setHasSeededThisSession(true);
       const refreshed = await readLocalLibraryRecipes(household.id);
       setRecipes(refreshed);
     } catch {
