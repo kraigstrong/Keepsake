@@ -55,6 +55,10 @@
     "supabase": "^2.115.0",
     "typescript": "~6.0.3"
   },
+  "engines": {
+    "node": ">=24",
+    "npm": ">=11"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",

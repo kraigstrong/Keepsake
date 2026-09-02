@@ -20,8 +20,14 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
+
+      # The lockfile is written by npm 11, and npm 10 computes a different
+      # tree from it (it requires a nested optional-peer typescript that
+      # npm 11 omits) — which is what froze every Dependabot PR. .nvmrc
+      # pins Node, but Node only pins npm indirectly, so pin it directly.
+      - run: npm install --global npm@11
 
       - run: npm ci
 
@@ -39,8 +45,14 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
+
+      # The lockfile is written by npm 11, and npm 10 computes a different
+      # tree from it (it requires a nested optional-peer typescript that
+      # npm 11 omits) — which is what froze every Dependabot PR. .nvmrc
+      # pins Node, but Node only pins npm indirectly, so pin it directly.
+      - run: npm install --global npm@11
 
       - run: npm ci
 
@@ -80,8 +92,14 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
+
+      # The lockfile is written by npm 11, and npm 10 computes a different
+      # tree from it (it requires a nested optional-peer typescript that
+      # npm 11 omits) — which is what froze every Dependabot PR. .nvmrc
+      # pins Node, but Node only pins npm indirectly, so pin it directly.
+      - run: npm install --global npm@11
 
       - run: npm ci
 
