@@ -148,8 +148,10 @@
           <th>Usage</th>
           <td>
             A small, fixed list of anonymous events recording which features are used — for example
-            that a recipe was saved or a weekly plan confirmed. Event names only; never the contents
-            of a recipe or a note.
+            that a recipe was saved or a weekly plan confirmed. An event may carry plain
+            measurements alongside its name: a count, a duration, or a yes/no flag such as whether a
+            cooking note was added. It never carries what you wrote. Search terms in particular are
+            deliberately excluded — only the timing and the number of results are recorded.
           </td>
         </tr>
       </table>
@@ -230,8 +232,10 @@
 
       <h2>How long it is kept, and how to delete it</h2>
       <p>
-        Your content is kept for as long as your household exists. Deleting a recipe removes it, and
-        Keepsake also deletes the associated image files.
+        Your content is kept for as long as your household exists. Deleting a recipe moves it to
+        <em>Recently Deleted</em>, where it stays until you restore it or choose
+        <em>Delete Forever</em>. Deleting it forever removes the recipe and its stored images; if an
+        image file is ever left behind, a periodic sweep removes it.
       </p>
       <p>
         <strong>This beta has no in-app button to delete your account.</strong> To have your account
