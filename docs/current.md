@@ -6,11 +6,19 @@ A pointer to what's actively selected right now, not a log — update it when th
 
 ## Active work item
 
-`docs/roadmap.md`'s **milestone 4, Smart Meal Selection ("Help Me Choose")** — sequenced ahead of Friends & Family Preview.
+**Starter recipes for a new library** (`docs/roadmap.md`'s Unplaced item), selected 2026-09-01. Plan: [`docs/proposals/starter-recipes.md`](proposals/starter-recipes.md), whose three open product decisions were decided that day, all taking the recommendation — Library's empty state only, no new category values, no re-offer once seeded.
 
-The full solo flow is merged and deployed: deck → shortlist → review → apply, plus "Select more". Staging is current with `main`. **`FLAGS.smartMealSelection` is on for everyone as of 2026-08-28** — the flag is kept, not deleted, as the rollback lever through the preview. Beta scope is settled: **solo-only, group is post-beta**, which is what the flip had been waiting on.
+**Known and accepted, don't re-report:** a second member with Library already mounted can see the starter offer again if someone else seeds and the library is then emptied — their device holds the pre-seed stamp until relaunch, because no focus or foreground path refetches it. Codex pressed for a refresh before settling eligibility ([#146](https://github.com/kraigstrong/Keepsake/pull/146)); declined 2026-09-01 and confirmed by the developer. The targeted version feeds provider state back into Library's focus effect, whose deps include `household` and whose `fetchHousehold` returns a fresh object each call — so it needs a re-render guard, in an effect that already produced two subtle failures in this work (an infinite render loop, and a batching-dependent window where the offer rendered against a stale list). The worst outcome being closed is an inert button until relaunch, in a household where two members are active simultaneously and the library has been fully emptied.
 
-Build history, review findings, and walkthrough notes: [`docs/history/phase-18-smart-meal-selection.md`](history/phase-18-smart-meal-selection.md).
+**Ordering hazard, do not lose:** [#146](https://github.com/kraigstrong/Keepsake/pull/146) makes `fetchHousehold` select `starter_recipes_seeded_at`. Against a staging database without that column PostgREST returns 400, `fetchHousehold` throws, and the app shows "Couldn't load your household" — the same full-screen failure as builds 3 and 4. **#144's migration must reach staging before #146 merges or a dev build runs off `main`.**
+
+**Three of four are merged to `main`** (2026-09-01): [#143](https://github.com/kraigstrong/Keepsake/pull/143) the ten recipes as data, [#144](https://github.com/kraigstrong/Keepsake/pull/144) the `seed_starter_recipes` RPC and its migration, [#145](https://github.com/kraigstrong/Keepsake/pull/145) the client seeding path. Each merged with all four CI checks green.
+
+**[#146](https://github.com/kraigstrong/Keepsake/pull/146) — the offer itself — is held deliberately, not blocked.** It must not merge until #144's migration is on staging: it makes `fetchHousehold` select `starter_recipes_seeded_at`, and against a database without that column PostgREST 400s and the app shows "Couldn't load your household". **Staging is now genuinely behind `main`**, so `npm run check:drift` will report drift until that is applied. Note `devtools.env` is a FIFO and drains on read — it needs re-priming from 1Password before any staging command will authenticate.
+
+After the migration lands: merge #146, then the device pass that is the last open acceptance criterion — editing/archiving a starter recipe behaving like any other, and Help Me Choose starting a round off the seeded set.
+
+Previously active, now merged and deployed: **milestone 4, Smart Meal Selection** — full solo flow, `FLAGS.smartMealSelection` on for everyone since 2026-08-28, flag kept as the rollback lever. Beta scope settled solo-only. History: [`docs/history/phase-18-smart-meal-selection.md`](history/phase-18-smart-meal-selection.md).
 
 ## Blocked / open follow-ups
 

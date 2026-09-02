@@ -81,11 +81,35 @@ describe('fetchHousehold', () => {
   it('returns the household when the caller has one', async () => {
     mockedFrom.mockReturnValue({
       select: () => ({
-        maybeSingle: () => Promise.resolve({ data: { id: 'household-1' }, error: null }),
+        maybeSingle: () =>
+          Promise.resolve({
+            data: { id: 'household-1', starter_recipes_seeded_at: null },
+            error: null,
+          }),
       }),
     });
 
-    await expect(fetchHousehold()).resolves.toEqual({ id: 'household-1' });
+    await expect(fetchHousehold()).resolves.toEqual({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
+
+    // A non-null stamp has to survive the snake_case mapping too — the
+    // offer keys off it, and a silently-dropped value would re-offer the
+    // starter recipes to a household that already took them.
+    mockedFrom.mockReturnValue({
+      select: () => ({
+        maybeSingle: () =>
+          Promise.resolve({
+            data: { id: 'household-1', starter_recipes_seeded_at: '2026-09-01T12:00:00.000Z' },
+            error: null,
+          }),
+      }),
+    });
+    await expect(fetchHousehold()).resolves.toEqual({
+      id: 'household-1',
+      starterRecipesSeededAt: '2026-09-01T12:00:00.000Z',
+    });
   });
 
   it('returns null when the caller has no household', async () => {
@@ -99,10 +123,16 @@ describe('fetchHousehold', () => {
 
 describe('createHousehold', () => {
   it('calls the create_household RPC and returns the new household', async () => {
-    const single = jest.fn().mockResolvedValue({ data: { id: 'household-1' }, error: null });
+    const single = jest.fn().mockResolvedValue({
+      data: { id: 'household-1', starter_recipes_seeded_at: null },
+      error: null,
+    });
     mockedRpc.mockReturnValue({ single });
 
-    await expect(createHousehold()).resolves.toEqual({ id: 'household-1' });
+    await expect(createHousehold()).resolves.toEqual({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
     expect(mockedRpc).toHaveBeenCalledWith('create_household');
   });
 
@@ -133,10 +163,16 @@ describe('createInvitation', () => {
 
 describe('acceptInvitation', () => {
   it('calls the accept_invitation RPC with the raw token', async () => {
-    const single = jest.fn().mockResolvedValue({ data: { id: 'household-1' }, error: null });
+    const single = jest.fn().mockResolvedValue({
+      data: { id: 'household-1', starter_recipes_seeded_at: null },
+      error: null,
+    });
     mockedRpc.mockReturnValue({ single });
 
-    await expect(acceptInvitation('raw-token')).resolves.toEqual({ id: 'household-1' });
+    await expect(acceptInvitation('raw-token')).resolves.toEqual({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
     expect(mockedRpc).toHaveBeenCalledWith('accept_invitation', { raw_token: 'raw-token' });
   });
 

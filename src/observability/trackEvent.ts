@@ -45,8 +45,9 @@ export type AnalyticsEvent =
   | 'selection_round_cancelled'
   | 'selection_deck_exhausted'
   | 'selection_technical_failure'
-  // Starter recipes. `starter_recipes_offered` lands with PR 4, which is
-  // where it can actually fire — this file's own rule.
+  // Starter recipes. The pair is the conversion rate on the one-tap
+  // offer: how many empty libraries saw it, how many took it.
+  | 'starter_recipes_offered'
   | 'starter_recipes_added';
 
 export function trackEvent(

@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Category, CategoryGroup } from './api';
@@ -23,6 +23,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { Sheet } from '../components/Sheet';
 import { useHousehold } from '../household/HouseholdProvider';
 import { useImportActivity } from '../import/ImportActivityContext';
+import { trackEvent } from '../observability';
 import type { SearchResult } from '../search/search';
 import { searchRecipes } from '../search/search';
 import {
@@ -30,6 +31,7 @@ import {
   readLocalLibraryRecipes,
   type LibraryRecipe,
 } from '../sync/offlineRecipes';
+import { seedStarterRecipes } from '../starterRecipes/api';
 import { syncHousehold } from '../sync/syncEngine';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -82,10 +84,18 @@ const SEARCH_DEBOUNCE_MS = 200;
 export function LibraryScreen() {
   const router = useRouter();
   const { open: openAddSheet } = useAddSheet();
-  const { household } = useHousehold();
+  const { household, refreshHousehold } = useHousehold();
   const [recipes, setRecipes] = useState<LibraryRecipe[] | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadError, setLoadError] = useState(false);
+  // An empty local mirror is not the same fact as an empty household:
+  // this screen paints `local` before awaiting syncHousehold below, so a
+  // reinstall or a cleared database shows an empty Library for an
+  // established household. The plain "No recipes yet" state is fine to
+  // show meanwhile; only the starter offer has to wait for the truth.
+  const [hasSyncSettled, setHasSyncSettled] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedError, setSeedError] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -145,9 +155,16 @@ export function LibraryScreen() {
           setCategories(localCategories);
           setLoadError(false);
 
+          // Tracked rather than swallowed: the offer must not appear on
+          // the strength of a sync that failed. A cold mirror plus a
+          // failed sync looks exactly like an empty household, which is
+          // how an established one gets offered starters it can only be
+          // refused (Codex, PR #146).
+          let syncSucceeded = true;
           await syncHousehold(household.id).catch(() => {
             // Offline or a transient failure — the list stays at
             // whatever was already cached locally.
+            syncSucceeded = false;
           });
           if (cancelled) return;
 
@@ -158,6 +175,16 @@ export function LibraryScreen() {
           if (cancelled) return;
           if (refreshed) setRecipes(refreshed);
           if (refreshedCategories) setCategories(refreshedCategories);
+          // Last, and deliberately after setRecipes rather than before
+          // the await above: these batch into one commit, so the offer
+          // can never be judged against the pre-sync list.
+          //
+          // Gated on the sync having succeeded, not merely finished.
+          // Costs nothing real — seeding needs the network anyway, so an
+          // offer that appears offline could only ever fail — and it
+          // closes the case where a failed sync leaves a cold mirror
+          // indistinguishable from an empty household.
+          if (syncSucceeded) setHasSyncSettled(true);
         })
         .catch(() => {
           if (!cancelled) setLoadError(true);
@@ -173,6 +200,63 @@ export function LibraryScreen() {
   function chooseSort(mode: SortMode) {
     setSortMode(mode);
     writeSortPreference(mode);
+  }
+
+  // Three conditions, and only the first is about what to render. The
+  // household must not have seeded before (decision D: otherwise a
+  // household that emptied its library is left tapping a button that can
+  // only ever no-op), and the first sync must have settled (an empty
+  // local mirror is not an empty household). The RPC enforces the real
+  // invariant either way — this decides what to show, not what may be
+  // written.
+  const canOfferStarters =
+    hasSyncSettled && household != null && household.starterRecipesSeededAt == null;
+
+  // Once per mount of the offer, not per render, so the conversion
+  // denominator means something.
+  const hasReportedOffer = useRef(false);
+  const offerVisible = canOfferStarters && !loadError && recipes !== null && recipes.length === 0;
+  useEffect(() => {
+    // Reset on disappearance: the offer can unmount and come back while
+    // Library stays mounted (decline, add a recipe, delete it, return),
+    // and a guard keyed to the screen would swallow the second
+    // impression while a second `starter_recipes_added` could still
+    // fire — undercounting the denominator the pair exists to measure
+    // (Codex, PR #146).
+    if (!offerVisible) {
+      hasReportedOffer.current = false;
+      return;
+    }
+    if (!hasReportedOffer.current) {
+      hasReportedOffer.current = true;
+      trackEvent('starter_recipes_offered');
+    }
+  }, [offerVisible]);
+
+  async function addStarterRecipes() {
+    if (!household || isSeeding) return;
+    setIsSeeding(true);
+    setSeedError(false);
+    try {
+      await seedStarterRecipes(household.id);
+      // Refresh the shared household rather than recording the seed in
+      // this screen's own state. A screen-local flag leaves every other
+      // mounted reader on the pre-seed snapshot — including the other
+      // member's Library, which would show the dead offer again if the
+      // library were later emptied (Codex, PR #146).
+      await refreshHousehold().catch(() => {
+        // The recipes are in and the list is about to repaint; a stale
+        // stamp is not worth failing the seed the user just completed.
+      });
+      const refreshed = await readLocalLibraryRecipes(household.id);
+      setRecipes(refreshed);
+    } catch {
+      // Inline, with the offer still tappable — never a navigation away
+      // from a screen the user is standing on.
+      setSeedError(true);
+    } finally {
+      setIsSeeding(false);
+    }
   }
 
   const isSearching = query.trim().length > 0;
@@ -239,6 +323,18 @@ export function LibraryScreen() {
           />
         ) : recipes === null ? (
           <LoadingState label="Loading recipes…" testID="library-loading" />
+        ) : recipes.length === 0 && canOfferStarters ? (
+          <EmptyState
+            title="Start your Keepsake"
+            message="Ten favourites to explore with — edit or delete any of them."
+            actionLabel={isSeeding ? 'Adding recipes…' : 'Add starter recipes'}
+            onAction={addStarterRecipes}
+            actionDisabled={isSeeding}
+            secondaryActionLabel="Start with my own"
+            onSecondaryAction={openAddSheet}
+            errorMessage={seedError ? "Couldn't add the starter recipes. Try again." : undefined}
+            testID="library-starter-offer"
+          />
         ) : recipes.length === 0 ? (
           <EmptyState
             title="No recipes yet"

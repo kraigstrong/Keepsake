@@ -11,6 +11,7 @@ import { supabase } from '../supabase/instance';
  */
 interface HouseholdRow {
   id: string;
+  starter_recipes_seeded_at: string | null;
 }
 interface CreateInvitationRow {
   token: string;
@@ -27,6 +28,13 @@ export interface Profile {
 
 export interface Household {
   id: string;
+  /**
+   * When this household took the starter recipes, or null if it never
+   * has. Read only to suppress the offer: without it, a household that
+   * seeds and then archives or deletes all ten lands back on an empty
+   * Library and is left tapping a button that can only ever no-op.
+   */
+  starterRecipesSeededAt: string | null;
 }
 
 export interface HouseholdMember {
@@ -73,16 +81,25 @@ export async function updateProfile(
 }
 
 export async function fetchHousehold(): Promise<Household | null> {
-  const { data, error } = await supabase.from('households').select('id').maybeSingle();
+  const { data, error } = await supabase
+    .from('households')
+    .select('id, starter_recipes_seeded_at')
+    .maybeSingle();
   if (error) throw error;
-  return data ? { id: data.id } : null;
+  return data
+    ? { id: data.id, starterRecipesSeededAt: data.starter_recipes_seeded_at ?? null }
+    : null;
 }
 
 export async function createHousehold(): Promise<Household> {
   const { data, error } = await supabase.rpc('create_household').single();
   if (error) throw error;
   const row = data as HouseholdRow;
-  return { id: row.id };
+  // Read from the row here too, rather than hardcoding null. It is null
+  // by construction today — the RPC just inserted it — but both this and
+  // accept_invitation return public.households, so reading it keeps one
+  // rule instead of one rule and an assumption.
+  return { id: row.id, starterRecipesSeededAt: row.starter_recipes_seeded_at ?? null };
 }
 
 export interface CreatedInvitation {
@@ -101,7 +118,10 @@ export async function acceptInvitation(token: string): Promise<Household> {
   const { data, error } = await supabase.rpc('accept_invitation', { raw_token: token }).single();
   if (error) throw error;
   const row = data as HouseholdRow;
-  return { id: row.id };
+  // Read from the row rather than assumed null: an invitee is joining a
+  // household that may well have seeded already, and the offer keys off
+  // this to stay suppressed.
+  return { id: row.id, starterRecipesSeededAt: row.starter_recipes_seeded_at ?? null };
 }
 
 export async function fetchHouseholdMembers(householdId: string): Promise<HouseholdMember[]> {

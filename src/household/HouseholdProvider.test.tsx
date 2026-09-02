@@ -53,7 +53,7 @@ describe('HouseholdProvider / useHousehold', () => {
       displayName: 'Alice',
       preferredUnitSystem: 'us_customary',
     });
-    mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1' });
+    mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1', starterRecipesSeededAt: null });
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
@@ -63,7 +63,7 @@ describe('HouseholdProvider / useHousehold', () => {
       displayName: 'Alice',
       preferredUnitSystem: 'us_customary',
     });
-    expect(result.current.household).toEqual({ id: 'household-1' });
+    expect(result.current.household).toEqual({ id: 'household-1', starterRecipesSeededAt: null });
   });
 
   it('does not fetch when there is no session', async () => {
@@ -114,14 +114,14 @@ describe('HouseholdProvider / useHousehold', () => {
       displayName: 'Alice',
       preferredUnitSystem: 'metric',
     });
-    mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1' });
+    mockedApi.fetchHousehold.mockResolvedValue({ id: 'household-1', starterRecipesSeededAt: null });
 
     await act(async () => {
       result.current.retryLoad();
     });
 
     await waitFor(() => expect(result.current.loadError).toBe(false), { timeout: RETRY_BUDGET_MS });
-    expect(result.current.household).toEqual({ id: 'household-1' });
+    expect(result.current.household).toEqual({ id: 'household-1', starterRecipesSeededAt: null });
   });
 
   // The invitee case (2026-09-01): a first fetch that fails right after
@@ -135,13 +135,13 @@ describe('HouseholdProvider / useHousehold', () => {
       .mockResolvedValue(profile);
     mockedApi.fetchHousehold
       .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValue({ id: 'household-1' });
+      .mockResolvedValue({ id: 'household-1', starterRecipesSeededAt: null });
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.loadError).toBe(false);
-    expect(result.current.household).toEqual({ id: 'household-1' });
+    expect(result.current.household).toEqual({ id: 'household-1', starterRecipesSeededAt: null });
     expect(result.current.profile).toEqual(profile);
     expect(mockedApi.fetchProfile).toHaveBeenCalledTimes(2);
   });
@@ -217,8 +217,11 @@ describe('HouseholdProvider / useHousehold', () => {
     });
     mockedApi.fetchHousehold
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: 'household-1' });
-    mockedApi.createHousehold.mockResolvedValue({ id: 'household-1' });
+      .mockResolvedValueOnce({ id: 'household-1', starterRecipesSeededAt: null });
+    mockedApi.createHousehold.mockResolvedValue({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -227,7 +230,9 @@ describe('HouseholdProvider / useHousehold', () => {
       await result.current.createHousehold();
     });
 
-    await waitFor(() => expect(result.current.household).toEqual({ id: 'household-1' }));
+    await waitFor(() =>
+      expect(result.current.household).toEqual({ id: 'household-1', starterRecipesSeededAt: null }),
+    );
   });
 
   it('acceptInvitation accepts the invitation and refreshes state', async () => {
@@ -238,8 +243,11 @@ describe('HouseholdProvider / useHousehold', () => {
     });
     mockedApi.fetchHousehold
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: 'household-1' });
-    mockedApi.acceptInvitation.mockResolvedValue({ id: 'household-1' });
+      .mockResolvedValueOnce({ id: 'household-1', starterRecipesSeededAt: null });
+    mockedApi.acceptInvitation.mockResolvedValue({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
 
     const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -249,7 +257,9 @@ describe('HouseholdProvider / useHousehold', () => {
     });
 
     expect(mockedApi.acceptInvitation).toHaveBeenCalledWith('raw-token');
-    await waitFor(() => expect(result.current.household).toEqual({ id: 'household-1' }));
+    await waitFor(() =>
+      expect(result.current.household).toEqual({ id: 'household-1', starterRecipesSeededAt: null }),
+    );
   });
 
   it('re-enters loading synchronously when the signed-in user changes', async () => {
