@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(35);
 
 insert into auth.users (id, email)
 values
@@ -450,6 +450,15 @@ select matches(
   (select prosrc from pg_proc where proname = 'save_recipe'),
   'preserveNewRecipeDraft',
   'save_recipe: still honours the draft-preservation opt-out'
+);
+
+-- pgTAP runs one file in one transaction and cannot commit a concurrent
+-- insert mid-seed, so the re-verify before stamping is only assertable
+-- structurally — same limitation, and same honesty, as the lock guards.
+select matches(
+  (select prosrc from pg_proc where proname = 'seed_starter_recipes'),
+  'household gained a recipe while seeding',
+  'seed_starter_recipes: still re-verifies emptiness before stamping'
 );
 
 select * from finish();
