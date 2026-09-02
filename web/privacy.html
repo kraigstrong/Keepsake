@@ -215,7 +215,8 @@
           <th>Apple</th>
           <td>
             Distributes the beta through TestFlight, and tells us which builds are installed.
-            Apple's own terms apply to that.
+            Apple's own terms apply to that. See also the note below on sending a grocery list to
+            Reminders.
           </td>
         </tr>
       </table>
@@ -238,12 +239,23 @@
         recipe, but not this import history.
       </p>
 
+      <h2>Sending a grocery list to Reminders</h2>
+      <p>
+        If you choose to send a grocery list to Apple Reminders, Keepsake asks for permission and
+        then writes the item text — which is derived from your recipes — into the reminders account
+        you have set up on your device. Where that text is then stored is decided by that account
+        rather than by Keepsake: for an iCloud account it goes to Apple, and for another provider's
+        account it goes to that provider. This only happens when you ask for it.
+      </p>
+
       <h2>How long it is kept, and how to delete it</h2>
       <p>
         Your content is kept for as long as your household exists. Deleting a recipe moves it to
         <em>Recently Deleted</em>, where it stays until you restore it or choose
-        <em>Delete Forever</em>. Deleting it forever removes the recipe and its stored images; if an
-        image file is ever left behind, a periodic sweep removes it.
+        <em>Delete Forever</em>. Deleting it forever removes the recipe and deletes its stored
+        images. Image deletion is best-effort: if it fails, the file can remain in storage. A
+        periodic sweep clears leftover photos taken for import, and anything else can be removed on
+        request.
       </p>
       <p>
         <strong>This beta has no in-app button to delete your account.</strong> To have your account
