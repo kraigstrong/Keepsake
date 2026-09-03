@@ -1,6 +1,6 @@
 # Deploying a Supabase Edge Function
 
-Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other. `npm run check:drift` reports both; run it before assuming staging matches `main`.
+Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other. `npm run check:drift` covers the migration half only — it compares migration lists and auth config, and never queries deployed functions. **Nothing automated reports which function version staging is running**, so a merged-but-undeployed Edge Function change is invisible: check that half by hand.
 
 ## Credentials
 

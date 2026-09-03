@@ -43,7 +43,7 @@ Internal testing needs none of this; external testing needs all of it, and Beta 
 - [ ] **Contact address on the policy** is one a reader associates with this app, and it actually receives mail. The policy offers it as the only route for a deletion request.
 - [ ] **Beta app description** and **feedback email** filled in on App Store Connect.
 - [ ] **Demo account** exists, has a password set (App Review cannot receive an email OTP), and **has been signed into once to tap the starter-recipes offer** — the library is empty until someone does, and an empty library is a rejection risk.
-- [ ] **Export compliance** answered. `ITSAppUsesNonExemptEncryption` in `app.json` avoids being asked on every upload.
+- [ ] **Export compliance** answered. Setting `ios.config.usesNonExemptEncryption` in `app.json` would stop this being asked on every upload — **not configured yet**, tracked in #157.
 - [ ] **Privacy questionnaire** matches `web/privacy.html`'s collection table and the allowlist in `src/observability/trackEvent.ts` — including the two easily-missed flows, the Reminders export and the retained import history.
 - [ ] Accepted, knowingly: no in-app account-deletion path. There is no guaranteed exemption from Guideline 5.1.1(v); the contingency if App Review raises it is a minimal in-app deletion *initiation* flow.
 
