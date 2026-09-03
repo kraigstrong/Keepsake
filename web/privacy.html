@@ -143,6 +143,15 @@
           </td>
         </tr>
         <tr>
+          <th>Activity</th>
+          <td>
+            When you record having cooked something, Keepsake stores that it was cooked, when, and
+            by whom, and every member of your household can see it. When you use Help Me Choose,
+            your individual yes/no choices are stored against your name; they stay private while a
+            round is in progress and become visible to your household once it finishes.
+          </td>
+        </tr>
+        <tr>
           <th>Diagnostics</th>
           <td>Crash and error reports when something goes wrong, so it can be fixed.</td>
         </tr>
@@ -243,8 +252,14 @@
       <p>
         Keepsake keeps a copy of your household's recipes and plans on your device so it works
         without a connection, along with a search index built from them and any cooking notes not
-        yet sent. Your sign-in token is held in the device's secure keychain. All of it stays on
-        your device, and removing the app removes it.
+        yet sent. Your sign-in token is held in the device's secure keychain.
+      </p>
+      <p>
+        A link you share to Keepsake from another app is also queued on the device, and that queue
+        deliberately survives signing out, so a share you made is not lost by signing out before it
+        finishes. It keeps the address after the import has finished, whether it succeeded or
+        failed. All of this stays on your device; removing the app removes all of it, including the
+        queue.
       </p>
 
       <h2>Sending a grocery list to Reminders</h2>
@@ -266,9 +281,13 @@
         request.
       </p>
       <p>
-        <strong>This beta has no in-app button to delete your account.</strong> To have your account
-        and your household's data deleted, email the address below and it will be carried out
-        manually. An in-app path is planned before any public release.
+        <strong>This beta has no in-app button to delete your account.</strong> Email the address
+        below and it will be done by hand. Two things shape what that can mean, because recipes
+        belong to a household rather than to whoever added them. Removing you from a shared
+        household does not delete its library — the others keep it, including recipes you added. And
+        deleting a household's content outright is straightforward only when you are its sole
+        member; in a shared household it needs the agreement of everyone in it, since there is no
+        owner who can decide for the rest. An in-app path is planned before any public release.
       </p>
 
       <h2>Security</h2>
