@@ -289,6 +289,49 @@ describe('HouseholdProvider / useHousehold', () => {
     });
   });
 
+  // A stalled request is not a rejected one: fetch on React Native never
+  // settles it, so before this bound the invitee sat on "Joining your
+  // household…" until they force-quit. Found in review of #157.
+  it('turns a stalled accept into a retryable outcome instead of hanging', async () => {
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    // Never settles, in either direction.
+    mockedApi.acceptInvitation.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      const pending = result.current.acceptInvitation('raw-token');
+      jest.advanceTimersByTime(10_000);
+      outcome = await pending;
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'retryable',
+      message: expect.stringContaining('still saved'),
+    });
+  });
+
+  it('gives up on a stalled initial load rather than holding the splash', async () => {
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockReturnValue(new Promise(() => {}));
+    mockedApi.fetchHousehold.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    // Past LOAD_TIMEOUT_MS, not RETRY_BUDGET_MS: what is being waited on
+    // here is the 10s bound firing, not the 300ms+900ms retry chain.
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 15_000 });
+    expect(result.current.loadError).toBe(true);
+  });
+
   it('reports an RPC rejection as terminal', async () => {
     mockedApi.fetchProfile.mockResolvedValue({
       id: 'user-1',
