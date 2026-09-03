@@ -30,7 +30,9 @@ Do not point the project at the repository root — that would try to build the 
 
 ## Before it fronts an App Review submission
 
-- Confirm `privacy@brightbench.app` exists and is monitored. It is the only contact route the policy
-  gives, including for deletion requests.
+- The contact address is `support@timetutor.app`, chosen 2026-09-02 because it already forwards and
+  ImprovMX's free tier covers only one domain. It works, but it names the wrong product for anyone
+  who looks — worth swapping for an address on this domain before external App Review.
+  forwardemail.net covers unlimited domains free if ImprovMX's single-domain limit is the blocker.
 - Re-read the policy as the accountable party. It was drafted from the app's actual data flows, but
   it is not legal advice.
