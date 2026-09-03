@@ -1,6 +1,6 @@
 # Deploying a Supabase Edge Function
 
-Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other. `docs/current.md`'s Staging section tracks both independently; check it before assuming staging matches `main`.
+Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other. `npm run check:drift` reports both; run it before assuming staging matches `main`.
 
 ## Credentials
 
