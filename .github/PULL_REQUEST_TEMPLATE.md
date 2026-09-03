@@ -2,13 +2,9 @@
 
 <!-- One or two sentences. What does this PR do. -->
 
-## Work item
+## Closes
 
-<!-- Link or reference to the docs/roadmap.md entry this addresses, if any. -->
-
-## PRD requirements touched
-
-<!-- IDs from docs/prd-traceability.md, e.g. REC-01, REC-02, SEC-03 -->
+<!-- Closes #N. Merging closes the issue; there is no status file to update. -->
 
 ## What changed
 

@@ -5,17 +5,28 @@ description: "Use when beginning or resuming work on a Keepsake work item — st
 
 Starting or resuming a Keepsake work item. Work through this in order.
 
-## 1. Establish current state
+## 1. Read the selected issue
 
-Read, in this order:
+First establish *which* issue. Nothing marks one as "selected" — that is deliberate, to avoid a status field needing manual sync — so identify it, in this order:
 
-1. `docs/current.md` — what's actively selected, its state, next action, any open questions.
-2. `docs/roadmap.md` — the milestone this work item belongs to (what "done" looks like for the milestone) and the work item's own entry.
-3. `docs/prd-traceability.md` filtered to any requirement IDs this work item touches.
-4. `docs/adr/` for any prior decisions relevant to this work item (skim titles, read ones that look relevant).
-5. `docs/architecture.md` if the work item touches a part of the system you haven't worked in recently.
+1. **The developer named it**, by number or by name:
+   `gh issue list --state open --search "<words>"`
+2. **Resuming on an existing branch** — the open PR for this branch names the issue it closes:
+   `gh pr list --head "$(git branch --show-current)" --json number,title,body`
+3. **Neither** — list the candidates and ask which. Don't guess, and don't default to the top of the list.
 
-If `docs/current.md` says something different is actively selected than what the developer named, say so before proceeding — don't silently skip ahead.
+```bash
+gh issue list --state open --json number,title,labels,milestone   # both milestones
+gh issue view <number>
+```
+
+Note the milestone is a filter, not a selector: `--milestone "Beta"` narrows to release blockers and *excludes* `Post-beta` work, so don't use it when the developer named something outside the beta boundary.
+
+The issue is the specification: its body carries the objective, scope, non-goals and acceptance criteria. Its labels say who owns it and what verification it needs. Nothing else is required to start.
+
+Read further only when the issue actually demands it — `docs/adr/` for a decision the issue cites, `docs/architecture.md` for a subsystem you haven't worked in recently. Don't read the whole documentation set by default.
+
+If the developer names something different from what's open and labelled, say so before proceeding — don't silently skip ahead.
 
 ## 2. Confirm the branch
 

@@ -6,7 +6,7 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 
 - [ ] CI is green on the commit being released: typecheck, lint, format, unit tests, migration apply/reset, RLS/pgTAP tests, secret scan, dependency scan (all jobs in `.github/workflows/ci.yml`).
 - [ ] No `Not Started` PRD requirement is claimed as shipped — check `docs/prd-traceability.md` for the requirements this release is supposed to include.
-- [ ] `docs/current.md` reflects reality — the active work item's state matches what's actually shipped.
+- [ ] `npm run check:drift` passes — the hosted staging project matches local migrations and auth settings. **Not optional:** drift has bitten three times, once hiding a beta gate recorded as closed whose migration had never reached staging. CI only ever applies migrations to a disposable per-PR database, never to the project the app actually talks to.
 - [ ] Dependency scan has no unresolved high/critical findings in runtime dependencies (`npm audit --omit=dev --audit-level=high`); any accepted moderate findings, and any high/critical findings scoped out via `--omit=dev` (build-tooling-only), are documented in `.github/workflows/ci.yml`, not silently ignored.
 - [ ] No secret, credential, or production config value appears anywhere in the diff being released (belt-and-suspenders on top of the CI gitleaks job).
 
@@ -35,8 +35,20 @@ Distinct from the per-PR `security-check` skill (which runs on every change that
 - [ ] Error tracking (Sentry) and analytics (PostHog) are confirmed receiving events from a real build before wide release, not just local dev.
 - [ ] Beta/TestFlight feedback channel exists and is monitored.
 
+## External TestFlight (Beta App Review)
+
+Internal testing needs none of this; external testing needs all of it, and Beta App Review takes days rather than minutes.
+
+- [ ] **Privacy policy URL** resolves and is current — `https://keepsake.brightbench.app/privacy.html`.
+- [ ] **Contact address on the policy** is one a reader associates with this app, and it actually receives mail. The policy offers it as the only route for a deletion request.
+- [ ] **Beta app description** and **feedback email** filled in on App Store Connect.
+- [ ] **Demo account** exists, has a password set (App Review cannot receive an email OTP), and **has been signed into once to tap the starter-recipes offer** — the library is empty until someone does, and an empty library is a rejection risk.
+- [ ] **Export compliance** answered. Setting `ios.config.usesNonExemptEncryption` in `app.json` would stop this being asked on every upload — **not configured yet**, tracked in #157.
+- [ ] **Privacy questionnaire** matches `web/privacy.html`'s collection table and the allowlist in `src/observability/trackEvent.ts` — including the two easily-missed flows, the Reminders export and the retained import history.
+- [ ] Accepted, knowingly: no in-app account-deletion path. There is no guaranteed exemption from Guideline 5.1.1(v); the contingency if App Review raises it is a minimal in-app deletion *initiation* flow.
+
 ## Post-release
 
 - [ ] Tag the release in Git.
-- [ ] Update the phase's `docs/history/*.md` entry (and `docs/current.md` if this release changes the active work item's state).
+- [ ] Close the GitHub issues this release delivers, if the merging PRs didn't already via `Closes #N`.
 - [ ] Smoke-check production immediately after rollout (execution-plan.md §3.5-adjacent operational validation) — don't assume a green CI run before deploy means the deployed build is healthy.

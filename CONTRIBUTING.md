@@ -4,7 +4,7 @@ This is effectively a household of one developer plus Claude sessions doing the 
 
 ## The short version
 
-1. Read `docs/current.md` to see what's active, and `docs/roadmap.md` to see what's next.
+1. Read the GitHub Issue you're working from — `gh issue list --state open --milestone "Beta"`. Its body carries the acceptance criteria.
 2. Work on a feature branch, not `main`.
 3. Commit in small, coherent, independently-reviewable steps (see `docs/architecture.md`'s "How work happens here") — not one giant commit at the end.
 4. No secrets, ever, in any commit — see `CLAUDE.md` and `AGENTS.md`.

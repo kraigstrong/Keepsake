@@ -19,10 +19,6 @@ Read the actual diff, the actual tests, and the verification findings yourself �
 
 Confirm `docs/prd-traceability.md` is updated for any requirement ID this work item provides evidence for.
 
-## 4. Update current.md
+## 4. Human review packet
 
-Update `docs/current.md` to reflect the work item's new state (shipped, awaiting review, blocked on X) and the next concrete action — for this work item or the next one selected from `docs/roadmap.md`. If this closes out real ground on a milestone, note it there too, but keep it to what shipped and what's still open — link to the PR and any ADR for the reasoning, don't re-narrate it. Commit this before packaging (step 5) — it needs to be part of the branch `pr-ready` verifies and pushes, not a stray uncommitted change left behind after the packet is already generated.
-
-## 5. Human review packet
-
-Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves, unless they've explicitly asked you to do it directly.
+The PR description carries `Closes #N` so merging closes the issue — **work state lives in the issue, not in a committed file, so there is no status commit to make.** (`docs/prd-traceability.md` is a requirement-status index rather than work state; step 3 still updates it. Whether that mandate survives is #175.) Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves, unless they've explicitly asked you to do it directly.

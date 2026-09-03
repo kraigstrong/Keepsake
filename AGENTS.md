@@ -13,7 +13,7 @@ Keepsake (product name "Pantry" internally in some docs — same app) is a calm,
 - `server/` — runtime-neutral pure TypeScript, executes under both Node (for Jest) and Deno (the Edge Function): `server/units/` (quantity parsing/scaling), `server/import/` (URL fetch, HTML reduction, JSON-LD extraction), `server/ai/` (Claude extraction calls). No side effects at import time; keep it that way.
 - `supabase/functions/import-recipe/` — the one Deno Edge Function. Pinned import map in `deno.json`. Uses the caller's own JWT (never service-role) so RLS applies inside it same as anywhere else.
 - `supabase/migrations/` — forward-only SQL migrations. `supabase/tests/database/` — pgTAP tests, one file per migration/RPC group, run for real against Postgres in CI.
-- `docs/` — `prd.md` (product spec), `architecture.md` (living system-architecture overview — read this right after this file), `roadmap.md` (milestones and work-item backlog — what's still left to build), `current.md` (current-state pointer — see below), `execution-plan.md` (historical phase-by-phase build record; the durable process principles that used to live here have moved to `architecture.md`), `history/` (one archive file per phase, load a specific one only when needed), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → status), `adr/` (numbered decision records).
+- `docs/` — `prd.md` (product spec), `architecture.md` (living system-architecture overview — read this right after this file), `roadmap.md` (milestone outcomes; the backlog lives in GitHub Issues), `execution-plan.md` (historical phase-by-phase build record; the durable process principles that used to live here have moved to `architecture.md`), `history/` (one archive file per phase, load a specific one only when needed), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → status), `adr/` (numbered decision records).
 - `.claude/skills/` — `select-work-item`, `ship-work-item`, `pr-ready`, `security-check` encode this project's recurring workflows.
 
 ## Durable security invariants
@@ -48,7 +48,17 @@ Run the full sequence locally before every push, not a hand-picked subset — CI
 
 ## Current-state pointer
 
-Read [`docs/current.md`](docs/current.md) — short by design — for what work item is actively selected right now and its state. [`docs/roadmap.md`](docs/roadmap.md) holds the milestone/backlog layer (what's next, in priority order); `docs/current.md` is only what's actually in flight this session. Full phase-by-phase history from before the work-item model lives in `docs/history/phase-NN-*.md`, one file per phase — load a specific one only when a task needs that phase's detail. If you need design rationale rather than a phase narrative, `docs/adr/` is indexed by number and faster to search.
+Work state lives in **GitHub Issues**, not in any file:
+
+```bash
+gh issue list --state open --milestone "Beta" --json number,title,labels,body
+```
+
+The issue body carries the acceptance criteria. `Beta` blocks external TestFlight; `Post-beta` does not. `owner:kraig` is developer-only, `blocked:kraig` is waiting on a decision, `verify:*` says whether the item needs the suite, a Simulator, a device, or two devices. An open issue with a linked PR is in flight; a closed issue is done. A Project board exists as a view over these issues — **if a board field and the issue disagree, the issue wins.** An empty result means check the milestone name; `gh` exits 0 for a milestone that does not exist.
+
+Never record work state in a committed file. A PR closes its issue with `Closes #N`.
+
+[`docs/roadmap.md`](docs/roadmap.md) holds milestone outcomes only. Full phase-by-phase history from before the work-item model lives in `docs/history/phase-NN-*.md` — load a specific one only when a task needs that phase's detail. For design rationale, `docs/adr/` is indexed by number and faster to search.
 
 ## Delegation
 
@@ -78,11 +88,14 @@ A work item is done when: the canonical commands above pass, its security implic
 
 ## Review priorities for Codex
 
-Codex reviews every PR on this repo. In priority order:
+Three priorities, in order. **Findings are weighted by consequence to a user's data, privacy, security, or ability to use the app** — not by how much of the diff they touch.
 
 1. **Security.** Household/RLS boundary correctness on any new table, column, or RPC — does a query or function actually get scoped by the caller's household, or does it only look like it does? Server-only code crossing into client bundles — a new import in `src/` or `app/` reaching into `server/ai`, `server/import`'s network/secret-touching modules, or anything that would put a credential in the Metro bundle. Any new external-input surface (URL, upload, deep link, AI output) used before validation.
-2. **Maintainability.** Prefer this repo's established patterns over a new one for the same problem — pure runtime-neutral modules in `server/`, one RPC per write boundary, an ADR recorded before a non-obvious consequential decision, not after (see `docs/adr/TEMPLATE.md`'s bar — routine decisions don't need one at all). Flag complexity that isn't earning its keep, and duplicated logic that should be one shared call site instead. This includes comment and doc weight: a comment that re-derives an ADR's whole decision inline instead of citing it, or that's grown longer than the code it explains, is a maintainability finding — flag it the same as any other unearned complexity.
-3. **Race conditions.** Atomicity of multi-step `security definer` functions and multi-RPC request handlers — a partial failure between two separate database calls that should have been one transaction is a recurring defect class in this repo; `docs/adr/0020-import-fencing-and-local-data-isolation.md` (`finalize_import_job`) is the canonical fix pattern to compare against: merge the steps into one function, call the existing save/create RPC directly rather than duplicating its body (nested `security definer` calls share the outer transaction), and fence any claim/lease with a token, not just a timestamp. Also watch for concurrency assumptions stated as comments but not enforced in SQL — "idempotent" or "single-winner" claims that aren't backed by a unique constraint, row lock, or atomic `UPDATE ... WHERE ... RETURNING`.
-4. **Product requirements.** Does the change actually satisfy the PRD requirement ID(s) it claims (`docs/prd-traceability.md`), and does it match the work item's own stated acceptance criteria — not scope-creeping beyond it or silently dropping part of it?
+2. **Race conditions and atomicity.** Multi-step `security definer` functions and multi-RPC request handlers — a partial failure between two database calls that should have been one transaction is a recurring defect class here. `docs/adr/0020-import-fencing-and-local-data-isolation.md` (`finalize_import_job`) is the canonical fix pattern: merge the steps into one function, call the existing save/create RPC directly rather than duplicating its body (nested `security definer` calls share the outer transaction), and fence any claim or lease with a token, not just a timestamp. Watch for concurrency assumptions stated in comments but not enforced in SQL — "idempotent" or "single-winner" claims not backed by a unique constraint, row lock, or atomic `UPDATE ... WHERE ... RETURNING`.
+3. **Acceptance criteria.** Does the change satisfy the acceptance criteria in the issue it closes — without scope creep, and without silently dropping part of it?
 
-Report findings against real code paths, not the PR diff in isolation — this repo's bugs have mostly been in what a diff *doesn't* touch (a second call site, an existing test that should have caught it, a downstream table).
+Report findings against real code paths, not the PR diff in isolation — this repo's bugs have mostly been in what a diff *doesn't* touch (a second call site, an existing test that should have caught it, a downstream table). When a finding is one instance of a class, say so and name the other instances; a fix that closes only the named line is the wrong fix.
+
+**Do not report on comment length or documentation weight.** That was previously a listed priority and it produced findings on six of eleven PRs, two of which had no correctness finding at all. Prose style is not a review concern here.
+
+**Scope.** Skip review entirely for routine status and editorial changes. Do review externally binding policy (anything a user or Apple reads), security procedures, and agent-operating instructions — a defect in those has consequences even though no code changed.
