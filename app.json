@@ -10,6 +10,9 @@
     "ios": {
       "bundleIdentifier": "com.kraigstrong.keepsake",
       "buildNumber": "5",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "supportsTablet": false,
       "appleTeamId": "MKACSCQ588",
       "entitlements": {
