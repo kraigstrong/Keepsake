@@ -9,8 +9,23 @@ import {
   type Household,
   type Profile,
 } from './api';
+import { classifyInvitationFailure, invitationFailureMessage } from './invitationOutcome';
 import { logError } from '../observability';
+import { withTimeout } from '../shared/withTimeout';
 import { useSession } from '../session/SessionProvider';
+
+/**
+ * Why this is four outcomes and not `{ error }`: three of them must lead
+ * somewhere different. `retryable` keeps the token and offers Retry;
+ * `terminal` spends it and explains why; `joined-refresh-failed` means
+ * the membership row exists and the invitee must never be sent back to
+ * "Create a household". See src/household/invitationOutcome.ts.
+ */
+export type AcceptInvitationResult =
+  | { outcome: 'joined' }
+  | { outcome: 'joined-refresh-failed'; message: string }
+  | { outcome: 'retryable'; message: string }
+  | { outcome: 'terminal'; message: string };
 
 interface HouseholdContextValue {
   profile: Profile | null;
@@ -34,7 +49,7 @@ interface HouseholdContextValue {
   refreshHousehold: () => Promise<void>;
   setDisplayName: (displayName: string) => Promise<{ error: string | null }>;
   createHousehold: () => Promise<{ error: string | null }>;
-  acceptInvitation: (token: string) => Promise<{ error: string | null }>;
+  acceptInvitation: (token: string) => Promise<AcceptInvitationResult>;
 }
 
 const HouseholdContext = createContext<HouseholdContextValue | null>(null);
@@ -47,6 +62,17 @@ const HouseholdContext = createContext<HouseholdContextValue | null>(null);
 // after accept_invitation had already succeeded would clear the pending
 // token and render "Create a household" to someone who just joined one.
 const LOAD_RETRY_DELAYS_MS = [300, 900];
+
+// supabase-js goes through fetch, which has no default timeout on React
+// Native: a request that *stalls* rather than fails never settles, and
+// every spinner waiting on one is permanent. These bound the two awaits
+// on the invitation path — the accept itself, and the refresh it needs
+// before the invitee can be shown their household. Both are safe to
+// retry, which is what makes a timeout the right answer rather than an
+// abort: accept_invitation re-entered by the same caller returns their
+// household again, and the loads are reads.
+const ACCEPT_TIMEOUT_MS = 10_000;
+const LOAD_TIMEOUT_MS = 10_000;
 
 /**
  * Only meaningful once signed in — mounted unconditionally alongside
@@ -114,16 +140,23 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     throw lastError;
   }, [userId]);
 
+  // Bounds the whole retry chain, not each attempt: three stalled
+  // attempts at ten seconds each would be half a minute of splash.
+  const loadWithinTimeout = useCallback(
+    () => withTimeout(loadHouseholdState(), LOAD_TIMEOUT_MS, 'household load'),
+    [loadHouseholdState],
+  );
+
   const refresh = useCallback(async () => {
-    const { profile: fetchedProfile, household: fetchedHousehold } = await loadHouseholdState();
+    const { profile: fetchedProfile, household: fetchedHousehold } = await loadWithinTimeout();
     setProfile(fetchedProfile);
     setHousehold(fetchedHousehold);
     setIsLoading(false);
-  }, [loadHouseholdState]);
+  }, [loadWithinTimeout]);
 
   useEffect(() => {
     let cancelled = false;
-    loadHouseholdState()
+    loadWithinTimeout()
       .then(({ profile: fetchedProfile, household: fetchedHousehold }) => {
         if (cancelled) return;
         setProfile(fetchedProfile);
@@ -141,7 +174,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [loadHouseholdState, loadAttempt]);
+  }, [loadWithinTimeout, loadAttempt]);
 
   const retryLoad = useCallback(() => {
     setIsLoading(true);
@@ -170,14 +203,34 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const acceptInvitation = async (token: string): Promise<{ error: string | null }> => {
+  // The two awaits are deliberately not in one try. Collapsing them
+  // reports a refresh failure as a failure to accept — which is what
+  // happened on 2026-09-01: the membership row was written, the refetch
+  // 401'd, and the invitee was shown "Create a household", the one
+  // irreversible action in the app (ADR-0004). The caller has to be able
+  // to tell "you are not in" from "you are in, we just can't show it".
+  const acceptInvitation = async (token: string): Promise<AcceptInvitationResult> => {
     try {
-      await acceptInvitationApi(token);
-      await refresh();
-      return { error: null };
+      await withTimeout(acceptInvitationApi(token), ACCEPT_TIMEOUT_MS, 'accept_invitation');
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'failed to accept invitation' };
+      logError(err, { context: 'acceptInvitation' });
+      return {
+        outcome: classifyInvitationFailure(err) === 'terminal' ? 'terminal' : 'retryable',
+        message: invitationFailureMessage(err),
+      };
     }
+
+    try {
+      await refresh();
+    } catch (err) {
+      logError(err, { context: 'acceptInvitationRefresh' });
+      return {
+        outcome: 'joined-refresh-failed',
+        message: "You're in — we just couldn't load your household yet.",
+      };
+    }
+
+    return { outcome: 'joined' };
   };
 
   return (

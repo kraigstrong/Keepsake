@@ -1,6 +1,6 @@
 import { act } from 'react';
 
-import { renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 // The third of app/invite/[token].tsx's three branches, and the only one
 // that already worked — an invite tapped on a device that's already in a
@@ -76,21 +76,24 @@ jest.mock('../supabase/instance', () => ({
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyz012345';
 
-describe('invite deep link — already onboarded (T4)', () => {
-  // This previously asserted the opposite — that an onboarded member
-  // tapping an invite simply lands in the app. That *was* the defect:
-  // the token was captured, never consumed and never cleared, so the
-  // second member of a two-person household could tap a link and be
-  // told nothing at all. Landing in the app silently and having the
-  // invitation quietly evaporate are indistinguishable to the person
-  // holding the phone, which is why this now demands a message.
-  // Explicit timeout — see navigation.test.tsx.
-  it('says the invitation cannot be applied instead of silently dropping it', async () => {
+describe('invite deep link — already onboarded, acknowledging the notice (T4)', () => {
+  // Separate file because this suite renders the router twice-over
+  // otherwise; one renderRouter per file is the convention here (see
+  // navigation.test.tsx). What it pins is the terminal half of T4: the
+  // token is spent deliberately on acknowledgement, so the notice cannot
+  // reappear on every launch for a member who can never use it.
+  it('clears the invitation and continues into the app', async () => {
     renderRouter('./app', { initialUrl: `/invite/${TOKEN}` });
     await act(async () => {});
     await waitFor(() => {
       expect(screen.getByTestId('invite-already-in-household')).toBeOnTheScreen();
     });
-    expect(screen.queryByTestId('this-week-placeholder')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('invite-already-in-household-continue'));
+    await act(async () => {});
+
+    await waitFor(() => {
+      expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();
+    });
   }, 20000);
 });

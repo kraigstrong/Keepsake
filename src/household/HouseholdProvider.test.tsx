@@ -262,6 +262,134 @@ describe('HouseholdProvider / useHousehold', () => {
     );
   });
 
+  // T7/T8 of the invitation state table (#157). The distinction these
+  // pin is the one that stranded a real invitee on 2026-09-01: a failure
+  // *after* the membership row was written must not read as a failure to
+  // join, and a transport failure must not spend the token.
+  it('reports a transient accept failure as retryable, leaving the token spendable', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    mockedApi.acceptInvitation.mockRejectedValue({ code: '401', message: 'JWT expired' });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'retryable',
+      message: expect.stringContaining('still saved'),
+    });
+  });
+
+  // A stalled request is not a rejected one: fetch on React Native never
+  // settles it, so before this bound the invitee sat on "Joining your
+  // household…" until they force-quit. Found in review of #157.
+  it('turns a stalled accept into a retryable outcome instead of hanging', async () => {
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    // Never settles, in either direction.
+    mockedApi.acceptInvitation.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      const pending = result.current.acceptInvitation('raw-token');
+      jest.advanceTimersByTime(10_000);
+      outcome = await pending;
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'retryable',
+      message: expect.stringContaining('still saved'),
+    });
+  });
+
+  it('gives up on a stalled initial load rather than holding the splash', async () => {
+    jest.useFakeTimers();
+    mockedApi.fetchProfile.mockReturnValue(new Promise(() => {}));
+    mockedApi.fetchHousehold.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+
+    // Past LOAD_TIMEOUT_MS, not RETRY_BUDGET_MS: what is being waited on
+    // here is the 10s bound firing, not the 300ms+900ms retry chain.
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 15_000 });
+    expect(result.current.loadError).toBe(true);
+  });
+
+  it('reports an RPC rejection as terminal', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    mockedApi.acceptInvitation.mockRejectedValue({
+      code: 'P0001',
+      message: 'invitation has expired',
+    });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'terminal',
+      message: expect.stringContaining('expired'),
+    });
+  });
+
+  // Real timers deliberately: the refresh's 300ms+900ms retry chain is
+  // awaited inside act(), and act() does not advance fake timers the way
+  // waitFor does — under fake timers this hangs rather than failing.
+  it('does not report a joined invitee as having failed when only the refresh fails', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    // Loads fine, then every refetch afterwards fails.
+    mockedApi.fetchHousehold.mockResolvedValueOnce(null).mockRejectedValue(new Error('offline'));
+    mockedApi.acceptInvitation.mockResolvedValue({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    // The membership row exists. Saying "failed to accept invitation"
+    // here is what sent a real invitee back to "Create a household".
+    expect(outcome).toEqual({
+      outcome: 'joined-refresh-failed',
+      message: expect.stringContaining("You're in"),
+    });
+  });
+
   it('re-enters loading synchronously when the signed-in user changes', async () => {
     mockedUseSession.mockReturnValue({ session: null });
     mockedApi.fetchProfile.mockResolvedValue(null);
