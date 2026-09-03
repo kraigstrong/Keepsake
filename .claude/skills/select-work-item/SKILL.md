@@ -5,17 +5,18 @@ description: "Use when beginning or resuming work on a Keepsake work item — st
 
 Starting or resuming a Keepsake work item. Work through this in order.
 
-## 1. Establish current state
+## 1. Read the selected issue
 
-Read, in this order:
+```bash
+gh issue list --state open --milestone "Beta" --json number,title,labels,body
+gh issue view <number>
+```
 
-1. `docs/current.md` — what's actively selected, its state, next action, any open questions.
-2. `docs/roadmap.md` — the milestone this work item belongs to (what "done" looks like for the milestone) and the work item's own entry.
-3. `docs/prd-traceability.md` filtered to any requirement IDs this work item touches.
-4. `docs/adr/` for any prior decisions relevant to this work item (skim titles, read ones that look relevant).
-5. `docs/architecture.md` if the work item touches a part of the system you haven't worked in recently.
+The issue is the specification: its body carries the objective, scope, non-goals and acceptance criteria. Its labels say who owns it and what verification it needs. Nothing else is required to start.
 
-If `docs/current.md` says something different is actively selected than what the developer named, say so before proceeding — don't silently skip ahead.
+Read further only when the issue actually demands it — `docs/adr/` for a decision the issue cites, `docs/architecture.md` for a subsystem you haven't worked in recently. Don't read the whole documentation set by default.
+
+If the developer names something different from what's open and labelled, say so before proceeding — don't silently skip ahead.
 
 ## 2. Confirm the branch
 

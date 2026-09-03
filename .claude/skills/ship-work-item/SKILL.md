@@ -17,12 +17,6 @@ Assume the implementation may be wrong — don't trust a subagent's own summary 
 
 Read the actual diff, the actual tests, and the verification findings yourself — not a summary of a summary. Did this actually solve the work item's stated problem, correctly, within scope? Decide: approve, request a targeted fix (loop back to step 1, then re-verify just the affected behavior — don't restart the whole lifecycle for a narrow fix), escalate a decision, or split remaining work into a new work item rather than silently expanding this one's scope.
 
-Confirm `docs/prd-traceability.md` is updated for any requirement ID this work item provides evidence for.
+## 4. Human review packet
 
-## 4. Update current.md
-
-Update `docs/current.md` to reflect the work item's new state (shipped, awaiting review, blocked on X) and the next concrete action — for this work item or the next one selected from `docs/roadmap.md`. If this closes out real ground on a milestone, note it there too, but keep it to what shipped and what's still open — link to the PR and any ADR for the reasoning, don't re-narrate it. Commit this before packaging (step 5) — it needs to be part of the branch `pr-ready` verifies and pushes, not a stray uncommitted change left behind after the packet is already generated.
-
-## 5. Human review packet
-
-Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves, unless they've explicitly asked you to do it directly.
+The PR description carries `Closes #N` so merging closes the issue — **there is no status file to update, and no status commit to make.** Package the result using the `pr-ready` skill: what changed, why, what verification ran and what it found (and how each finding was resolved), risks or limitations, any follow-up work items discovered, and any critical decisions made along the way — flagged explicitly, not something to miss on a quick mobile review. Give the exact `git push` command and the filled-in PR description; the developer pushes and opens the PR themselves, unless they've explicitly asked you to do it directly.

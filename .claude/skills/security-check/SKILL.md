@@ -42,4 +42,4 @@ Read the "Critical" list near the end of `docs/execution-plan.md`. If the change
 
 ## 4. Report
 
-State plainly: which categories applied, what was checked, what evidence exists (test names, not just "looks fine"), and any open finding. If there's an open finding that isn't resolved in this change, it needs either a fix now or an explicit, visible deferral (in `docs/current.md` or the PR description) — not silence.
+State plainly: which categories applied, what was checked, what evidence exists (test names, not just "looks fine"), and any open finding. If there's an open finding that isn't resolved in this change, it needs either a fix now or an explicit, visible deferral (in the PR description, or a new issue) — not silence.
