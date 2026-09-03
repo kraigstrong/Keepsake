@@ -13,7 +13,7 @@ Keepsake (product name "Pantry" internally in some docs — same app) is a calm,
 - `server/` — runtime-neutral pure TypeScript, executes under both Node (for Jest) and Deno (the Edge Function): `server/units/` (quantity parsing/scaling), `server/import/` (URL fetch, HTML reduction, JSON-LD extraction), `server/ai/` (Claude extraction calls). No side effects at import time; keep it that way.
 - `supabase/functions/import-recipe/` — the one Deno Edge Function. Pinned import map in `deno.json`. Uses the caller's own JWT (never service-role) so RLS applies inside it same as anywhere else.
 - `supabase/migrations/` — forward-only SQL migrations. `supabase/tests/database/` — pgTAP tests, one file per migration/RPC group, run for real against Postgres in CI.
-- `docs/` — `prd.md` (product spec), `architecture.md` (living system-architecture overview — read this right after this file), `roadmap.md` (milestones and work-item backlog — what's still left to build), `current.md` (current-state pointer — see below), `execution-plan.md` (historical phase-by-phase build record; the durable process principles that used to live here have moved to `architecture.md`), `history/` (one archive file per phase, load a specific one only when needed), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → status), `adr/` (numbered decision records).
+- `docs/` — `prd.md` (product spec), `architecture.md` (living system-architecture overview — read this right after this file), `roadmap.md` (milestone outcomes; the backlog lives in GitHub Issues), `execution-plan.md` (historical phase-by-phase build record; the durable process principles that used to live here have moved to `architecture.md`), `history/` (one archive file per phase, load a specific one only when needed), `threat-model.md` (T-numbered entries), `prd-traceability.md` (requirement ID → status), `adr/` (numbered decision records).
 - `.claude/skills/` — `select-work-item`, `ship-work-item`, `pr-ready`, `security-check` encode this project's recurring workflows.
 
 ## Durable security invariants
@@ -48,7 +48,17 @@ Run the full sequence locally before every push, not a hand-picked subset — CI
 
 ## Current-state pointer
 
-Read [`docs/current.md`](docs/current.md) — short by design — for what work item is actively selected right now and its state. [`docs/roadmap.md`](docs/roadmap.md) holds the milestone/backlog layer (what's next, in priority order); `docs/current.md` is only what's actually in flight this session. Full phase-by-phase history from before the work-item model lives in `docs/history/phase-NN-*.md`, one file per phase — load a specific one only when a task needs that phase's detail. If you need design rationale rather than a phase narrative, `docs/adr/` is indexed by number and faster to search.
+Work state lives in **GitHub Issues**, not in any file:
+
+```bash
+gh issue list --state open --milestone "Beta" --json number,title,labels,body
+```
+
+The issue body carries the acceptance criteria. `Beta` blocks external TestFlight; `Post-beta` does not. `owner:kraig` is developer-only, `blocked:kraig` is waiting on a decision, `verify:*` says whether the item needs the suite, a Simulator, a device, or two devices. An open issue with a linked PR is in flight; a closed issue is done. A Project board exists as a view over these issues — **if a board field and the issue disagree, the issue wins.** An empty result means check the milestone name; `gh` exits 0 for a milestone that does not exist.
+
+Never record work state in a committed file. A PR closes its issue with `Closes #N`.
+
+[`docs/roadmap.md`](docs/roadmap.md) holds milestone outcomes only. Full phase-by-phase history from before the work-item model lives in `docs/history/phase-NN-*.md` — load a specific one only when a task needs that phase's detail. For design rationale, `docs/adr/` is indexed by number and faster to search.
 
 ## Delegation
 

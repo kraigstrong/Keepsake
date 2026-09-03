@@ -2,14 +2,14 @@
 
 A calm, opinionated recipe app. iOS, Expo/React Native + TypeScript, Supabase backend, Anthropic Claude API for AI cleanup — server-side only. (Some older docs still call it "Pantry" — same app, renamed since; `package.json`'s `name` and this file are the canonical spelling.)
 
-Active development, well past scaffolding — see [`docs/current.md`](docs/current.md) for what's actively being worked on right now, and [`docs/roadmap.md`](docs/roadmap.md) for what's next.
+Active development, well past scaffolding. What's active, blocked and next lives in GitHub Issues — `gh issue list --state open --milestone "Beta"`. [`docs/roadmap.md`](docs/roadmap.md) holds the milestone outcomes those issues ladder up to.
 
 ## Start here
 
 - [`docs/prd.md`](docs/prd.md) — what we're building and why.
 - [`docs/architecture.md`](docs/architecture.md) — how the system fits together as it stands today.
-- [`docs/roadmap.md`](docs/roadmap.md) — milestones and the work-item backlog: what's still left to build.
-- [`docs/current.md`](docs/current.md) — where things stand right now and the next concrete action. Check this first. Full phase-by-phase history from before the work-item model lives in `docs/history/`.
+- [`docs/roadmap.md`](docs/roadmap.md) — milestone outcomes. No backlog; that lives in GitHub Issues.
+- **GitHub Issues** — what's active, blocked and next, with acceptance criteria. Check this first: `gh issue list --state open --milestone "Beta"`. Phase-by-phase history from before the work-item model lives in `docs/history/`.
 - [`docs/prd-traceability.md`](docs/prd-traceability.md) — requirement-by-requirement status.
 - [`docs/adr/`](docs/adr/) — recorded decisions and their rationale.
 - [`AGENTS.md`](AGENTS.md) — cross-agent baseline (repo map, security invariants, commands, critical decision policy) any coding agent should work from.
@@ -39,4 +39,4 @@ npm run db:reset && npm run db:test   # migrations + pgTAP, needs npm run db:sta
 
 ## Working on this project
 
-Development happens through Claude sessions (Cowork or Claude Code) working directly in this repo, one work item at a time from `docs/roadmap.md`'s backlog. See `CLAUDE.md` for the full operating model, and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the commit/PR mechanics.
+Development happens through Claude sessions (Cowork or Claude Code) working directly in this repo, one work item at a time from the GitHub Issues backlog. See `CLAUDE.md` for the full operating model, and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the commit/PR mechanics.

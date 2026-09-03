@@ -4,7 +4,13 @@ See [`AGENTS.md`](AGENTS.md) for the cross-agent baseline (repo map, durable sec
 
 Pantry is a calm, opinionated recipe app (Expo/React Native + TypeScript, Supabase, Anthropic Claude API server-side). Full product spec: [`docs/prd.md`](docs/prd.md). System architecture: [`docs/architecture.md`](docs/architecture.md). What's next: [`docs/roadmap.md`](docs/roadmap.md). Read all three before doing product or cross-cutting work if you haven't already loaded them this session.
 
-Every session, before doing anything else: read [`docs/current.md`](docs/current.md). It says what work item is actively selected, its state, and the next concrete action — kept deliberately short (a pointer, not a log). Update it when the active work item's state, blocker, or next action materially changes — not just because a session started or ended — or before handing off a decision to the developer.
+Every session, before doing anything else: find the selected work item in GitHub Issues.
+
+```bash
+gh issue list --state open --milestone "Beta" --json number,title,labels,body
+```
+
+The issue body carries the acceptance criteria. `Beta` blocks external TestFlight; `Post-beta` does not. `owner:kraig` is developer-only, `blocked:kraig` is waiting on a decision, `verify:*` says what verification the item needs. **Do not record work state in a file** — the issue is the record, and a PR closes it with `Closes #N`.
 
 ## The work-item lifecycle
 
@@ -23,7 +29,7 @@ Keepsake development follows **Product Vision → Milestone → Work Item → Ex
 
 ## How to work
 
-1. **Resume, don't restart.** Use `docs/current.md` and `docs/roadmap.md` to pick up where the last session left off rather than re-reading everything from zero.
+1. **Resume, don't restart.** Use the open issues to pick up where the last session left off rather than re-reading everything from zero.
 2. **Vertical slices, incremental commits.** Multiple small, reviewable, outcome-oriented commits per work item, not one large commit at the end (see `docs/architecture.md`'s "How work happens here"). Commit locally as you go; don't wait for a work item to "feel done."
 3. **Security ships with the feature, not after it.** Any work item touching a trust boundary gets `.claude/skills/security-check` as part of the work, not a follow-up task.
 4. **No secrets in Git, ever.** No API keys, service-role credentials, tokens, or `.env` values in any commit, log, fixture, or PR description. Use 1Password CLI / Environments for all secret injection. If you're ever unsure whether something is a secret, treat it as one and ask.
