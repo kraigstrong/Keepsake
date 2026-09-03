@@ -9,8 +9,22 @@ import {
   type Household,
   type Profile,
 } from './api';
+import { classifyInvitationFailure, invitationFailureMessage } from './invitationOutcome';
 import { logError } from '../observability';
 import { useSession } from '../session/SessionProvider';
+
+/**
+ * Why this is four outcomes and not `{ error }`: three of them must lead
+ * somewhere different. `retryable` keeps the token and offers Retry;
+ * `terminal` spends it and explains why; `joined-refresh-failed` means
+ * the membership row exists and the invitee must never be sent back to
+ * "Create a household". See src/household/invitationOutcome.ts.
+ */
+export type AcceptInvitationResult =
+  | { outcome: 'joined' }
+  | { outcome: 'joined-refresh-failed'; message: string }
+  | { outcome: 'retryable'; message: string }
+  | { outcome: 'terminal'; message: string };
 
 interface HouseholdContextValue {
   profile: Profile | null;
@@ -34,7 +48,7 @@ interface HouseholdContextValue {
   refreshHousehold: () => Promise<void>;
   setDisplayName: (displayName: string) => Promise<{ error: string | null }>;
   createHousehold: () => Promise<{ error: string | null }>;
-  acceptInvitation: (token: string) => Promise<{ error: string | null }>;
+  acceptInvitation: (token: string) => Promise<AcceptInvitationResult>;
 }
 
 const HouseholdContext = createContext<HouseholdContextValue | null>(null);
@@ -170,14 +184,34 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const acceptInvitation = async (token: string): Promise<{ error: string | null }> => {
+  // The two awaits are deliberately not in one try. Collapsing them
+  // reports a refresh failure as a failure to accept — which is what
+  // happened on 2026-09-01: the membership row was written, the refetch
+  // 401'd, and the invitee was shown "Create a household", the one
+  // irreversible action in the app (ADR-0004). The caller has to be able
+  // to tell "you are not in" from "you are in, we just can't show it".
+  const acceptInvitation = async (token: string): Promise<AcceptInvitationResult> => {
     try {
       await acceptInvitationApi(token);
-      await refresh();
-      return { error: null };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'failed to accept invitation' };
+      logError(err, { context: 'acceptInvitation' });
+      return {
+        outcome: classifyInvitationFailure(err) === 'terminal' ? 'terminal' : 'retryable',
+        message: invitationFailureMessage(err),
+      };
     }
+
+    try {
+      await refresh();
+    } catch (err) {
+      logError(err, { context: 'acceptInvitationRefresh' });
+      return {
+        outcome: 'joined-refresh-failed',
+        message: "You're in — we just couldn't load your household yet.",
+      };
+    }
+
+    return { outcome: 'joined' };
   };
 
   return (

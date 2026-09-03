@@ -262,6 +262,91 @@ describe('HouseholdProvider / useHousehold', () => {
     );
   });
 
+  // T7/T8 of the invitation state table (#157). The distinction these
+  // pin is the one that stranded a real invitee on 2026-09-01: a failure
+  // *after* the membership row was written must not read as a failure to
+  // join, and a transport failure must not spend the token.
+  it('reports a transient accept failure as retryable, leaving the token spendable', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    mockedApi.acceptInvitation.mockRejectedValue({ code: '401', message: 'JWT expired' });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'retryable',
+      message: expect.stringContaining('still saved'),
+    });
+  });
+
+  it('reports an RPC rejection as terminal', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    mockedApi.fetchHousehold.mockResolvedValue(null);
+    mockedApi.acceptInvitation.mockRejectedValue({
+      code: 'P0001',
+      message: 'invitation has expired',
+    });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'terminal',
+      message: expect.stringContaining('expired'),
+    });
+  });
+
+  // Real timers deliberately: the refresh's 300ms+900ms retry chain is
+  // awaited inside act(), and act() does not advance fake timers the way
+  // waitFor does — under fake timers this hangs rather than failing.
+  it('does not report a joined invitee as having failed when only the refresh fails', async () => {
+    mockedApi.fetchProfile.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Alice',
+      preferredUnitSystem: 'us_customary',
+    });
+    // Loads fine, then every refetch afterwards fails.
+    mockedApi.fetchHousehold.mockResolvedValueOnce(null).mockRejectedValue(new Error('offline'));
+    mockedApi.acceptInvitation.mockResolvedValue({
+      id: 'household-1',
+      starterRecipesSeededAt: null,
+    });
+
+    const { result } = await renderHook(() => useHousehold(), { wrapper: HouseholdProvider });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.acceptInvitation('raw-token');
+    });
+
+    // The membership row exists. Saying "failed to accept invitation"
+    // here is what sent a real invitee back to "Create a household".
+    expect(outcome).toEqual({
+      outcome: 'joined-refresh-failed',
+      message: expect.stringContaining("You're in"),
+    });
+  });
+
   it('re-enters loading synchronously when the signed-in user changes', async () => {
     mockedUseSession.mockReturnValue({ session: null });
     mockedApi.fetchProfile.mockResolvedValue(null);
