@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Keepsake</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #1c1917;
+        --muted: #57534e;
+        --rule: #e7e5e4;
+        --paper: #fdfcfb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e7e5e4;
+          --muted: #a8a29e;
+          --rule: #292524;
+          --paper: #1c1917;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 3rem 1.5rem 6rem;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          16px/1.65 ui-serif,
+          Georgia,
+          'Times New Roman',
+          serif;
+      }
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.9rem;
+        line-height: 1.2;
+        margin: 0 0 0.25rem;
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin: 2.5rem 0 0.6rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--rule);
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 2rem;
+        font-size: 0.95rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1rem 0;
+        font-size: 0.95rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem 0.5rem 0;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 600;
+      }
+      ul {
+        padding-left: 1.2rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      a {
+        color: inherit;
+      }
+      @media (max-width: 34rem) {
+        /* Stack the label above its cell — a two-column table squeezes the
+           label into a column too narrow to read on a phone. */
+        th,
+        td {
+          display: block;
+          width: 100%;
+          padding-right: 0;
+        }
+        th {
+          border-bottom: none;
+          padding-bottom: 0.15rem;
+        }
+      }
+      footer {
+        margin-top: 3rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Keepsake Privacy Policy</h1>
+      <p class="sub">Last updated 2 September 2026</p>
+
+      <p>
+        Keepsake is a recipe app for households. It is currently in private beta, distributed
+        through TestFlight to a small number of invited testers. This policy describes what the app
+        collects, where that information goes, and how to have it removed.
+      </p>
+      <p>
+        Keepsake does not show ads, does not sell or share personal information, and does not track
+        you across other apps or websites.
+      </p>
+
+      <h2>What Keepsake collects</h2>
+      <table>
+        <tr>
+          <th>Account</th>
+          <td>
+            Your email address, and a display name you choose. Email is used to sign you in and to
+            identify you to the other members of your household. Signing in normally uses a code
+            emailed to you; if you opt to set a password instead, it is held by our sign-in provider
+            and is never stored by the app itself.
+          </td>
+        </tr>
+        <tr>
+          <th>Your content</th>
+          <td>
+            Recipes you add, import or photograph, including ingredients, instructions, yields,
+            notes you write while cooking, weekly meal plans, and grocery lists.
+          </td>
+        </tr>
+        <tr>
+          <th>Photos</th>
+          <td>
+            Images you attach to a recipe, or photograph in order to import a recipe from a printed
+            or handwritten page.
+          </td>
+        </tr>
+        <tr>
+          <th>Activity</th>
+          <td>
+            When you record having cooked something, Keepsake stores that it was cooked, when, and
+            by whom, and every member of your household can see it. When you use Help Me Choose,
+            your individual yes/no choices are stored against your name; they stay private while a
+            round is in progress and become visible to your household once it finishes.
+          </td>
+        </tr>
+        <tr>
+          <th>Diagnostics</th>
+          <td>Crash and error reports when something goes wrong, so it can be fixed.</td>
+        </tr>
+        <tr>
+          <th>Usage</th>
+          <td>
+            A small, fixed list of anonymous events recording which features are used — for example
+            that a recipe was saved or a weekly plan confirmed. An event may carry plain
+            measurements alongside its name: a count, a duration, or a yes/no flag such as whether a
+            cooking note was added. It never carries what you wrote. Search terms in particular are
+            deliberately excluded — only the timing and the number of results are recorded.
+          </td>
+        </tr>
+      </table>
+      <p>
+        Keepsake does <strong>not</strong> collect your location, contacts, health data, advertising
+        identifiers, or the contents of your photo library beyond the specific images you choose to
+        add.
+      </p>
+
+      <h2>Households, and who can see your content</h2>
+      <p>
+        Recipes and plans in Keepsake belong to a <em>household</em>, not to an individual. Every
+        member of your household can see, edit, archive and delete everything in that household's
+        library, including recipes you added and cooking notes you wrote. Only join a household with
+        people you intend to share all of that with.
+      </p>
+      <p>
+        In this beta there is no way to leave a household once you have joined one. If you need to
+        be removed, contact us using the address below and it will be done by hand.
+      </p>
+
+      <h2>Who else processes your information</h2>
+      <p>
+        Keepsake relies on a small number of service providers. Each receives only what it needs:
+      </p>
+      <table>
+        <tr>
+          <th>Supabase</th>
+          <td>
+            Hosts the database, file storage and sign-in. Your account, recipes, plans and photos
+            are stored here.
+          </td>
+        </tr>
+        <tr>
+          <th>Anthropic</th>
+          <td>
+            When you import a recipe from a web address or a photo, the page's text or the image is
+            sent to Anthropic's Claude API to extract the recipe's structure. This happens on the
+            server, and only for imports you start.
+          </td>
+        </tr>
+        <tr>
+          <th>Sentry</th>
+          <td>
+            Receives error and crash reports. Recipe content, cooking notes and credentials are
+            deliberately excluded, and web addresses in diagnostic traces have their query strings
+            removed before sending.
+          </td>
+        </tr>
+        <tr>
+          <th>PostHog</th>
+          <td>Receives the anonymous feature-usage events described above.</td>
+        </tr>
+        <tr>
+          <th>Resend</th>
+          <td>Delivers the sign-in code emails. Receives your email address.</td>
+        </tr>
+        <tr>
+          <th>Apple</th>
+          <td>
+            Distributes the beta through TestFlight, and tells us which builds are installed.
+            Apple's own terms apply to that. See also the note below on sending a grocery list to
+            Reminders.
+          </td>
+        </tr>
+      </table>
+      <p>
+        These providers process data on our behalf. None of them are permitted to use it for their
+        own purposes.
+      </p>
+
+      <h2>Importing from the web</h2>
+      <p>
+        When you import a recipe from a web address — typed in, or shared to Keepsake from another
+        app — Keepsake fetches that page from its own servers rather than from your device, and
+        sends the page's text to Anthropic for extraction. The address you imported is stored with
+        the resulting recipe so it can be credited and revisited.
+      </p>
+      <p>
+        Keepsake also keeps a separate record of the import itself, which retains that address as a
+        history of what was imported and why it succeeded or failed.
+        <strong>That record outlives the recipe:</strong> deleting a recipe forever removes the
+        recipe, but not this import history.
+      </p>
+
+      <h2>On your device</h2>
+      <p>
+        Keepsake keeps a copy of your household's recipes and plans on your device so it works
+        without a connection, along with a search index built from them and any cooking notes not
+        yet sent. Your sign-in token is held in the device's secure keychain.
+      </p>
+      <p>
+        A link you share to Keepsake from another app is also queued on the device, and that queue
+        deliberately survives signing out, so a share you made is not lost by signing out before it
+        finishes. It keeps the address after the import has finished, whether it succeeded or
+        failed. All of this stays on your device; removing the app removes all of it, including the
+        queue.
+      </p>
+
+      <h2>Sending a grocery list to Reminders</h2>
+      <p>
+        If you choose to send a grocery list to Apple Reminders, Keepsake asks for permission and
+        then writes the item text — which is derived from your recipes — into the reminders account
+        you have set up on your device. Where that text is then stored is decided by that account
+        rather than by Keepsake: for an iCloud account it goes to Apple, and for another provider's
+        account it goes to that provider. This only happens when you ask for it.
+      </p>
+
+      <h2>How long it is kept, and how to delete it</h2>
+      <p>
+        Your content is kept for as long as your household exists. Deleting a recipe moves it to
+        <em>Recently Deleted</em>, where it stays until you restore it or choose
+        <em>Delete Forever</em>. Deleting it forever removes the recipe and deletes its stored
+        images. Image deletion is best-effort: if it fails, the file can remain in storage. A
+        periodic sweep clears leftover photos taken for import, and anything else can be removed on
+        request.
+      </p>
+      <p>
+        <strong>This beta has no in-app button to delete your account.</strong> Email the address
+        below and it will be done by hand. Two things shape what that can mean, because recipes
+        belong to a household rather than to whoever added them. Removing you from a shared
+        household does not delete its library — the others keep it, including recipes you added. And
+        deleting a household's content outright is straightforward only when you are its sole
+        member; in a shared household it needs the agreement of everyone in it, since there is no
+        owner who can decide for the rest. An in-app path is planned before any public release.
+      </p>
+
+      <h2>Security</h2>
+      <p>
+        Traffic between the app and its servers is encrypted in transit. Access to household data is
+        enforced by database-level row security, so one household cannot read another's, and the app
+        never holds administrative database credentials.
+      </p>
+      <p>
+        No system is perfectly secure, and this is a beta. Please do not store information in
+        Keepsake that would be harmful to disclose.
+      </p>
+
+      <h2>Children</h2>
+      <p>
+        Keepsake is not directed at children under 13, and we do not knowingly collect information
+        from them.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes materially, the date at the top will be updated and testers will be
+        told through the app or by email.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        <!-- REVIEW BEFORE PUBLISHING: confirm this mailbox exists and is monitored. -->
+        Questions, or a deletion request:
+        <a href="mailto:privacy@brightbench.app">privacy@brightbench.app</a>
+      </p>
+
+      <footer>Keepsake — private beta</footer>
+    </main>
+  </body>
+</html>
