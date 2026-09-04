@@ -1,6 +1,6 @@
 # ADR-0028: Account deletion, attribution survival, and the one service-role exception
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-03
 - **Phase:** Milestone 5 — Friends & Family Preview
 
@@ -64,7 +64,9 @@ A failed sweep aborts before anything is mutated, so the account is untouched an
 
 **Its precondition is not "the caller has a household."** A caller with no membership row is not an error — it is someone whose previous attempt got this far and no further. The function's contract is a postcondition ("when this returns, the caller's data is gone"), so every step is written to be a no-op on an already-empty state. Writing it as a precondition check instead is the specific bug that turns a recoverable half-deletion into a permanent one.
 
-`profiles` is deliberately *not* deleted by this RPC. Its `on delete cascade` on `auth.users` removes it in step 6, which keeps the profile row alive as the marker of an incomplete deletion — see decision 6.
+`profiles` is deliberately *not* deleted by this RPC. Its `on delete cascade` on `auth.users` removes it in step 6, which keeps the profile row alive as the marker of an incomplete deletion — see decision 7.
+
+**The same transaction blanks `display_name`.** The row survives to carry a marker, not to carry the person. Leaving the name on it would mean a deletion that failed at its last step preserves the user's name indefinitely, which is precisely the outcome the whole flow exists to prevent — and decision 7 explains why "indefinitely" is the realistic case rather than the pathological one. What survives is an id, a `deletion_requested_at`, and nothing that identifies anyone.
 
 ### 6. A dedicated Edge Function deletes the `auth.users` row with the service-role key — the one exception
 
@@ -72,7 +74,9 @@ A failed sweep aborts before anything is mutated, so the account is untouched an
 
 **Why `auth.uid()`-only scope is what makes it safe.** The danger in an elevated credential is not that it is powerful; it is that it is *steerable*. The service-role key bypasses RLS, so the security of any code holding it reduces to the question of where its operands come from. Here there is exactly one operand and it is not caller-supplied: the user id is read from the verified JWT, which the caller cannot forge without the project's JWT secret. A caller who submits another user's id submits it into a function that never reads a body. A caller who wants to delete someone else's account has to become them first, at which point they did not need this function.
 
-That argument holds only if the id genuinely comes from a *verified* token. The failure mode to name concretely: base64-decoding the JWT payload to read `sub` without verifying the signature turns this function into `deleteUser(anyone)`, because the token is entirely under the caller's control. The id must come from `supabase.auth.getUser()` on a caller-JWT client — which validates against the auth server — with the platform's `verify_jwt` left at its default. `supabase/config.toml` has no `[functions.*]` block today, so that default currently applies to every function; deploying this one with `--no-verify-jwt` would remove the outer half of the check.
+That argument holds only if the id genuinely comes from a *verified* token. The failure mode to name concretely: base64-decoding the JWT payload to read `sub` without verifying the signature turns this function into `deleteUser(anyone)`, because the token is entirely under the caller's control. The id must come from `supabase.auth.getUser()` on a caller-JWT client, which validates against the auth server.
+
+**The outer check must be declared, not inherited.** `supabase/config.toml` has no `[functions.*]` block today, so `verify_jwt` holds only as a platform default that a single `--no-verify-jwt` at deploy time silently removes. This project has been bitten by undeclared hosted configuration three times — the magic-link `site_url` and `otp_length` mismatch, `password_min_length` sitting at 6 while `docs/threat-model.md` T11 claimed 8, and two migrations recorded as shipped that staging had never received — and `npm run check:drift` exists because of it. The last place to rely on an undeclared default is the outer authentication check on the one function holding the service-role key. So this ADR requires a `[functions.delete-account]` block declaring `verify_jwt = true`, and `check:drift` asserting it against the deployed project alongside the auth settings it already checks.
 
 **What must be true of the implementation for the exception to hold** — these are the review criteria, not general advice:
 
@@ -81,6 +85,7 @@ That argument holds only if the id genuinely comes from a *verified* token. The 
 - The function does one thing. No "and also clean up X" — every additional privileged operation is a new operand and a new place to get the provenance wrong.
 - `delete_own_account` is called with the caller's JWT, so RLS and `auth.uid()` still govern the data half. The privileged step happens after that transaction has committed, never before and never around it.
 - A test attempts the deletion with a mismatched id supplied every way the function could conceivably accept one, and proves the function has no parameter to accept it through.
+- **The mechanical guard ships with the exception, in the same PR.** A check in the family of `scripts/check-no-server-secrets-in-client.mjs` — which scans only `src/`, `app/` and `modules/`, and so would never see this — asserting that no Edge Function source other than the deletion function names the service-role key. This is a condition of the exception, not a follow-up: the Consequences section below argues that without it the invariant degrades into a convention within a release or two, and an exception whose only guard is reviewer memory is how that happens.
 
 **What this does not license.** It is not a general admin path, and no second privileged operation may be added to this function. It is not a "delete any user" capability. It is not precedent for service-role elsewhere: `import-recipe` stays JWT-only, and `docs/threat-model.md`'s T15 reasoning — that a server-side Storage sweep was ruled out because the runtime holds no service-role key — is **not** reopened by this ADR, because the runtime still does not, in any path except this one. `AGENTS.md:28` should be amended to name this exception explicitly rather than softened into a guideline; the invariant's value is that it is a hard stop with one written-down hole, not that it is advice.
 
@@ -94,7 +99,11 @@ If decision 5 commits and decision 6 fails, the account is data-empty and still 
 
 Worse, the app cannot safely *infer* the state. "Signed in, no household" is also every partially-onboarded new user, and auto-completing a deletion on that signal would delete real accounts that had merely not finished signing up.
 
-So the marker is explicit and server-side: the profile row survives the data transaction, carrying a `deletion_requested_at` timestamp, and is removed by its existing `on delete cascade` when the auth row goes. A non-null `deletion_requested_at` observed at sign-in is unambiguous — no new user can produce it — and the client re-invokes the Edge Function on seeing it, before rendering any onboarding UI. The retry needs no user-visible entry point, no new table, and no heuristic. The whole flow is then idempotent end to end: sweep (already empty), RPC (already no-op by decision 5's postcondition contract), auth delete (the only step with work left).
+So the marker is explicit and server-side: the profile row survives the data transaction, carrying a `deletion_requested_at` timestamp and a blanked `display_name` (decision 5), and is removed by its existing `on delete cascade` when the auth row goes. A non-null `deletion_requested_at` observed at sign-in is unambiguous — no new user can produce it — and the client re-invokes the Edge Function on seeing it, before rendering any onboarding UI.
+
+**But sign-in cannot be the only trigger, and an earlier draft of this ADR made it the only one.** The person who has just deleted their account is precisely the person who will not sign in again, so conditioning recovery on a return visit closes the window only for users who do not use the feature. The retry therefore runs in-process first: the client re-invokes the deletion function on a bounded retry before it reports success and signs the user out, and only a still-failing attempt after that falls through to the marker. Sign-in recovery is the backstop for the case where the app died mid-flow, not the mechanism.
+
+What makes the residual acceptable rather than merely bounded is decision 5's blanking: a marker row that outlives every retry holds an id and a timestamp. The account still exists and can still sign in, which is a real failure and is why the in-process retry comes first — but it identifies nobody. The whole flow is then idempotent end to end: sweep (already empty), RPC (already no-op by decision 5's postcondition contract), auth delete (the only step with work left).
 
 The intermediate state is also survivable if the retry is delayed: a `created_by` pointing at a user with a `deletion_requested_at` profile and no membership resolves to no display name through the same path decision 2 already requires to tolerate null.
 
