@@ -26,7 +26,7 @@ Three decisions were taken by the developer before this ADR and are recorded, no
 
 ### 1. A departing member's household content survives; only the attribution goes
 
-Recipes, versions, cooking history, plan entries, grocery selections and import history stay in the household. The fifteen blocking columns become `ON DELETE SET NULL`, and the nine `NOT NULL` constraints on them are dropped.
+Recipes, versions, cooking history, plan entries, grocery selections and import history stay in the household. Fourteen of the fifteen blocking columns become `ON DELETE SET NULL`, and the nine `NOT NULL` constraints on them are dropped. The fifteenth, `recipe_drafts.user_id`, is the exception and gets `ON DELETE CASCADE` — see below, and do not read "fifteen columns" anywhere as "fifteen `SET NULL`s".
 
 The reasoning is the no-owner fact above. In a two-person household, deleting the leaver's recipes guts a library the other person reasonably considers half theirs, and there is no role in the schema that could arbitrate that. Absent an owner, the only defensible default is that shared content stays shared.
 
@@ -64,9 +64,7 @@ A failed sweep aborts before anything is mutated, so the account is untouched an
 
 **Its precondition is not "the caller has a household."** A caller with no membership row is not an error — it is someone whose previous attempt got this far and no further. The function's contract is a postcondition ("when this returns, the caller's data is gone"), so every step is written to be a no-op on an already-empty state. Writing it as a precondition check instead is the specific bug that turns a recoverable half-deletion into a permanent one.
 
-`profiles` is deliberately *not* deleted by this RPC. Its `on delete cascade` on `auth.users` removes it in step 6, which keeps the profile row alive as the marker of an incomplete deletion — see decision 7.
-
-**The same transaction blanks `display_name`.** The row survives to carry a marker, not to carry the person. Leaving the name on it would mean a deletion that failed at its last step preserves the user's name indefinitely, which is precisely the outcome the whole flow exists to prevent — and decision 7 explains why "indefinitely" is the realistic case rather than the pathological one. What survives is an id, a `deletion_requested_at`, and nothing that identifies anyone.
+`profiles` **is** deleted by this RPC, and the incomplete-deletion marker lives in a table of its own — see decision 7 for why the marker has to exist at all, and why it cannot be a column on `profiles`.
 
 ### 6. A dedicated Edge Function deletes the `auth.users` row with the service-role key — the one exception
 
@@ -93,19 +91,23 @@ That argument holds only if the id genuinely comes from a *verified* token. The 
 
 **Why nothing else can delete the auth row** is covered under Alternatives. The short version is that Supabase exposes no self-service delete in the user-facing auth API, and every other route either needs the same or greater privilege or takes a dependency on the internal `auth` schema.
 
-### 7. The window between the data delete and the auth delete is closed by the surviving profile row
+### 7. The window between the data delete and the auth delete is closed by a purpose-built marker
 
 If decision 5 commits and decision 6 fails, the account is data-empty and still signs in. #166 R6 requires that state to be recoverable by re-running the deletion. As the app is built today it is not reachable: `app/onboarding.tsx:30` routes any signed-in user with no profile straight to "what should we call you?", and Settings — where the delete entry point lives — is not reachable from there. A user in the half-deleted state would sign in and be shown the new-user onboarding screen with no path back to finishing.
 
 Worse, the app cannot safely *infer* the state. "Signed in, no household" is also every partially-onboarded new user, and auto-completing a deletion on that signal would delete real accounts that had merely not finished signing up.
 
-So the marker is explicit and server-side: the profile row survives the data transaction, carrying a `deletion_requested_at` timestamp and a blanked `display_name` (decision 5), and is removed by its existing `on delete cascade` when the auth row goes. A non-null `deletion_requested_at` observed at sign-in is unambiguous — no new user can produce it — and the client re-invokes the Edge Function on seeing it, before rendering any onboarding UI.
+So the marker is explicit and server-side, and it is **not** a column on `profiles`. An earlier revision of this ADR kept the profile row alive with its `display_name` blanked, which cannot be built: `display_name` is `text not null check (char_length(trim(display_name)) > 0)` (`20260802120000_household_and_membership_schema.sql:11`), so neither null, nor `''`, nor whitespace satisfies it — a `delete_own_account` written to that description rolls back every deletion it attempts. The available repairs were to weaken that constraint or to put the marker somewhere else, and weakening it is the worse trade: a nullable `display_name` is a second permanent null-tolerance tax on every path that renders a member name, levied to serve a state that is supposed to be rare.
+
+The marker is therefore its own table — `account_deletions`, keyed by `user_id` with `on delete cascade` to `auth.users`, carrying a `requested_at` and nothing else. The RPC deletes the profile and inserts the marker in the same transaction; the cascade removes the marker when the auth row goes. A marker row observed at sign-in is unambiguous — no new user can produce one — and the client re-invokes the Edge Function on seeing it, before rendering any onboarding UI.
+
+**The marker carries no personal data by construction, not by remembering to blank it.** That is the substantive reason to prefer a separate table over a column, beyond the constraint: a row that has no name column cannot leak a name if a future migration or a missed code path forgets the blanking step.
 
 **But sign-in cannot be the only trigger, and an earlier draft of this ADR made it the only one.** The person who has just deleted their account is precisely the person who will not sign in again, so conditioning recovery on a return visit closes the window only for users who do not use the feature. The retry therefore runs in-process first: the client re-invokes the deletion function on a bounded retry before it reports success and signs the user out, and only a still-failing attempt after that falls through to the marker. Sign-in recovery is the backstop for the case where the app died mid-flow, not the mechanism.
 
-What makes the residual acceptable rather than merely bounded is decision 5's blanking: a marker row that outlives every retry holds an id and a timestamp. The account still exists and can still sign in, which is a real failure and is why the in-process retry comes first — but it identifies nobody. The whole flow is then idempotent end to end: sweep (already empty), RPC (already no-op by decision 5's postcondition contract), auth delete (the only step with work left).
+What makes the residual acceptable rather than merely bounded is the marker's shape: a row that outlives every retry holds a user id and a timestamp. The account still exists and can still sign in, which is a real failure and is why the in-process retry comes first — but it identifies nobody. The whole flow is then idempotent end to end: sweep (already empty), RPC (already no-op by decision 5's postcondition contract), auth delete (the only step with work left).
 
-The intermediate state is also survivable if the retry is delayed: a `created_by` pointing at a user with a `deletion_requested_at` profile and no membership resolves to no display name through the same path decision 2 already requires to tolerate null.
+The intermediate state is also survivable if the retry is delayed: the profile is already gone, so a `created_by` still pointing at that user resolves to no display name through the same path decision 2 already requires every attribution read to tolerate.
 
 ### 8. Local data: both outboxes go
 
@@ -131,7 +133,7 @@ The intermediate state is also survivable if the retry is delayed: a `created_by
 
 ## Consequences
 
-**Easier.** Apple's deletion requirement stops being a blocker on the external TestFlight build and on any later listing. The fifteen `SET NULL` conversions make attribution structurally optional, which removes a whole class of future migration pain — any later reason to detach a user from their traces is now a delete, not a schema change. The one-RPC shape means the data half has no partial-failure state to reason about, and decision 7's marker makes the only genuinely multi-commit step self-healing without a retry queue.
+**Easier.** Apple's deletion requirement stops being a blocker on the external TestFlight build and on any later listing. The fourteen `SET NULL` conversions make attribution structurally optional, which removes a whole class of future migration pain — any later reason to detach a user from their traces is now a delete, not a schema change. The one-RPC shape means the data half has no partial-failure state to reason about, and decision 7's marker makes the only genuinely multi-commit step self-healing without a retry queue.
 
 **Harder.** Every read path that renders an actor must now tolerate null, forever, including paths written before this ADR and paths written by anyone who has not read it — that is a permanent tax on new features that display a name, and it needs test coverage rather than reviewer vigilance. `AGENTS.md`'s service-role rule stops being a rule with no exceptions, which is measurably weaker than a rule with none: the mechanical check proposed in decision 6 is what keeps the exception from eroding, and without it the invariant degrades into a convention within a release or two.
 
