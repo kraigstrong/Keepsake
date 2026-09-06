@@ -215,6 +215,36 @@ describe('completion needs positive evidence the user is gone', () => {
   );
 });
 
+describe('the local session is always cleared', () => {
+  // signOut resolves with { error } rather than throwing, so a try/catch
+  // alone lets a failed logout through: no auth-state event, a still
+  // cached session, and a UI left on "Deleting your account..." for an
+  // account that no longer exists. The local-scope retry is the part that
+  // actually has to happen.
+  it('falls back to a local sign-out when the remote one reports an error', async () => {
+    mocked.functions.invoke.mockResolvedValue({ error: null });
+    mocked.auth.signOut
+      .mockResolvedValueOnce({ error: new Error('network') })
+      .mockResolvedValueOnce({ error: null });
+
+    const result = await deleteAccount('shared', null);
+
+    expect(result).toEqual({ outcome: 'deleted' });
+    expect(mocked.auth.signOut).toHaveBeenCalledTimes(2);
+    expect(mocked.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+  });
+
+  it('still signs out when the local wipe throws', async () => {
+    mocked.functions.invoke.mockResolvedValue({ error: null });
+    mockedWipe.mockRejectedValueOnce(new Error('sqlite is unhappy'));
+
+    const result = await deleteAccount('shared', null);
+
+    expect(result).toEqual({ outcome: 'deleted' });
+    expect(mocked.auth.signOut).toHaveBeenCalled();
+  });
+});
+
 describe('the happy path', () => {
   it('wipes local data and signs out', async () => {
     mocked.functions.invoke.mockResolvedValue({ error: null });

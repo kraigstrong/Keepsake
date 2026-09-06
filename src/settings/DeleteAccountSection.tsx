@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { deleteAccount, prepareAccountDeletion, type DeletionMode } from '../account/deleteAccount';
+import {
+  deleteAccount,
+  prepareAccountDeletion,
+  type DeletionMode,
+  type DeletionPlan,
+} from '../account/deleteAccount';
 import { Button } from '../components/Button';
-import { useHousehold } from '../household/HouseholdProvider';
 import { logError } from '../observability';
 import { colors, spacing, typography } from '../theme/tokens';
 
@@ -27,7 +31,7 @@ const CONFIRMATION_PHRASE = 'delete';
 type Stage =
   | { kind: 'idle' }
   | { kind: 'preparing' }
-  | { kind: 'confirming'; mode: DeletionMode }
+  | { kind: 'confirming'; plan: DeletionPlan }
   | { kind: 'deleting' }
   | { kind: 'error'; message: string };
 
@@ -43,24 +47,25 @@ function describe(mode: DeletionMode): string {
 }
 
 export function DeleteAccountSection() {
-  const { household } = useHousehold();
   const [stage, setStage] = useState<Stage>({ kind: 'idle' });
   const [typed, setTyped] = useState('');
 
   const begin = async () => {
     setStage({ kind: 'preparing' });
     try {
-      const mode = await prepareAccountDeletion();
-      setStage({ kind: 'confirming', mode });
+      const plan = await prepareAccountDeletion();
+      setStage({ kind: 'confirming', plan });
     } catch (error) {
       logError(error, { context: 'DeleteAccountSection.prepare' });
       setStage({ kind: 'error', message: "We couldn't check your household just now." });
     }
   };
 
-  const confirm = async (mode: DeletionMode) => {
+  const confirm = async (plan: DeletionPlan) => {
     setStage({ kind: 'deleting' });
-    const result = await deleteAccount(mode, household?.id ?? null);
+    // plan.householdId, not the provider's: the server answer is the one
+    // the sweep has to act on (see DeletionPlan).
+    const result = await deleteAccount(plan.mode, plan.householdId);
     if (result.outcome === 'deleted') return; // signed out; the boundary navigates away
     if (result.outcome === 'stale') {
       // Somebody joined or left while the confirmation was on screen, so
@@ -90,7 +95,7 @@ export function DeleteAccountSection() {
       <View style={styles.section} testID="settings-delete-account-confirm">
         <Text style={styles.warningTitle}>Delete your account?</Text>
         <Text style={styles.body} testID="settings-delete-account-consequence">
-          {describe(stage.mode)}
+          {describe(stage.plan.mode)}
         </Text>
         <Text style={styles.body}>
           Type <Text style={styles.phrase}>{CONFIRMATION_PHRASE}</Text> to confirm.
@@ -108,7 +113,7 @@ export function DeleteAccountSection() {
         <Button
           testID="settings-delete-account-confirm-button"
           title="Delete my account"
-          onPress={() => confirm(stage.mode)}
+          onPress={() => confirm(stage.plan)}
           disabled={!canConfirm}
         />
         <Button

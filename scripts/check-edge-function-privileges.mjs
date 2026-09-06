@@ -28,6 +28,14 @@ if (!existsSync(FUNCTIONS_DIR)) {
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.jsx'];
 
+// Comments are stripped before anything is matched. This file's own
+// docstring names both the key and the permitted call, and counting those
+// makes the guard report two privileged calls where there is one -- a
+// check that cries wolf about its own documentation gets muted.
+function withoutComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
 function* sourceFilesUnder(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -40,15 +48,23 @@ function* sourceFilesUnder(dir) {
 }
 
 const offenders = [];
+const privilegedCalls = [];
 let permittedFound = false;
 
 for (const entry of readdirSync(FUNCTIONS_DIR, { withFileTypes: true })) {
   if (!entry.isDirectory()) continue;
   const functionDir = join(FUNCTIONS_DIR, entry.name);
   for (const file of sourceFilesUnder(functionDir)) {
-    if (!readFileSync(file, 'utf8').includes(NEEDLE)) continue;
+    const source = withoutComments(readFileSync(file, 'utf8'));
+    if (!source.includes(NEEDLE)) continue;
     if (entry.name === PERMITTED) {
       permittedFound = true;
+      privilegedCalls.push(
+        ...[...source.matchAll(/auth\s*\.\s*admin\s*\.\s*(\w+)/g)].map((match) => ({
+          file: relative(FUNCTIONS_DIR, file),
+          method: match[1],
+        })),
+      );
     } else {
       offenders.push(relative(FUNCTIONS_DIR, file));
     }
@@ -78,4 +94,33 @@ if (!permittedFound) {
   process.exit(1);
 }
 
-console.log(`No unpermitted service-role use in ${FUNCTIONS_DIR}. OK.`);
+// Where the key is read is only half the exception. ADR-0028 scopes it to
+// exactly one operation, and a second privileged call is a second operand
+// with its own provenance to get wrong -- so a later
+// auth.admin.updateUserById() inside this same function must fail here
+// too, not pass because the file was already on the allowlist.
+const PERMITTED_ADMIN_METHOD = 'deleteUser';
+const unexpected = privilegedCalls.filter((call) => call.method !== PERMITTED_ADMIN_METHOD);
+if (unexpected.length > 0) {
+  console.error(
+    `✗ ${PERMITTED} performs a privileged operation other than auth.admin.${PERMITTED_ADMIN_METHOD}:\n` +
+      unexpected.map((c) => `    ${c.file}: auth.admin.${c.method}`).join('\n') +
+      '\n\n  ADR-0028 permits exactly one privileged call. Every additional one is a\n' +
+      '  new operand and a new place to get its provenance wrong, which is what the\n' +
+      '  exception was scoped to avoid. A second one needs its own ADR first.',
+  );
+  process.exit(1);
+}
+
+if (privilegedCalls.length !== 1) {
+  console.error(
+    `✗ Expected exactly one auth.admin.${PERMITTED_ADMIN_METHOD} call in ${PERMITTED}, found ${privilegedCalls.length}.\n` +
+      '  Zero means this check is watching a function that no longer does what it\n' +
+      '  guards; more than one means the single-operand argument no longer holds.',
+  );
+  process.exit(1);
+}
+
+console.log(
+  `No unpermitted service-role use in ${FUNCTIONS_DIR}, and ${PERMITTED} performs exactly one privileged call. OK.`,
+);

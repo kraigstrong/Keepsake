@@ -2,23 +2,19 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 
 import { DeleteAccountSection } from './DeleteAccountSection';
 import { deleteAccount, prepareAccountDeletion } from '../account/deleteAccount';
-import { useHousehold } from '../household/HouseholdProvider';
 
 jest.mock('../account/deleteAccount', () => ({
   prepareAccountDeletion: jest.fn(),
   deleteAccount: jest.fn(),
 }));
-jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 jest.mock('../observability', () => ({ logError: jest.fn() }));
 
 const mockedPrepare = prepareAccountDeletion as jest.Mock;
 const mockedDelete = deleteAccount as jest.Mock;
-const mockedUseHousehold = useHousehold as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
-  mockedPrepare.mockResolvedValue('sole');
+  mockedPrepare.mockResolvedValue({ mode: 'sole', householdId: 'household-1' });
   mockedDelete.mockResolvedValue({ outcome: 'deleted' });
 });
 
@@ -40,7 +36,7 @@ describe('the screen says which deletion this is before asking', () => {
     ['shared', 'stay with the people still in it'],
     ['no_household', 'deletes your account and nothing else'],
   ])('spells out the %s case', async (mode, phrase) => {
-    mockedPrepare.mockResolvedValue(mode);
+    mockedPrepare.mockResolvedValue({ mode, householdId: 'household-1' });
     await openConfirmation();
 
     expect(
@@ -114,6 +110,29 @@ describe('nothing destructive happens until the phrase is typed', () => {
       expect(screen.getByTestId('settings-delete-account-confirm')).toBeOnTheScreen(),
     );
     expect(screen.getByTestId('settings-delete-account-confirm-button')).toBeDisabled();
+  });
+});
+
+describe('the sweep acts on the server answer, not local state', () => {
+  // A device sitting on onboarding can have household === null while
+  // another device has already created one. prepare correctly says
+  // 'sole'; taking the id from local state would skip the sweep and
+  // orphan every image behind a deletion that has just revoked the only
+  // permission that could remove them.
+  it('passes the household id prepare returned, not the one this device knows', async () => {
+    mockedPrepare.mockResolvedValue({ mode: 'sole', householdId: 'from-the-server' });
+    await openConfirmation();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('settings-delete-account-input'), 'delete');
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-delete-account-confirm-button')).toBeEnabled(),
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-confirm-button'));
+    });
+
+    await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith('sole', 'from-the-server'));
   });
 });
 

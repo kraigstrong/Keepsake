@@ -22,7 +22,7 @@ jest.mock('../household/HouseholdProvider', () => ({
 jest.mock('../account/deleteAccount', () => ({
   hasPendingDeletion: jest.fn().mockResolvedValue('none'),
   resumePendingDeletion: jest.fn(),
-  prepareAccountDeletion: jest.fn().mockResolvedValue('no_household'),
+  prepareAccountDeletion: jest.fn().mockResolvedValue({ mode: 'no_household', householdId: null }),
   deleteAccount: jest.fn(),
 }));
 jest.mock('../deepLinks/DeepLinkProvider', () => ({

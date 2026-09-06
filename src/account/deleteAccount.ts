@@ -73,10 +73,28 @@ export async function resumePendingDeletion(): Promise<DeleteAccountResult> {
   return deleteAccount('no_household', null);
 }
 
-export async function prepareAccountDeletion(): Promise<DeletionMode> {
+export interface DeletionPlan {
+  mode: DeletionMode;
+  /**
+   * Read from the server alongside the mode, not taken from local state.
+   * A device sitting on onboarding can have `household === null` while
+   * another device has already created one -- `prepare` then correctly
+   * says 'sole' while the local id says there is nothing to sweep, and
+   * the images survive a deletion that has revoked the only permission
+   * that could remove them.
+   */
+  householdId: string | null;
+}
+
+export async function prepareAccountDeletion(): Promise<DeletionPlan> {
   const { data, error } = await supabase.rpc('prepare_account_deletion');
   if (error) throw error;
-  return data as DeletionMode;
+  const { data: household, error: householdError } = await supabase
+    .from('households')
+    .select('id')
+    .maybeSingle();
+  if (householdError) throw householdError;
+  return { mode: data as DeletionMode, householdId: household?.id ?? null };
 }
 
 /**
@@ -180,10 +198,25 @@ async function finishLocally(): Promise<void> {
   } catch (error) {
     logError(error, { context: 'deleteAccount.wipe' });
   }
+  // signOut resolves with { error } rather than throwing, so a try/catch
+  // alone lets a failed logout through silently -- and a failed logout
+  // means no auth-state event, a still-cached session, and a UI left on
+  // "Deleting your account..." for an account that no longer exists. The
+  // local-scope retry clears the stored session without a network call,
+  // which is the part that actually has to happen here.
   try {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      logError(error, { context: 'deleteAccount.signOut' });
+      await supabase.auth.signOut({ scope: 'local' });
+    }
   } catch (error) {
     logError(error, { context: 'deleteAccount.signOut' });
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (localError) {
+      logError(localError, { context: 'deleteAccount.signOutLocal' });
+    }
   }
 }
 
