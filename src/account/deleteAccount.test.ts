@@ -235,6 +235,39 @@ describe('a stalled request cannot hang the flow', () => {
   }, 20000);
 });
 
+describe('a data-stage failure is not automatically a household change', () => {
+  // Two devices racing: one verifies the user, the other deletes the auth
+  // row, and the first's RPC then fails inserting its marker because the
+  // row it references is gone. That is a completed deletion, not a
+  // household change -- reporting 'stale' would leave a dead session
+  // cached and tell the user something that did not happen.
+  it('checks whether deletion actually completed before reporting stale', async () => {
+    mocked.functions.invoke.mockResolvedValue({
+      error: httpError({ error: 'insert or update violates foreign key', stage: 'data' }),
+    });
+    mocked.auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: Object.assign(new Error('gone'), { code: 'user_not_found' }),
+    });
+
+    const result = await deleteAccount('shared', null);
+
+    expect(result).toEqual({ outcome: 'deleted' });
+    expect(mockedWipe).toHaveBeenCalled();
+  });
+
+  it('still reports the fence as stale', async () => {
+    mocked.functions.invoke.mockResolvedValue({
+      error: httpError({ error: 'household membership changed since confirmation', stage: 'data' }),
+    });
+
+    const result = await deleteAccount('shared', null);
+
+    expect(result.outcome).toBe('stale');
+    expect(mockedWipe).not.toHaveBeenCalled();
+  });
+});
+
 describe('the local session is always cleared', () => {
   // signOut resolves with { error } rather than throwing, so a try/catch
   // alone lets a failed logout through: no auth-state event, a still

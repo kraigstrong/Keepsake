@@ -28,6 +28,42 @@ if (!existsSync(FUNCTIONS_DIR)) {
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.jsx'];
 
+/**
+ * Every use of the elevated client, not just its auth.admin methods.
+ *
+ * Three earlier versions of this check matched `auth.admin.*` and were
+ * each defeated from a different direction, the last by the obvious one:
+ * `elevated.from('profiles').delete()` bypasses RLS exactly as thoroughly
+ * as an admin call and matched nothing. The method name was never the
+ * right thing to look at -- *any* call through a service-role client is a
+ * privileged operation, so what gets counted is uses of the binding.
+ *
+ * It finds the variable holding the service-role key, then the client
+ * constructed from it, then every property access on that client.
+ */
+function elevatedClientUses(source, where) {
+  const keyVar = source.match(
+    /(?:const|let|var)\s+(\w+)\s*=\s*Deno\s*\.\s*env\s*\.\s*get\(\s*['"]SUPABASE_SERVICE_ROLE_KEY['"]\s*\)/,
+  )?.[1];
+  if (!keyVar) return [];
+
+  const clientVar = source.match(
+    new RegExp(`(?:const|let|var)\\s+(\\w+)\\s*=\\s*createClient\\([^)]*\\b${keyVar}\\b`, 's'),
+  )?.[1];
+  if (!clientVar) {
+    // The key is read but no client is built from it in a shape this can
+    // follow. Reported rather than ignored: an unrecognised shape is the
+    // one case where staying quiet is indistinguishable from being safe.
+    return [
+      { file: where, method: `<service-role key read into ${keyVar}, client not recognised>` },
+    ];
+  }
+
+  return [
+    ...source.matchAll(new RegExp(`\\b${clientVar}\\s*\\.\\s*([\\w.\\s]+?)\\s*\\(`, 'g')),
+  ].map((match) => ({ file: where, method: match[1].replace(/\s+/g, '') }));
+}
+
 // Comments are stripped before anything is matched. This file's own
 // docstring names both the key and the permitted call, and counting those
 // makes the guard report two privileged calls where there is one -- a
@@ -69,12 +105,7 @@ for (const entry of readdirSync(FUNCTIONS_DIR, { withFileTypes: true })) {
     }
 
     if (entry.name === PERMITTED) {
-      privilegedCalls.push(
-        ...[...source.matchAll(/auth\s*\.\s*admin\s*\.\s*(\w+)/g)].map((match) => ({
-          file: where,
-          method: match[1],
-        })),
-      );
+      privilegedCalls.push(...elevatedClientUses(source, where));
     }
   }
 }
@@ -107,22 +138,23 @@ if (!permittedFound) {
 // with its own provenance to get wrong -- so a later
 // auth.admin.updateUserById() inside this same function must fail here
 // too, not pass because the file was already on the allowlist.
-const PERMITTED_ADMIN_METHOD = 'deleteUser';
+const PERMITTED_ADMIN_METHOD = 'auth.admin.deleteUser';
 const unexpected = privilegedCalls.filter((call) => call.method !== PERMITTED_ADMIN_METHOD);
 if (unexpected.length > 0) {
   console.error(
-    `✗ ${PERMITTED} performs a privileged operation other than auth.admin.${PERMITTED_ADMIN_METHOD}:\n` +
-      unexpected.map((c) => `    ${c.file}: auth.admin.${c.method}`).join('\n') +
-      '\n\n  ADR-0028 permits exactly one privileged call. Every additional one is a\n' +
-      '  new operand and a new place to get its provenance wrong, which is what the\n' +
-      '  exception was scoped to avoid. A second one needs its own ADR first.',
+    `✗ ${PERMITTED} uses the service-role client for something other than ${PERMITTED_ADMIN_METHOD}:\n` +
+      unexpected.map((c) => `    ${c.file}: ${c.method}`).join('\n') +
+      '\n\n  ADR-0028 permits exactly one privileged call. Any call through this client\n' +
+      '  bypasses RLS -- a .from().delete() is as privileged as an admin method --\n' +
+      '  and each one is a new operand with its own provenance to get wrong.\n' +
+      '  A second one needs its own ADR first.',
   );
   process.exit(1);
 }
 
 if (privilegedCalls.length !== 1) {
   console.error(
-    `✗ Expected exactly one auth.admin.${PERMITTED_ADMIN_METHOD} call in ${PERMITTED}, found ${privilegedCalls.length}.\n` +
+    `✗ Expected exactly one ${PERMITTED_ADMIN_METHOD} call in ${PERMITTED}, found ${privilegedCalls.length}.\n` +
       '  Zero means this check is watching a function that no longer does what it\n' +
       '  guards; more than one means the single-operand argument no longer holds.',
   );

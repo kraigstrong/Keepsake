@@ -43,6 +43,7 @@ const STORAGE_SWEEP_MAX_PASSES = 200;
 // the auth delete both happen inside one invocation.
 const INVOKE_TIMEOUT_MS = 20_000;
 const AUTH_CHECK_TIMEOUT_MS = 10_000;
+const SIGN_OUT_TIMEOUT_MS = 10_000;
 
 /** How many times the auth step is retried before falling back to the marker. */
 const AUTH_RETRY_DELAYS_MS = [400, 1200];
@@ -224,7 +225,10 @@ async function finishLocally(): Promise<void> {
   // local-scope retry clears the stored session without a network call,
   // which is the part that actually has to happen here.
   try {
-    const { error } = await supabase.auth.signOut();
+    // Bounded like the others: a stalled logout after the account is
+    // already gone would otherwise make the local fallback unreachable
+    // and leave the screen on "Deleting your account..." indefinitely.
+    const { error } = await withTimeout(supabase.auth.signOut(), SIGN_OUT_TIMEOUT_MS, 'signOut');
     if (error) {
       logError(error, { context: 'deleteAccount.signOut' });
       await supabase.auth.signOut({ scope: 'local' });
@@ -285,8 +289,14 @@ export async function deleteAccount(
       } catch {
         // not JSON — fall through to the generic path below
       }
-      if (body.stage === 'data') {
-        return { outcome: 'stale', message: body.error ?? 'Please try again.' };
+      // Only the fence is genuinely "your household changed". Other
+      // data-stage failures can accompany a deletion that did complete --
+      // two devices racing, the second RPC failing to insert its marker
+      // because the first already removed the auth row it references --
+      // so those fall through to the not-found check below rather than
+      // reporting a household change that never happened.
+      if (body.stage === 'data' && body.error?.includes('membership changed since confirmation')) {
+        return { outcome: 'stale', message: body.error };
       }
     }
 

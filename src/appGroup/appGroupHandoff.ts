@@ -75,3 +75,20 @@ export function readQueuedShares(): SharedImport[] {
 export function deleteQueuedShare(id: string): boolean {
   return AppGroupBridge.deleteSharePayload(id);
 }
+
+/**
+ * Empties the App Group share-inbox. Account deletion only (ADR-0028) --
+ * ordinary sign-out deliberately preserves it, because an unsent share is
+ * the only copy of itself until the server confirms it.
+ *
+ * The SQLite outboxes are not the whole queue. A payload the extension
+ * wrote but the app never drained sits in the native container, and
+ * `listSubmittableOutboxItems` lets a null-household row submit under
+ * whichever household signs in next -- so a deleted user's pending URL
+ * could be imported into the next account on the device.
+ */
+export function clearQueuedShares(): void {
+  for (const share of readQueuedShares()) {
+    AppGroupBridge.deleteSharePayload(share.id);
+  }
+}

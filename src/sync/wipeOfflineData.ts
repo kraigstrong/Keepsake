@@ -1,3 +1,4 @@
+import { clearQueuedShares } from '../appGroup/appGroupHandoff';
 import { wipeDatabase } from '../db/database';
 import { defaultImageStore, type ImageStore } from './imageCache';
 
@@ -24,4 +25,8 @@ export async function wipeOfflineDataForAccountDeletion(
 ): Promise<void> {
   await wipeDatabase({ includeOutboxes: true });
   imageStore.deleteDirectory();
+  // The native share-inbox is a third queue, outside SQLite entirely. A
+  // payload the extension wrote but the app never drained would otherwise
+  // survive, and submit under whichever household signs in next.
+  clearQueuedShares();
 }
