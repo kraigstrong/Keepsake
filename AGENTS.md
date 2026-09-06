@@ -25,7 +25,7 @@ These don't change work item to work item — treat a PR that violates one as a 
 - AI must never confidently invent information. Uncertain output is flagged (e.g. `uncertainFields`), not guessed.
 - Destructive operations are reauthorized server-side and idempotent.
 - No secrets in git, ever — no API keys, service-role credentials, tokens, or `.env` values in any commit, log, fixture, or PR description.
-- The Edge Function uses the caller's JWT, not the service-role key. A PR that introduces service-role access into a request path a client can trigger is a hard stop.
+- The Edge Function uses the caller's JWT, not the service-role key. A PR that introduces service-role access into a request path a client can trigger is a hard stop. **One written-down exception exists** — the account-deletion function, whose only privileged call is `auth.admin.deleteUser(id)` with `id` read from the verified JWT and no id parameter anywhere in its interface (ADR-0028). It is a hole with a name and a mechanical check, not a softening of the rule: any *other* function reaching for the key is still a hard stop, and so is a second privileged operation inside that one.
 
 ## Canonical commands
 
