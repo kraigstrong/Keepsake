@@ -215,6 +215,26 @@ describe('completion needs positive evidence the user is gone', () => {
   );
 });
 
+describe('a stalled request cannot hang the flow', () => {
+  // The repo's own withTimeout exists because a React Native fetch that
+  // stalls never settles. Without it here the retry delay, the not-found
+  // check and the sign-out are all unreachable and the screen sits on
+  // "Deleting your account..." forever.
+  it('treats a stalled invoke as a failure rather than waiting forever', async () => {
+    jest.useFakeTimers();
+    mocked.functions.invoke.mockReturnValue(new Promise(() => {}));
+    mocked.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+
+    const pending = deleteAccount('shared', null);
+    // Two invoke timeouts plus the retry backoff between them.
+    await jest.advanceTimersByTimeAsync(120_000);
+    const result = await pending;
+
+    expect(result.outcome).toBe('failed');
+    jest.useRealTimers();
+  }, 20000);
+});
+
 describe('the local session is always cleared', () => {
   // signOut resolves with { error } rather than throwing, so a try/catch
   // alone lets a failed logout through: no auth-state event, a still

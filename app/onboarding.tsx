@@ -95,9 +95,23 @@ export default function OnboardingScreen() {
         <Text style={styles.title}>Finishing deleting your account</Text>
         <Text style={styles.note}>
           {deletion === 'failed'
-            ? "We still couldn't finish. Your data is already gone; we'll try again next time you open Keepsake."
+            ? "We couldn't finish just now. Your data is already gone — this removes the account itself."
             : 'This will only take a moment.'}
         </Text>
+        {/* An earlier version said we would try again next time the app
+            opened, and offered nothing. Backgrounding does not remount
+            this, so on mobile that promise was rarely kept and the auth
+            row could survive until the OS killed the process. */}
+        {deletion === 'failed' && (
+          <Button
+            title="Try again"
+            testID="onboarding-deletion-retry-button"
+            onPress={() => {
+              setDeletion('checking');
+              setRecheck((n) => n + 1);
+            }}
+          />
+        )}
       </View>
     );
   }

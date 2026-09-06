@@ -108,6 +108,29 @@ describe('a half-finished deletion resumes instead of onboarding', () => {
     await waitFor(() => expect(screen.getByTestId('onboarding-profile-step')).toBeOnTheScreen());
   });
 
+  // The failed state used to promise a retry "next time you open
+  // Keepsake" and offer nothing. Backgrounding does not remount this, so
+  // that promise was rarely kept.
+  it('offers a retry when recovery fails, rather than promising one', async () => {
+    setup({ profile: null });
+    mockedHasPending.mockResolvedValue('pending');
+    mockedResume.mockResolvedValue({ outcome: 'failed', message: 'nope' });
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-finishing-deletion')).toBeOnTheScreen(),
+    );
+    expect(screen.getByTestId('onboarding-deletion-retry-button')).toBeOnTheScreen();
+
+    mockedResume.mockResolvedValue({ outcome: 'deleted' });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('onboarding-deletion-retry-button'));
+    });
+
+    await waitFor(() => expect(mockedResume).toHaveBeenCalledTimes(2));
+  });
+
   // A failed read is not evidence that nothing is pending. Treating it as
   // 'none' lets a half-deleted user reach onboarding and create a profile,
   // after which the check never runs again -- it is gated on there being

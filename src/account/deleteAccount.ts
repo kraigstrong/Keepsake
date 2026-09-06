@@ -1,6 +1,7 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
 import { logError } from '../observability';
+import { withTimeout } from '../shared/withTimeout';
 import { supabase } from '../supabase/instance';
 import { wipeOfflineDataForAccountDeletion } from '../sync/wipeOfflineData';
 
@@ -34,6 +35,14 @@ const STORAGE_PAGE_SIZE = 1000;
 // for the same reason nothing else here waits without a floor; at a page
 // per pass this is far more objects than a household will ever hold.
 const STORAGE_SWEEP_MAX_PASSES = 200;
+// supabase-js goes through fetch, which has no default timeout on React
+// Native: a stalled request never settles, so without this the retry
+// delay, the not-found check and the sign-out are all unreachable and the
+// screen sits on "Deleting your account..." forever -- the exact shape
+// #177 added withTimeout for. Generous, because the data transaction and
+// the auth delete both happen inside one invocation.
+const INVOKE_TIMEOUT_MS = 20_000;
+const AUTH_CHECK_TIMEOUT_MS = 10_000;
 
 /** How many times the auth step is retried before falling back to the marker. */
 const AUTH_RETRY_DELAYS_MS = [400, 1200];
@@ -179,9 +188,19 @@ function isDefinitiveNotFound(error: unknown): boolean {
 }
 
 async function authRowIsGone(): Promise<boolean> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return isDefinitiveNotFound(error);
-  return data?.user == null;
+  try {
+    const { data, error } = await withTimeout(
+      supabase.auth.getUser(),
+      AUTH_CHECK_TIMEOUT_MS,
+      'getUser',
+    );
+    if (error) return isDefinitiveNotFound(error);
+    return data?.user == null;
+  } catch {
+    // A stalled check proves nothing either way, and "proves nothing" has
+    // to mean "not deleted" here.
+    return false;
+  }
 }
 
 /**
@@ -238,9 +257,18 @@ export async function deleteAccount(
   }
 
   for (let attempt = 0; ; attempt += 1) {
-    const { error } = await supabase.functions.invoke('delete-account', {
-      body: { mode: expectedMode },
-    });
+    let error: unknown = null;
+    try {
+      ({ error } = await withTimeout(
+        supabase.functions.invoke('delete-account', { body: { mode: expectedMode } }),
+        INVOKE_TIMEOUT_MS,
+        'delete-account',
+      ));
+    } catch (timeout) {
+      // A stall is indistinguishable from a slow success from here, so it
+      // falls through to the same not-found check as any other failure.
+      error = timeout;
+    }
 
     if (!error) {
       await finishLocally();

@@ -56,17 +56,25 @@ for (const entry of readdirSync(FUNCTIONS_DIR, { withFileTypes: true })) {
   const functionDir = join(FUNCTIONS_DIR, entry.name);
   for (const file of sourceFilesUnder(functionDir)) {
     const source = withoutComments(readFileSync(file, 'utf8'));
-    if (!source.includes(NEEDLE)) continue;
+    const where = relative(FUNCTIONS_DIR, file);
+
+    // The two scans are independent on purpose. Gating the admin-call
+    // scan on the key being in the *same* file is how the previous
+    // version let a second privileged operation through: move it into a
+    // helper that never names the key, leave deleteUser in the entry
+    // point, and the count still came to one.
+    if (source.includes(NEEDLE)) {
+      if (entry.name === PERMITTED) permittedFound = true;
+      else offenders.push(where);
+    }
+
     if (entry.name === PERMITTED) {
-      permittedFound = true;
       privilegedCalls.push(
         ...[...source.matchAll(/auth\s*\.\s*admin\s*\.\s*(\w+)/g)].map((match) => ({
-          file: relative(FUNCTIONS_DIR, file),
+          file: where,
           method: match[1],
         })),
       );
-    } else {
-      offenders.push(relative(FUNCTIONS_DIR, file));
     }
   }
 }
