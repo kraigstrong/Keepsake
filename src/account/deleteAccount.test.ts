@@ -35,16 +35,41 @@ function httpError(body: Record<string, unknown>): FunctionsHttpError {
   return error;
 }
 
-const remove = jest.fn().mockResolvedValue({ error: null });
-const list = jest.fn().mockResolvedValue({ data: [{ id: 'o1', name: 'hero.jpg' }], error: null });
+// A bucket, not a fixed response. The sweep deletes what it lists and
+// then lists again, so a mock that always returns the same object never
+// terminates -- and one that ignores which objects were removed cannot
+// show whether the sweep actually cleared them.
+let bucket: Map<string, string[]>;
 
-/** A page of `count` removable objects, as Storage would return one. */
-function page(count: number) {
-  return Array.from({ length: count }, (_unused, i) => ({ id: `o${i}`, name: `${i}.jpg` }));
-}
+// id is nullable because Storage reports folder placeholders that way,
+// and the sweep has to skip them rather than loop on them.
+type StorageEntry = { id: string | null; name: string };
+
+const list = jest.fn(
+  async (prefix: string): Promise<{ data: StorageEntry[] | null; error: Error | null }> => ({
+    data: (bucket.get(prefix) ?? []).slice(0, 1000).map((name) => ({ id: `id-${name}`, name })),
+    error: null,
+  }),
+);
+const remove = jest.fn(async (paths: string[]): Promise<{ error: Error | null }> => {
+  for (const path of paths) {
+    const slash = path.lastIndexOf('/');
+    const prefix = path.slice(0, slash);
+    const name = path.slice(slash + 1);
+    bucket.set(
+      prefix,
+      (bucket.get(prefix) ?? []).filter((n) => n !== name),
+    );
+  }
+  return { error: null };
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
+  bucket = new Map([
+    ['household-1', ['hero.jpg']],
+    ['household-1/originals', ['original.jpg']],
+  ]);
   mocked.storage.from.mockReturnValue({ list, remove });
   mocked.auth.signOut.mockResolvedValue({ error: null });
 });
@@ -102,22 +127,38 @@ describe('a partial sweep aborts instead of proceeding', () => {
     expect(mocked.functions.invoke).not.toHaveBeenCalled();
   });
 
-  it('pages past the first thousand objects rather than leaving them', async () => {
-    // A full page means "there may be more", so it must ask again.
-    list
-      .mockResolvedValueOnce({ data: page(1000), error: null })
-      .mockResolvedValueOnce({ data: page(3), error: null })
-      .mockResolvedValue({ data: [], error: null });
+  // Modelled as a real bucket rather than a fixed sequence: the sweep
+  // deletes what it lists, so anything that pages with an advancing offset
+  // skips objects as they shift underneath it. A mock that ignores offset
+  // cannot see that -- this one removes what it is told to.
+  it('removes every object even when there are more than one page', async () => {
+    bucket.set(
+      'household-1',
+      Array.from({ length: 2300 }, (_u, i) => `hero-${i}.jpg`),
+    );
     mocked.functions.invoke.mockResolvedValue({ error: null });
 
     const result = await deleteAccount('sole', 'household-1');
 
     expect(result.outcome).toBe('deleted');
-    // Two pages for the hero prefix, then the originals prefix.
-    expect(list.mock.calls[0]?.[1]).toMatchObject({ offset: 0 });
-    expect(list.mock.calls[1]?.[1]).toMatchObject({ offset: 1000 });
-    expect(remove).toHaveBeenCalledTimes(2);
+    expect(bucket.get('household-1')).toEqual([]);
+    expect(bucket.get('household-1/originals')).toEqual([]);
+    // Three passes for 2300 objects, not one page and a shifted offset.
+    expect(remove).toHaveBeenCalledTimes(4);
   });
+
+  it('does not spin forever on an unremovable folder placeholder', async () => {
+    // Listing `<household>/` returns the `originals` folder as an entry
+    // with a null id. It can never be removed, so a loop that only stops
+    // on an empty page would never stop.
+    list.mockResolvedValue({ data: [{ id: null, name: 'originals' }], error: null });
+    mocked.functions.invoke.mockResolvedValue({ error: null });
+
+    const result = await deleteAccount('sole', 'household-1');
+
+    expect(result.outcome).toBe('deleted');
+    expect(remove).not.toHaveBeenCalled();
+  }, 10000);
 });
 
 describe('a stale confirmation is reported, not retried', () => {

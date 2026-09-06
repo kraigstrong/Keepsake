@@ -28,6 +28,12 @@ export type DeleteAccountResult =
   | { outcome: 'failed'; message: string };
 
 const STORAGE_PAGE_SIZE = 1000;
+// Termination depends on `remove` actually removing. It should, but the
+// loop below is destructive and re-lists what it just deleted, so a
+// server-side no-op that still reports success would spin forever. Bounded
+// for the same reason nothing else here waits without a floor; at a page
+// per pass this is far more objects than a household will ever hold.
+const STORAGE_SWEEP_MAX_PASSES = 200;
 
 /** How many times the auth step is retried before falling back to the marker. */
 const AUTH_RETRY_DELAYS_MS = [400, 1200];
@@ -82,25 +88,33 @@ export async function prepareAccountDeletion(): Promise<DeletionMode> {
  */
 async function sweepHouseholdStorage(householdId: string): Promise<void> {
   for (const prefix of [householdId, `${householdId}/originals`]) {
-    for (let offset = 0; ; offset += STORAGE_PAGE_SIZE) {
+    // Always from offset 0, never an advancing cursor. This deletes what
+    // it lists, so the offsets shift under it: paging to 1000 after
+    // removing the first thousand asks for what are now objects 2000+ and
+    // silently skips everything between. Each pass removes at least one
+    // object and the bucket is finite, so this terminates.
+    for (let pass = 0; ; pass += 1) {
+      if (pass >= STORAGE_SWEEP_MAX_PASSES) {
+        throw new Error(`Storage sweep did not converge for ${prefix}`);
+      }
       const { data, error } = await supabase.storage.from('recipe-images').list(prefix, {
         limit: STORAGE_PAGE_SIZE,
-        offset,
         sortBy: { column: 'name', order: 'asc' },
       });
       if (error) throw error;
       const page = data ?? [];
       if (page.length === 0) break;
 
-      // Folder placeholders have a null id and are not removable objects.
+      // Folder placeholders have a null id and cannot be removed, so a
+      // page of nothing but placeholders would otherwise loop forever --
+      // listing `<household>/` returns the `originals` folder itself.
       const paths = page
         .filter((object) => object.id !== null)
         .map((object) => `${prefix}/${object.name}`);
-      if (paths.length > 0) {
-        const { error: removeError } = await supabase.storage.from('recipe-images').remove(paths);
-        if (removeError) throw removeError;
-      }
-      if (page.length < STORAGE_PAGE_SIZE) break;
+      if (paths.length === 0) break;
+
+      const { error: removeError } = await supabase.storage.from('recipe-images').remove(paths);
+      if (removeError) throw removeError;
     }
   }
 }
