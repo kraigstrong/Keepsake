@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(12);
+select plan(17);
 
 insert into auth.users (id, email)
 values
@@ -129,6 +129,98 @@ select lives_ok(
   $$delete from public.households where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   'the household then deletes cleanly, import history and tombstones included'
 );
+
+-- Making a column nullable changes every predicate that reads it. These
+-- pin the three other sites, each of which was written when the column
+-- could not be null.
+
+-- accept_invitation: a spent token whose accepter has since been deleted
+-- must stay spent. `accepted_by <> auth.uid()` was null in that case, so
+-- the already-used guard did not fire and the function returned the
+-- household row to a caller who is not a member of it.
+insert into auth.users (id, email) values
+  ('44444444-4444-4444-4444-444444444444', 'dana@example.test'),
+  ('55555555-5555-5555-5555-555555555555', 'erin@example.test');
+insert into public.profiles (id, display_name) values
+  ('44444444-4444-4444-4444-444444444444', 'Dana D'),
+  ('55555555-5555-5555-5555-555555555555', 'Erin E');
+insert into public.households (id) values ('dddddddd-dddd-dddd-dddd-dddddddddddd');
+insert into public.household_membership (household_id, user_id)
+values ('dddddddd-dddd-dddd-dddd-dddddddddddd', '44444444-4444-4444-4444-444444444444');
+
+-- Dana's household invited someone who accepted, then deleted their account.
+insert into public.invitations (household_id, invited_by, token_hash, expires_at, accepted_at, accepted_by)
+values ('dddddddd-dddd-dddd-dddd-dddddddddddd', '44444444-4444-4444-4444-444444444444',
+        encode(digest('spent-token', 'sha256'), 'hex'), now() + interval '7 days',
+        now() - interval '1 day', null);
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', '55555555-5555-5555-5555-555555555555', 'role', 'authenticated')::text, true);
+
+select throws_ok(
+  $$select public.accept_invitation('spent-token')$$,
+  'P0001',
+  'invitation has already been used',
+  'a spent token stays spent once its accepter is deleted'
+);
+
+select is(
+  (select count(*)::int from public.household_membership
+   where user_id = '55555555-5555-5555-5555-555555555555'),
+  0,
+  'and the replaying caller joins nothing'
+);
+
+reset role;
+select set_config('request.jwt.claims', null, true);
+
+-- archive_recipe / delete_recipe: a repeat call must not name a later
+-- member as the actor of an action whose original actor has detached.
+insert into public.recipes (id, household_id, title, archived_at, archived_by)
+values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        'Archived by someone since gone', now() - interval '1 day', null);
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', '44444444-4444-4444-4444-444444444444', 'role', 'authenticated')::text, true);
+
+select lives_ok(
+  $$select public.archive_recipe('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee')$$,
+  'archiving an already-archived recipe still succeeds'
+);
+
+select is(
+  (select archived_by from public.recipes where id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'),
+  null,
+  'a detached archiver is not silently replaced by whoever called next'
+);
+
+reset role;
+select set_config('request.jwt.claims', null, true);
+
+-- create_selection_round's adoption guard also reads created_by with <>,
+-- and is deliberately left as-is: with a detached creator the predicate
+-- is null, the guard does not fire, and the stalled round is adopted --
+-- which is what should happen, since a round whose creator no longer
+-- exists must not block the household forever. This pins that outcome so
+-- a later "tidy-up" to `is distinct from` fails here instead of silently
+-- stranding every household whose round starter has left.
+insert into public.selection_rounds (id, household_id, created_by, mode, status, updated_at)
+values ('ffffffff-ffff-ffff-ffff-ffffffffffff', 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        null, 'solo', 'pending_candidates', now());
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', '44444444-4444-4444-4444-444444444444', 'role', 'authenticated')::text, true);
+
+select lives_ok(
+  $$select public.create_selection_round('solo')$$,
+  'a pending round whose creator was deleted can still be adopted'
+);
+
+reset role;
+select set_config('request.jwt.claims', null, true);
 
 select * from finish();
 rollback;

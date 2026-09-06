@@ -163,3 +163,140 @@ begin
   return result_round;
 end;
 $$;
+
+-- Sweep of the rest of the class, not just the guard above. Making a
+-- column nullable changes every predicate that reads it, and three more
+-- sites read one of these. Each is fixed here, with the column that
+-- causes it, rather than left to be discovered later.
+
+-- 1. accept_invitation. `accepted_by <> auth.uid()` is null when the
+-- accepter has deleted their account, so `accepted_at is not null and
+-- null` is null, the already-used guard does not fire, and the function
+-- falls through to returning the household row of a household the caller
+-- is not a member of. A spent token replayed by anyone else would hand
+-- back another household's row and report success while creating no
+-- membership. The client then treats the token as spent and clears it.
+create or replace function public.accept_invitation(raw_token text)
+returns public.households
+language plpgsql
+security definer
+-- extensions: digest() (pgcrypto) lives there on Supabase, not in public.
+set search_path = public, extensions
+as $$
+declare
+  computed_hash text := encode(digest(raw_token, 'sha256'), 'hex');
+  invitation public.invitations;
+  result_household public.households;
+begin
+  select * into invitation from public.invitations where token_hash = computed_hash for update;
+
+  if invitation.id is null then
+    raise exception 'invalid invitation token' using errcode = 'P0001';
+  end if;
+
+  -- is distinct from, not <>: accepted_by detaches on account deletion.
+  if invitation.accepted_at is not null
+     and invitation.accepted_by is distinct from auth.uid() then
+    raise exception 'invitation has already been used' using errcode = 'P0001';
+  end if;
+
+  if invitation.accepted_at is null then
+    if invitation.expires_at <= now() then
+      raise exception 'invitation has expired' using errcode = 'P0001';
+    end if;
+
+    if exists (select 1 from public.household_membership where user_id = auth.uid()) then
+      raise exception 'user already belongs to a household' using errcode = 'P0001';
+    end if;
+
+    insert into public.household_membership (household_id, user_id)
+    values (invitation.household_id, auth.uid());
+
+    update public.invitations
+    set accepted_at = now(), accepted_by = auth.uid()
+    where id = invitation.id;
+  end if;
+  -- else: already accepted by this same caller — fall through and
+  -- return their household again without re-inserting membership.
+
+  select * into result_household from public.households where id = invitation.household_id;
+  return result_household;
+end;
+$$;
+
+-- 2. archive_recipe and delete_recipe pair coalesce(archived_at, now())
+-- with coalesce(archived_by, auth.uid()) to stay idempotent. Once the
+-- actor detaches, that pairing breaks: the timestamp is set, the actor is
+-- null, and the next idempotent call records whoever made it as having
+-- performed the original action. The actor now keys off whether the
+-- *action* is new rather than whether the column is populated, so a
+-- missing actor on a completed action stays missing.
+create or replace function public.archive_recipe(recipe_id uuid)
+returns public.recipes
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_household_id uuid;
+  result_recipe public.recipes;
+begin
+  caller_household_id := public.my_household_id();
+  if caller_household_id is null then
+    raise exception 'caller does not belong to a household' using errcode = 'P0001';
+  end if;
+
+  update public.recipes
+  set archived_at = coalesce(archived_at, now()),
+      archived_by = case when archived_at is null then auth.uid() else archived_by end,
+      updated_at = now()
+  where id = recipe_id and household_id = caller_household_id and deleted_at is null
+  returning * into result_recipe;
+
+  if result_recipe is null then
+    raise exception 'recipe not found' using errcode = 'P0001';
+  end if;
+
+  return result_recipe;
+end;
+$$;
+
+create or replace function public.delete_recipe(recipe_id uuid)
+returns public.recipes
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_household_id uuid;
+  result_recipe public.recipes;
+begin
+  caller_household_id := public.my_household_id();
+  if caller_household_id is null then
+    raise exception 'caller does not belong to a household' using errcode = 'P0001';
+  end if;
+
+  update public.recipes
+  set deleted_at = coalesce(deleted_at, now()),
+      deleted_by = case when deleted_at is null then auth.uid() else deleted_by end,
+      updated_at = now()
+  where id = recipe_id and household_id = caller_household_id
+  returning * into result_recipe;
+
+  if result_recipe is null then
+    raise exception 'recipe not found' using errcode = 'P0001';
+  end if;
+
+  return result_recipe;
+end;
+$$;
+
+-- 3. create_selection_round's adoption guard reads created_by with <>
+-- too, and is deliberately left alone. With a detached creator the
+-- predicate is null, the guard does not fire, and the pending round is
+-- adopted -- which is the behaviour that should happen: a round whose
+-- creator no longer exists must not block the household. Rewriting 133
+-- lines of concurrency-sensitive code to make a correct outcome explicit
+-- risks more than it buys, so the behaviour is pinned by test instead
+-- (attribution_detaches.test.sql). Anyone tempted to "fix" it
+-- to `is distinct from` will fail that test, which is the point.
