@@ -25,7 +25,7 @@ export interface SelectionRoundCandidate {
 export interface SelectionRound {
   id: string;
   householdId: string;
-  createdBy: string;
+  createdBy: string | null;
   mode: SelectionRoundMode;
   status: SelectionRoundStatus;
   targetCount: number | null;
@@ -61,7 +61,9 @@ interface SelectionRoundCandidateRow {
 interface SelectionRoundRow {
   id: string;
   household_id: string;
-  created_by: string;
+  // Nullable since ADR-0028: a round outlives the member who started it,
+  // with the attribution detached rather than the round deleted.
+  created_by: string | null;
   mode: SelectionRoundMode;
   status: SelectionRoundStatus;
   target_count: number | null;
