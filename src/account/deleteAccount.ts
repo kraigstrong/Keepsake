@@ -27,8 +27,37 @@ export type DeleteAccountResult =
   | { outcome: 'stale'; message: string }
   | { outcome: 'failed'; message: string };
 
+const STORAGE_PAGE_SIZE = 1000;
+
 /** How many times the auth step is retried before falling back to the marker. */
 const AUTH_RETRY_DELAYS_MS = [400, 1200];
+
+/**
+ * Whether this account is mid-deletion: the data is gone and the auth row
+ * still owes removal (ADR-0028 decision 7). Read at sign-in, before any
+ * onboarding UI, because "signed in with no profile" is otherwise
+ * indistinguishable from a brand-new user -- and auto-completing a
+ * deletion on that signal alone would delete real accounts that had
+ * simply not finished signing up. The marker is what makes it
+ * unambiguous; RLS scopes it to the caller's own row.
+ */
+export async function hasPendingDeletion(): Promise<boolean> {
+  const { data, error } = await supabase.from('account_deletions').select('user_id').maybeSingle();
+  if (error) {
+    logError(error, { context: 'hasPendingDeletion' });
+    return false;
+  }
+  return data != null;
+}
+
+/**
+ * Finishes a deletion whose auth step never completed. The data half is a
+ * no-op by postcondition, so this is safe to run against an account that
+ * is already partly gone -- which is the only kind that gets here.
+ */
+export async function resumePendingDeletion(): Promise<DeleteAccountResult> {
+  return deleteAccount('no_household', null);
+}
 
 export async function prepareAccountDeletion(): Promise<DeletionMode> {
   const { data, error } = await supabase.rpc('prepare_account_deletion');
@@ -37,30 +66,42 @@ export async function prepareAccountDeletion(): Promise<DeletionMode> {
 }
 
 /**
- * Best-effort, and deliberately so. Once the household row is gone
- * `is_household_member` is false for everyone forever and the id is a
- * uuid that will not recur, so a leftover object is unreachable through
- * every application path -- this is a storage-cost and hygiene concern,
- * not a confidentiality one. It still runs first, because after step 2
- * the caller has lost the right to delete their own files.
+ * Runs before the data transaction, because the Storage policies gate on
+ * `is_household_member` and that transaction is what makes it false --
+ * this is the caller's last chance to delete their own files.
+ *
+ * Which is exactly why a partial sweep must not continue. An earlier
+ * version listed one page, logged any failure and carried on into the
+ * destructive RPC: a household with more than a page of images, or one
+ * transient list error, left objects behind *and* revoked the only
+ * identity that could ever retry. ADR-0028 chose the fail-loudly branch
+ * over recording orphans for a later sweep, because nothing in this
+ * stack schedules work to consume such a record. So this pages to
+ * exhaustion and propagates the first failure; the caller aborts with
+ * the account still intact and the whole flow retryable from the start.
  */
 async function sweepHouseholdStorage(householdId: string): Promise<void> {
-  const prefixes = [householdId, `${householdId}/originals`];
-  for (const prefix of prefixes) {
-    const { data, error } = await supabase.storage.from('recipe-images').list(prefix, {
-      limit: 1000,
-      sortBy: { column: 'name', order: 'asc' },
-    });
-    if (error) {
-      logError(error, { context: 'deleteAccount.sweepList', prefix });
-      continue;
+  for (const prefix of [householdId, `${householdId}/originals`]) {
+    for (let offset = 0; ; offset += STORAGE_PAGE_SIZE) {
+      const { data, error } = await supabase.storage.from('recipe-images').list(prefix, {
+        limit: STORAGE_PAGE_SIZE,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      });
+      if (error) throw error;
+      const page = data ?? [];
+      if (page.length === 0) break;
+
+      // Folder placeholders have a null id and are not removable objects.
+      const paths = page
+        .filter((object) => object.id !== null)
+        .map((object) => `${prefix}/${object.name}`);
+      if (paths.length > 0) {
+        const { error: removeError } = await supabase.storage.from('recipe-images').remove(paths);
+        if (removeError) throw removeError;
+      }
+      if (page.length < STORAGE_PAGE_SIZE) break;
     }
-    const paths = (data ?? [])
-      .filter((object) => object.id !== null)
-      .map((object) => `${prefix}/${object.name}`);
-    if (paths.length === 0) continue;
-    const { error: removeError } = await supabase.storage.from('recipe-images').remove(paths);
-    if (removeError) logError(removeError, { context: 'deleteAccount.sweepRemove', prefix });
   }
 }
 
@@ -79,10 +120,27 @@ function messageFrom(error: unknown, fallback: string): string {
  * "cannot authenticate" while the row is still there -- treating any of
  * them as terminal would report a successful deletion, sign the user out,
  * and leave the account standing.
+ *
+ * But the absence is usually reported *as an error*, not as a successful
+ * response carrying a null user: GoTrue answers a token whose subject no
+ * longer exists with `user_not_found`. Treating every error as "still
+ * there" -- which an earlier version did -- discards the one positive
+ * signal this exists to catch, so a lost response would exhaust its
+ * retries and report failure on a deletion that had already succeeded.
+ * `user_not_found` is definitive; `bad_jwt` and `session_not_found` are
+ * not, because a malformed or stale token produces them too.
  */
+function isDefinitiveNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'user_not_found'
+  );
+}
+
 async function authRowIsGone(): Promise<boolean> {
   const { data, error } = await supabase.auth.getUser();
-  if (error) return false;
+  if (error) return isDefinitiveNotFound(error);
   return data?.user == null;
 }
 
@@ -91,7 +149,16 @@ export async function deleteAccount(
   householdId: string | null,
 ): Promise<DeleteAccountResult> {
   if (expectedMode === 'sole' && householdId) {
-    await sweepHouseholdStorage(householdId);
+    try {
+      await sweepHouseholdStorage(householdId);
+    } catch (error) {
+      logError(error, { context: 'deleteAccount.sweep' });
+      return {
+        outcome: 'failed',
+        message:
+          "We couldn't remove your photos, so nothing has been deleted. Please check your connection and try again.",
+      };
+    }
   }
 
   for (let attempt = 0; ; attempt += 1) {

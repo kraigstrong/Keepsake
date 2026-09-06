@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { hasPendingDeletion, resumePendingDeletion } from '../src/account/deleteAccount';
 import { Button } from '../src/components/Button';
+import { StartupScreen } from '../src/components/StartupScreen';
+import { DeleteAccountSection } from '../src/settings/DeleteAccountSection';
 import { useDeepLink } from '../src/deepLinks/DeepLinkProvider';
 import {
   isWellFormedInvitationToken,
@@ -26,6 +29,49 @@ import { colors, spacing, typography } from '../src/theme/tokens';
 export default function OnboardingScreen() {
   const { profile, household, setDisplayName } = useHousehold();
   const { pendingInvitationToken } = useDeepLink();
+  const [deletion, setDeletion] = useState<'checking' | 'none' | 'resuming' | 'failed'>('checking');
+
+  // A half-finished deletion lands here: the data is gone, so there is no
+  // profile, which looks exactly like a brand-new signup. The marker is
+  // what tells them apart (ADR-0028 decision 7), and it has to be checked
+  // *before* any onboarding UI -- otherwise someone mid-deletion can type
+  // a name and create a profile on the account they asked to remove.
+  useEffect(() => {
+    if (profile) return;
+    let cancelled = false;
+    hasPendingDeletion()
+      .then(async (pending) => {
+        if (cancelled) return;
+        if (!pending) {
+          setDeletion('none');
+          return;
+        }
+        setDeletion('resuming');
+        const result = await resumePendingDeletion();
+        if (!cancelled && result.outcome !== 'deleted') setDeletion('failed');
+      })
+      .catch(() => {
+        if (!cancelled) setDeletion('none');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  if (!profile && deletion === 'checking') return <StartupScreen />;
+
+  if (deletion === 'resuming' || deletion === 'failed') {
+    return (
+      <View style={styles.container} testID="onboarding-finishing-deletion">
+        <Text style={styles.title}>Finishing deleting your account</Text>
+        <Text style={styles.note}>
+          {deletion === 'failed'
+            ? "We still couldn't finish. Your data is already gone; we'll try again next time you open Keepsake."
+            : 'This will only take a moment.'}
+        </Text>
+      </View>
+    );
+  }
 
   if (!profile) {
     return (
@@ -332,6 +378,11 @@ function HouseholdSetupStep() {
           {error}
         </Text>
       )}
+
+      {/* Settings sits behind the onboarded guard, so without this the
+          only account with no household -- the exact case deletion's
+          'no_household' mode exists for -- has no way to reach it. */}
+      <DeleteAccountSection />
     </View>
   );
 }

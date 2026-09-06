@@ -38,6 +38,11 @@ function httpError(body: Record<string, unknown>): FunctionsHttpError {
 const remove = jest.fn().mockResolvedValue({ error: null });
 const list = jest.fn().mockResolvedValue({ data: [{ id: 'o1', name: 'hero.jpg' }], error: null });
 
+/** A page of `count` removable objects, as Storage would return one. */
+function page(count: number) {
+  return Array.from({ length: count }, (_unused, i) => ({ id: `o${i}`, name: `${i}.jpg` }));
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mocked.storage.from.mockReturnValue({ list, remove });
@@ -70,6 +75,48 @@ describe('ordering: nothing destructive runs before the caller has confirmed', (
 
     expect(list).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('a partial sweep aborts instead of proceeding', () => {
+  // The sweep is the caller's last chance to delete their own files: the
+  // data transaction is what makes is_household_member false. Continuing
+  // past an incomplete sweep leaves objects behind *and* revokes the only
+  // identity that could retry, so ADR-0028 takes the fail-loudly branch.
+  it('does not delete anything when a page fails to list', async () => {
+    list.mockResolvedValueOnce({ data: null, error: new Error('storage down') });
+
+    const result = await deleteAccount('sole', 'household-1');
+
+    expect(result.outcome).toBe('failed');
+    expect(mocked.functions.invoke).not.toHaveBeenCalled();
+    expect(mockedWipe).not.toHaveBeenCalled();
+  });
+
+  it('does not delete anything when a removal fails', async () => {
+    remove.mockResolvedValueOnce({ error: new Error('storage down') });
+
+    const result = await deleteAccount('sole', 'household-1');
+
+    expect(result.outcome).toBe('failed');
+    expect(mocked.functions.invoke).not.toHaveBeenCalled();
+  });
+
+  it('pages past the first thousand objects rather than leaving them', async () => {
+    // A full page means "there may be more", so it must ask again.
+    list
+      .mockResolvedValueOnce({ data: page(1000), error: null })
+      .mockResolvedValueOnce({ data: page(3), error: null })
+      .mockResolvedValue({ data: [], error: null });
+    mocked.functions.invoke.mockResolvedValue({ error: null });
+
+    const result = await deleteAccount('sole', 'household-1');
+
+    expect(result.outcome).toBe('deleted');
+    // Two pages for the hero prefix, then the originals prefix.
+    expect(list.mock.calls[0]?.[1]).toMatchObject({ offset: 0 });
+    expect(list.mock.calls[1]?.[1]).toMatchObject({ offset: 1000 });
+    expect(remove).toHaveBeenCalledTimes(2);
   });
 });
 

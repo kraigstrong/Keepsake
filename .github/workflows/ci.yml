@@ -93,7 +93,16 @@ jobs:
       # was filed as post-beta because nothing deployed before beta -- this
       # function does, and it is the one holding the service-role key, so
       # shipping it with nothing type-checking it is not the same trade.
-      - run: deno check supabase/functions/delete-account/index.ts
+      # --config so Deno uses the function's own import map, and
+      # --node-modules-dir=none so it stops walking up to the repo's
+      # package.json and demanding a node_modules/ that Edge Functions
+      # never have. Without both it resolves @supabase/supabase-js as a
+      # node dependency and fails before type-checking anything.
+      - run: >
+          deno check
+          --config supabase/functions/delete-account/deno.json
+          --node-modules-dir=none
+          supabase/functions/delete-account/index.ts
 
   secret-scan:
     name: Secret scan (gitleaks)

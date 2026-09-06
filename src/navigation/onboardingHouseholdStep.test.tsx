@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import OnboardingScreen from '../../app/onboarding';
+import { hasPendingDeletion, resumePendingDeletion } from '../account/deleteAccount';
 import { useDeepLink } from '../deepLinks/DeepLinkProvider';
 import { useHousehold } from '../household/HouseholdProvider';
 
@@ -17,6 +18,12 @@ import { useHousehold } from '../household/HouseholdProvider';
  */
 jest.mock('../household/HouseholdProvider', () => ({
   useHousehold: jest.fn(),
+}));
+jest.mock('../account/deleteAccount', () => ({
+  hasPendingDeletion: jest.fn().mockResolvedValue(false),
+  resumePendingDeletion: jest.fn(),
+  prepareAccountDeletion: jest.fn().mockResolvedValue('no_household'),
+  deleteAccount: jest.fn(),
 }));
 jest.mock('../deepLinks/DeepLinkProvider', () => ({
   useDeepLink: jest.fn(),
@@ -55,7 +62,52 @@ function setup({
   return { acceptInvitation, createHousehold, clearPendingInvitationToken, retryLoad };
 }
 
-beforeEach(() => jest.clearAllMocks());
+const mockedHasPending = hasPendingDeletion as jest.Mock;
+const mockedResume = resumePendingDeletion as jest.Mock;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockedHasPending.mockResolvedValue(false);
+});
+
+// ADR-0028 decision 7. A half-finished deletion has no profile, which is
+// indistinguishable from a brand-new signup -- so the marker is checked
+// before any onboarding UI renders. Getting this wrong lets someone
+// mid-deletion type a name and create a profile on the account they asked
+// to remove, and leaves the auth row alive indefinitely, since the person
+// who just deleted their account is not coming back to finish it.
+describe('a half-finished deletion resumes instead of onboarding', () => {
+  it('finishes the deletion rather than asking for a display name', async () => {
+    setup({ profile: null });
+    mockedHasPending.mockResolvedValue(true);
+    mockedResume.mockResolvedValue({ outcome: 'deleted' });
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-finishing-deletion')).toBeOnTheScreen(),
+    );
+    expect(screen.queryByTestId('onboarding-profile-step')).toBeNull();
+    expect(mockedResume).toHaveBeenCalled();
+  });
+
+  it('never shows the name prompt while the marker is still being checked', async () => {
+    setup({ profile: null });
+    mockedHasPending.mockReturnValue(new Promise(() => {}));
+
+    await render(<OnboardingScreen />);
+
+    expect(screen.queryByTestId('onboarding-profile-step')).toBeNull();
+  });
+
+  it('onboards normally when there is no marker', async () => {
+    setup({ profile: null });
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('onboarding-profile-step')).toBeOnTheScreen());
+  });
+});
 
 describe('T2 — signed in, no profile, invitation pending', () => {
   it('tells the invitee the link was received, a step before it is used', async () => {
