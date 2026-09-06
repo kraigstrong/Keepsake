@@ -47,13 +47,21 @@ const AUTH_RETRY_DELAYS_MS = [400, 1200];
  * simply not finished signing up. The marker is what makes it
  * unambiguous; RLS scopes it to the caller's own row.
  */
-export async function hasPendingDeletion(): Promise<boolean> {
+export type PendingDeletionState = 'pending' | 'none' | 'unknown';
+
+export async function hasPendingDeletion(): Promise<PendingDeletionState> {
   const { data, error } = await supabase.from('account_deletions').select('user_id').maybeSingle();
   if (error) {
+    // Deliberately not 'none'. Collapsing a failed read into "no deletion
+    // pending" lets onboarding render on a transient PostgREST error, and
+    // a half-deleted user can then create a profile -- after which the
+    // recovery check never runs again, because it is gated on there being
+    // no profile, and the auth row survives indefinitely. Unknown has to
+    // stay unknown and keep the door shut.
     logError(error, { context: 'hasPendingDeletion' });
-    return false;
+    return 'unknown';
   }
-  return data != null;
+  return data != null ? 'pending' : 'none';
 }
 
 /**
@@ -158,6 +166,27 @@ async function authRowIsGone(): Promise<boolean> {
   return data?.user == null;
 }
 
+/**
+ * The account is already gone server-side by the time this runs, so
+ * nothing here may prevent the sign-out. A failed SQLite or image-cache
+ * cleanup used to reject straight past it, leaving the UI on "Deleting
+ * your account…" forever with a live local session for an account that no
+ * longer exists -- a worse outcome than the stale rows it was trying to
+ * clear. Both steps are best-effort and the flow always terminates.
+ */
+async function finishLocally(): Promise<void> {
+  try {
+    await wipeOfflineDataForAccountDeletion();
+  } catch (error) {
+    logError(error, { context: 'deleteAccount.wipe' });
+  }
+  try {
+    await supabase.auth.signOut();
+  } catch (error) {
+    logError(error, { context: 'deleteAccount.signOut' });
+  }
+}
+
 export async function deleteAccount(
   expectedMode: DeletionMode,
   householdId: string | null,
@@ -181,8 +210,7 @@ export async function deleteAccount(
     });
 
     if (!error) {
-      await wipeOfflineDataForAccountDeletion();
-      await supabase.auth.signOut();
+      await finishLocally();
       return { outcome: 'deleted' };
     }
 
@@ -203,8 +231,7 @@ export async function deleteAccount(
 
     // The auth step may have succeeded with its response lost. Ask.
     if (await authRowIsGone()) {
-      await wipeOfflineDataForAccountDeletion();
-      await supabase.auth.signOut();
+      await finishLocally();
       return { outcome: 'deleted' };
     }
 

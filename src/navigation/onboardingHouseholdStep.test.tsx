@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import OnboardingScreen from '../../app/onboarding';
 import { hasPendingDeletion, resumePendingDeletion } from '../account/deleteAccount';
@@ -20,7 +20,7 @@ jest.mock('../household/HouseholdProvider', () => ({
   useHousehold: jest.fn(),
 }));
 jest.mock('../account/deleteAccount', () => ({
-  hasPendingDeletion: jest.fn().mockResolvedValue(false),
+  hasPendingDeletion: jest.fn().mockResolvedValue('none'),
   resumePendingDeletion: jest.fn(),
   prepareAccountDeletion: jest.fn().mockResolvedValue('no_household'),
   deleteAccount: jest.fn(),
@@ -67,7 +67,7 @@ const mockedResume = resumePendingDeletion as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedHasPending.mockResolvedValue(false);
+  mockedHasPending.mockResolvedValue('none');
 });
 
 // ADR-0028 decision 7. A half-finished deletion has no profile, which is
@@ -79,7 +79,7 @@ beforeEach(() => {
 describe('a half-finished deletion resumes instead of onboarding', () => {
   it('finishes the deletion rather than asking for a display name', async () => {
     setup({ profile: null });
-    mockedHasPending.mockResolvedValue(true);
+    mockedHasPending.mockResolvedValue('pending');
     mockedResume.mockResolvedValue({ outcome: 'deleted' });
 
     await render(<OnboardingScreen />);
@@ -106,6 +106,52 @@ describe('a half-finished deletion resumes instead of onboarding', () => {
     await render(<OnboardingScreen />);
 
     await waitFor(() => expect(screen.getByTestId('onboarding-profile-step')).toBeOnTheScreen());
+  });
+
+  // A failed read is not evidence that nothing is pending. Treating it as
+  // 'none' lets a half-deleted user reach onboarding and create a profile,
+  // after which the check never runs again -- it is gated on there being
+  // no profile -- and the auth row survives indefinitely.
+  it('stays shut when the marker cannot be read, and offers a retry', async () => {
+    setup({ profile: null });
+    mockedHasPending.mockResolvedValue('unknown');
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-deletion-check-failed')).toBeOnTheScreen(),
+    );
+    expect(screen.queryByTestId('onboarding-profile-step')).toBeNull();
+
+    mockedHasPending.mockResolvedValue('none');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('onboarding-deletion-recheck-button'));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('onboarding-profile-step')).toBeOnTheScreen());
+  });
+});
+
+// Settings sits behind the onboarded guard, and requiring someone to
+// choose a display name before they may delete the account they already
+// authenticated into is not an in-app deletion path.
+describe('deletion is reachable before a profile exists', () => {
+  it('offers deletion on the profile step', async () => {
+    setup({ profile: null });
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('onboarding-profile-step')).toBeOnTheScreen());
+    expect(screen.getByTestId('settings-delete-account-button')).toBeOnTheScreen();
+  });
+
+  it('offers deletion on the household step', async () => {
+    setup();
+
+    await render(<OnboardingScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('onboarding-household-step')).toBeOnTheScreen());
+    expect(screen.getByTestId('settings-delete-account-button')).toBeOnTheScreen();
   });
 });
 

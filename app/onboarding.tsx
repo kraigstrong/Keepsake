@@ -29,7 +29,10 @@ import { colors, spacing, typography } from '../src/theme/tokens';
 export default function OnboardingScreen() {
   const { profile, household, setDisplayName } = useHousehold();
   const { pendingInvitationToken } = useDeepLink();
-  const [deletion, setDeletion] = useState<'checking' | 'none' | 'resuming' | 'failed'>('checking');
+  const [deletion, setDeletion] = useState<'checking' | 'none' | 'resuming' | 'failed' | 'unknown'>(
+    'checking',
+  );
+  const [recheck, setRecheck] = useState(0);
 
   // A half-finished deletion lands here: the data is gone, so there is no
   // profile, which looks exactly like a brand-new signup. The marker is
@@ -40,10 +43,17 @@ export default function OnboardingScreen() {
     if (profile) return;
     let cancelled = false;
     hasPendingDeletion()
-      .then(async (pending) => {
+      .then(async (state) => {
         if (cancelled) return;
-        if (!pending) {
+        if (state === 'none') {
           setDeletion('none');
+          return;
+        }
+        // 'unknown' keeps the door shut rather than falling through to
+        // onboarding: a failed read is not evidence that nothing is
+        // pending, and guessing wrong here is unrecoverable.
+        if (state === 'unknown') {
+          setDeletion('unknown');
           return;
         }
         setDeletion('resuming');
@@ -51,14 +61,33 @@ export default function OnboardingScreen() {
         if (!cancelled && result.outcome !== 'deleted') setDeletion('failed');
       })
       .catch(() => {
-        if (!cancelled) setDeletion('none');
+        if (!cancelled) setDeletion('unknown');
       });
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, recheck]);
 
   if (!profile && deletion === 'checking') return <StartupScreen />;
+
+  if (deletion === 'unknown') {
+    return (
+      <View style={styles.container} testID="onboarding-deletion-check-failed">
+        <Text style={styles.title}>We couldn&rsquo;t reach Keepsake</Text>
+        <Text style={styles.note}>
+          Checking your account needs a connection. Nothing has changed on this device.
+        </Text>
+        <Button
+          title="Try again"
+          testID="onboarding-deletion-recheck-button"
+          onPress={() => {
+            setDeletion('checking');
+            setRecheck((n) => n + 1);
+          }}
+        />
+      </View>
+    );
+  }
 
   if (deletion === 'resuming' || deletion === 'failed') {
     return (
@@ -73,20 +102,27 @@ export default function OnboardingScreen() {
     );
   }
 
-  if (!profile) {
-    return (
-      <ProfileSetupStep
-        onSubmit={setDisplayName}
-        hasPendingInvitation={pendingInvitationToken !== null}
-      />
-    );
-  }
-  if (!household) {
-    return <HouseholdSetupStep />;
-  }
   // Both exist — HouseholdProvider's refresh() already updated state, and
   // app/_layout.tsx's guard will navigate away on its own next render.
-  return null;
+  if (profile && household) return null;
+
+  // Deletion is offered from both steps, not just the household one. An
+  // account that has authenticated but not yet chosen a display name is
+  // still an account, and requiring someone to create a profile before
+  // they may delete it is not an in-app deletion path.
+  return (
+    <View style={styles.screen}>
+      {!profile ? (
+        <ProfileSetupStep
+          onSubmit={setDisplayName}
+          hasPendingInvitation={pendingInvitationToken !== null}
+        />
+      ) : !household ? (
+        <HouseholdSetupStep />
+      ) : null}
+      <DeleteAccountSection />
+    </View>
+  );
 }
 
 function ProfileSetupStep({
@@ -378,16 +414,14 @@ function HouseholdSetupStep() {
           {error}
         </Text>
       )}
-
-      {/* Settings sits behind the onboarded guard, so without this the
-          only account with no household -- the exact case deletion's
-          'no_household' mode exists for -- has no way to reach it. */}
-      <DeleteAccountSection />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     alignItems: 'stretch',
