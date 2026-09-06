@@ -86,10 +86,20 @@ const RECIPE_MIRROR_TABLES = [
   'cooking_sessions',
 ] as const;
 
-export async function wipeDatabase(): Promise<void> {
+// The two outboxes survive sign-out because an unsent capture is the only
+// copy of itself until the server confirms it. Account deletion is the one
+// case where that reasoning inverts: both hold rows stamped with a
+// household_id the user no longer has any access to, so keeping them means
+// retrying forever against a household they cannot write to (ADR-0028).
+const OUTBOX_TABLES = ['import_outbox', 'cooking_event_outbox'] as const;
+
+export async function wipeDatabase({ includeOutboxes = false } = {}): Promise<void> {
   const db = await getDatabase();
+  const tables = includeOutboxes
+    ? [...RECIPE_MIRROR_TABLES, ...OUTBOX_TABLES]
+    : RECIPE_MIRROR_TABLES;
   await db.withTransactionAsync(async () => {
-    for (const table of RECIPE_MIRROR_TABLES) {
+    for (const table of tables) {
       await db.execAsync(`delete from ${table}`);
     }
   });

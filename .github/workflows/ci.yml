@@ -36,6 +36,11 @@ jobs:
       - run: npm run format:check
       - run: npm test -- --ci
       - run: npm run check:client-secrets
+      # ADR-0028 permits exactly one Edge Function to hold the service-role
+      # key. check:client-secrets scans src/, app/ and modules/ and points
+      # server-only names *at* supabase/functions/, so nothing looked inside
+      # until now.
+      - run: npm run check:edge-privileges
 
   database:
     name: Migration apply/reset and RLS tests
@@ -71,6 +76,33 @@ jobs:
 
       - if: always()
         run: npx supabase stop
+
+  edge-function-typecheck:
+    name: Type-check the deletion Edge Function
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # Scoped to delete-account deliberately. supabase/functions/* is
+      # excluded from tsconfig.json and eslint.config.js (Deno's own type
+      # universe), and #164 covers widening this to every function. That
+      # was filed as post-beta because nothing deployed before beta -- this
+      # function does, and it is the one holding the service-role key, so
+      # shipping it with nothing type-checking it is not the same trade.
+      # --config so Deno uses the function's own import map, and
+      # --node-modules-dir=none so it stops walking up to the repo's
+      # package.json and demanding a node_modules/ that Edge Functions
+      # never have. Without both it resolves @supabase/supabase-js as a
+      # node dependency and fails before type-checking anything.
+      - run: >
+          deno check
+          --config supabase/functions/delete-account/deno.json
+          --node-modules-dir=none
+          supabase/functions/delete-account/index.ts
 
   secret-scan:
     name: Secret scan (gitleaks)

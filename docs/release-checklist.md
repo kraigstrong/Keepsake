@@ -45,7 +45,7 @@ Internal testing needs none of this; external testing needs all of it, and Beta 
 - [ ] **Demo account** exists, has a password set (App Review cannot receive an email OTP), and **has been signed into once to tap the starter-recipes offer** — the library is empty until someone does, and an empty library is a rejection risk.
 - [ ] **Export compliance** answered. Setting `ios.config.usesNonExemptEncryption` in `app.json` would stop this being asked on every upload — **not configured yet**, tracked in #157.
 - [ ] **Privacy questionnaire** matches `web/privacy.html`'s collection table and the allowlist in `src/observability/trackEvent.ts` — including the two easily-missed flows, the Reminders export and the retained import history.
-- [ ] Accepted, knowingly: no in-app account-deletion path. There is no guaranteed exemption from Guideline 5.1.1(v); the contingency if App Review raises it is a minimal in-app deletion *initiation* flow.
+- [ ] **In-app account deletion works on the build being submitted** (Guideline 5.1.1(v)). Settings → Delete account, typed confirmation, and the account is actually gone afterwards — not merely signed out. Verify from a *sole* member and a *shared* member; they are different operations and only the two-device pass exercises the second.
 
 ## Post-release
 

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { hasPendingDeletion, resumePendingDeletion } from '../src/account/deleteAccount';
 import { Button } from '../src/components/Button';
+import { StartupScreen } from '../src/components/StartupScreen';
+import { DeleteAccountSection } from '../src/settings/DeleteAccountSection';
 import { useDeepLink } from '../src/deepLinks/DeepLinkProvider';
 import {
   isWellFormedInvitationToken,
@@ -26,21 +29,114 @@ import { colors, spacing, typography } from '../src/theme/tokens';
 export default function OnboardingScreen() {
   const { profile, household, setDisplayName } = useHousehold();
   const { pendingInvitationToken } = useDeepLink();
+  const [deletion, setDeletion] = useState<'checking' | 'none' | 'resuming' | 'failed' | 'unknown'>(
+    'checking',
+  );
+  const [recheck, setRecheck] = useState(0);
 
-  if (!profile) {
+  // A half-finished deletion lands here: the data is gone, so there is no
+  // profile, which looks exactly like a brand-new signup. The marker is
+  // what tells them apart (ADR-0028 decision 7), and it has to be checked
+  // *before* any onboarding UI -- otherwise someone mid-deletion can type
+  // a name and create a profile on the account they asked to remove.
+  useEffect(() => {
+    if (profile) return;
+    let cancelled = false;
+    hasPendingDeletion()
+      .then(async (state) => {
+        if (cancelled) return;
+        if (state === 'none') {
+          setDeletion('none');
+          return;
+        }
+        // 'unknown' keeps the door shut rather than falling through to
+        // onboarding: a failed read is not evidence that nothing is
+        // pending, and guessing wrong here is unrecoverable.
+        if (state === 'unknown') {
+          setDeletion('unknown');
+          return;
+        }
+        setDeletion('resuming');
+        const result = await resumePendingDeletion();
+        if (!cancelled && result.outcome !== 'deleted') setDeletion('failed');
+      })
+      .catch(() => {
+        if (!cancelled) setDeletion('unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, recheck]);
+
+  if (!profile && deletion === 'checking') return <StartupScreen />;
+
+  if (deletion === 'unknown') {
     return (
-      <ProfileSetupStep
-        onSubmit={setDisplayName}
-        hasPendingInvitation={pendingInvitationToken !== null}
-      />
+      <View style={styles.container} testID="onboarding-deletion-check-failed">
+        <Text style={styles.title}>We couldn&rsquo;t reach Keepsake</Text>
+        <Text style={styles.note}>
+          Checking your account needs a connection. Nothing has changed on this device.
+        </Text>
+        <Button
+          title="Try again"
+          testID="onboarding-deletion-recheck-button"
+          onPress={() => {
+            setDeletion('checking');
+            setRecheck((n) => n + 1);
+          }}
+        />
+      </View>
     );
   }
-  if (!household) {
-    return <HouseholdSetupStep />;
+
+  if (deletion === 'resuming' || deletion === 'failed') {
+    return (
+      <View style={styles.container} testID="onboarding-finishing-deletion">
+        <Text style={styles.title}>Finishing deleting your account</Text>
+        <Text style={styles.note}>
+          {deletion === 'failed'
+            ? "We couldn't finish just now. Your data is already gone — this removes the account itself."
+            : 'This will only take a moment.'}
+        </Text>
+        {/* An earlier version said we would try again next time the app
+            opened, and offered nothing. Backgrounding does not remount
+            this, so on mobile that promise was rarely kept and the auth
+            row could survive until the OS killed the process. */}
+        {deletion === 'failed' && (
+          <Button
+            title="Try again"
+            testID="onboarding-deletion-retry-button"
+            onPress={() => {
+              setDeletion('checking');
+              setRecheck((n) => n + 1);
+            }}
+          />
+        )}
+      </View>
+    );
   }
+
   // Both exist — HouseholdProvider's refresh() already updated state, and
   // app/_layout.tsx's guard will navigate away on its own next render.
-  return null;
+  if (profile && household) return null;
+
+  // Deletion is offered from both steps, not just the household one. An
+  // account that has authenticated but not yet chosen a display name is
+  // still an account, and requiring someone to create a profile before
+  // they may delete it is not an in-app deletion path.
+  return (
+    <View style={styles.screen}>
+      {!profile ? (
+        <ProfileSetupStep
+          onSubmit={setDisplayName}
+          hasPendingInvitation={pendingInvitationToken !== null}
+        />
+      ) : !household ? (
+        <HouseholdSetupStep />
+      ) : null}
+      <DeleteAccountSection />
+    </View>
+  );
 }
 
 function ProfileSetupStep({
@@ -337,6 +433,9 @@ function HouseholdSetupStep() {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     alignItems: 'stretch',
