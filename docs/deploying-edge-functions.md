@@ -1,6 +1,8 @@
 # Deploying a Supabase Edge Function
 
-Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other. `npm run check:drift` covers the migration half only — it compares migration lists and auth config, and never queries deployed functions. **Nothing automated reports which function version staging is running**, so a merged-but-undeployed Edge Function change is invisible: check that half by hand.
+Deploying a function (`supabase/functions/<name>/`) is a separate step from pushing migrations (`supabase db push`) — updating one never updates the other.
+
+`npm run check:drift` now covers part of this: it asserts `delete-account` is deployed and that its `verify_jwt` is still `true` (ADR-0028 — it is the one function holding the service-role key). It does **not** compare *versions* for any function, so a merged-but-undeployed change to `import-recipe` or `select-candidates` — or a newer commit of `delete-account` — is still invisible. Check that half by hand with `functions list` below.
 
 ## Credentials
 
@@ -41,7 +43,7 @@ Type-check before deploying with [Deno's own `deno check`](https://supabase.com/
 deno check supabase/functions/<function-name>/index.ts
 ```
 
-This requires the `deno` CLI installed locally — it is **not** currently installed in this dev environment (confirmed 2026-08-26: `which deno` finds nothing, and the Supabase CLI's own bundler doesn't expose an equivalent check flag). Until it is, a type error in Edge Function code can reach staging undetected by any automated step — treat a careful manual read of the diff as the only check standing in for `deno check` today, and install Deno before relying on this step for real.
+This requires the `deno` CLI installed locally — still **not** installed in this dev environment (re-confirmed 2026-09-06). CI closes the gap for `delete-account` only: `.github/workflows/ci.yml`'s `edge-function-typecheck` job runs `deno check` against it on every PR, so a type error there cannot reach staging unnoticed. `import-recipe` and `select-candidates` remain unchecked by anything — widening that job is #164. Installing Deno locally is still worth doing; without it every Edge Function change costs a full CI round trip to type-check.
 
 ## Verify
 
