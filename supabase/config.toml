@@ -383,6 +383,14 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# ADR-0028: the one function holding the service-role key. verify_jwt is
+# the platform default, but declared here rather than inherited -- an
+# undeclared default is removed by a single `--no-verify-jwt` at deploy
+# time, and this project has been bitten by undeclared hosted config three
+# times already. check:drift asserts it against the deployed project.
+[functions.delete-account]
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

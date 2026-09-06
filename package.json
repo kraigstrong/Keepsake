@@ -80,6 +80,7 @@
     "archive:prep": "node scripts/prepare-archive.mjs",
     "archive:env": "node scripts/prepare-archive-env.mjs",
     "archive:env:restore": "node scripts/prepare-archive-env.mjs --restore",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:edge-privileges": "node scripts/check-edge-function-privileges.mjs"
   }
 }

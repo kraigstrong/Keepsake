@@ -202,6 +202,37 @@ for (const { api, expected, why } of ASSERTED) {
   }
 }
 
+// Edge Function privilege config (ADR-0028). verify_jwt is the platform
+// default, so nothing here would notice a single `--no-verify-jwt` at
+// deploy time on the one function holding the service-role key. Declared
+// in config.toml; asserted here against what is actually deployed.
+const PRIVILEGED_FUNCTION = 'delete-account';
+const fnResponse = await fetch(
+  `https://api.supabase.com/v1/projects/${ref}/functions/${PRIVILEGED_FUNCTION}`,
+  { headers: { Authorization: `Bearer ${token}` } },
+);
+if (fnResponse.status === 404) {
+  problems.push(
+    `  ${PRIVILEGED_FUNCTION}: exists in this repo but is not deployed to the project.\n` +
+      '      Nothing verifies an Edge Function reaches staging the way migrations are\n' +
+      '      checked below — deploy it, or it is main-only (docs/deploying-edge-functions.md).',
+  );
+} else if (!fnResponse.ok) {
+  problems.push(
+    `  ${PRIVILEGED_FUNCTION}: Management API returned ${fnResponse.status} reading its config.`,
+  );
+} else {
+  const fn = await fnResponse.json();
+  if (fn.verify_jwt !== true) {
+    problems.push(
+      `  ${PRIVILEGED_FUNCTION}.verify_jwt: expected true, project has ${JSON.stringify(fn.verify_jwt)}\n` +
+        '      This is the one function permitted to hold the service-role key (ADR-0028).\n' +
+        '      Without verify_jwt the platform stops rejecting unauthenticated callers\n' +
+        '      before the handler runs. Redeploy without --no-verify-jwt.',
+    );
+  }
+}
+
 // Migrations: the third incident, and the one config push cannot see.
 // Both directions are drift. A local-only migration means the project is
 // missing a change the repo has — the 2026-08-29 case. A remote-only one

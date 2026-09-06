@@ -11,3 +11,17 @@ export async function wipeOfflineData(imageStore: ImageStore = defaultImageStore
   await wipeDatabase();
   imageStore.deleteDirectory();
 }
+
+/**
+ * Account deletion's wipe (ADR-0028). Same as sign-out plus the two
+ * outboxes, which sign-out deliberately preserves: an unsent capture is
+ * normally the only copy of itself, but after deletion its household_id
+ * points somewhere this user can no longer write, so it would retry
+ * forever. This does not change what sign-out does.
+ */
+export async function wipeOfflineDataForAccountDeletion(
+  imageStore: ImageStore = defaultImageStore,
+): Promise<void> {
+  await wipeDatabase({ includeOutboxes: true });
+  imageStore.deleteDirectory();
+}

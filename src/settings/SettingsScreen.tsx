@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
+import { DeleteAccountSection } from './DeleteAccountSection';
 import { Button } from '../components/Button';
 import { LoadingState } from '../components/LoadingState';
 import { Row } from '../components/Row';
@@ -281,6 +282,8 @@ export function SettingsScreen() {
       <View style={styles.signOutSection}>
         <Button title="Sign out" onPress={() => signOut()} variant="secondary" />
       </View>
+
+      <DeleteAccountSection />
     </ScrollView>
   );
 }
