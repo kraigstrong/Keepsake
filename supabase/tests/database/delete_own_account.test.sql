@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(21);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'alice@example.test'),
@@ -69,6 +69,31 @@ select is(
   (select count(*)::int from public.households where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   1,
   'and the household is untouched by the aborted attempt'
+);
+
+-- ---------- the fence cannot be switched off ----------
+
+-- null <> anything is null, so an IF on it does not fire. A caller
+-- passing null would have disabled the confirmation fence entirely and
+-- then had the function act on whatever mode it derived.
+select throws_ok(
+  $$select public.delete_own_account(null)$$,
+  'P0001',
+  'invalid expected_mode',
+  'a null mode is rejected rather than silently disabling the fence'
+);
+
+select throws_ok(
+  $$select public.delete_own_account('whatever')$$,
+  'P0001',
+  'invalid expected_mode',
+  'so is a mode that is not one of the three real answers'
+);
+
+select is(
+  (select count(*)::int from public.households where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  1,
+  'neither attempt touched the household'
 );
 
 -- ---------- shared member leaves ----------
@@ -212,7 +237,20 @@ select is(
   'bob cannot read anyone else''s deletion marker'
 );
 
+-- The race this cannot reproduce, guarded structurally instead. pgTAP
+-- runs one session in one transaction and cannot express two overlapping
+-- calls, so what is pinned is that the re-verification still exists: two
+-- calls from the same member can both resolve a household before either
+-- commits, and without this check the second wakes holding a household it
+-- has already left and destroys it. Same approach the weekly-plan lock
+-- guards use for the same reason.
 reset role;
+select ok(
+  (select prosrc from pg_proc where proname = 'delete_own_account')
+    like '%where household_id = caller_household_id and user_id = caller_id%',
+  'delete_own_account still re-reads the caller''s membership under the lock'
+);
+
 select set_config('request.jwt.claims', null, true);
 
 select * from finish();

@@ -76,6 +76,17 @@ begin
     raise exception 'not authenticated' using errcode = 'P0001';
   end if;
 
+  -- Validated before any destructive work, and before the null could
+  -- reach the comparison below. `actual_mode <> null` is null, so a
+  -- PL/pgSQL IF on it does not fire -- a caller passing null would have
+  -- switched the fence off entirely and then had the function act on
+  -- whatever mode it derived. The repo's own idiom is to reject null
+  -- first and compare second (weekly_plan_rpcs.sql:82-87).
+  if expected_mode is null
+     or expected_mode not in ('sole', 'shared', 'no_household') then
+    raise exception 'invalid expected_mode' using errcode = 'P0001';
+  end if;
+
   -- Not a precondition check. A caller with no membership row is not an
   -- error: it is someone whose previous attempt got this far and no
   -- further. Every step below is a no-op on an already-empty state, so
@@ -92,13 +103,34 @@ begin
     -- destroy a household that has just become shared.
     perform 1 from public.households where id = caller_household_id for update;
 
+    -- Membership is re-read under the lock, not inherited from the
+    -- unlocked read above. Two overlapping calls from the same member
+    -- both resolve this household before either commits; if the first
+    -- removes the caller and commits, the second wakes holding a
+    -- household it is no longer in, counts the one remaining member as
+    -- 'sole', and -- expected_mode being caller-supplied -- destroys
+    -- somebody else's library. Sole ownership cannot be inferred from a
+    -- count alone; it has to be a count of a household the caller is
+    -- still demonstrably in.
+    if not exists (
+      select 1 from public.household_membership
+      where household_id = caller_household_id and user_id = caller_id
+    ) then
+      -- Already left, by an earlier attempt or a concurrent one. Nothing
+      -- household-side remains to do, which is the postcondition
+      -- contract rather than an error.
+      caller_household_id := null;
+    end if;
+  end if;
+
+  if caller_household_id is not null then
     select count(*) into member_count
     from public.household_membership
     where household_id = caller_household_id;
 
     actual_mode := case when member_count <= 1 then 'sole' else 'shared' end;
 
-    if actual_mode <> expected_mode then
+    if actual_mode is distinct from expected_mode then
       raise exception 'household membership changed since confirmation'
         using errcode = 'P0001';
     end if;
