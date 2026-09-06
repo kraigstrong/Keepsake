@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(25);
+select plan(28);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'alice@example.test'),
@@ -252,6 +252,94 @@ select ok(
 );
 
 select set_config('request.jwt.claims', null, true);
+
+-- ---------- nothing beyond the leaver's own rows ----------
+
+-- Its own household, so this does not depend on what the tests above
+-- left behind. fay and gil share it; gil leaves.
+insert into auth.users (id, email) values
+  ('f0000000-0000-0000-0000-00000000fa11', 'fay@example.test'),
+  ('f0000000-0000-0000-0000-00000000911a', 'gil@example.test');
+insert into public.profiles (id, display_name) values
+  ('f0000000-0000-0000-0000-00000000fa11', 'Fay F'),
+  ('f0000000-0000-0000-0000-00000000911a', 'Gil G');
+insert into public.households (id) values ('f0000000-0000-0000-0000-0000000000ee');
+insert into public.household_membership (household_id, user_id) values
+  ('f0000000-0000-0000-0000-0000000000ee', 'f0000000-0000-0000-0000-00000000fa11'),
+  ('f0000000-0000-0000-0000-0000000000ee', 'f0000000-0000-0000-0000-00000000911a');
+
+-- Content across several household-scoped tables, created by the leaver,
+-- so the census has something to prove survived.
+insert into public.recipes (id, household_id, title, created_by)
+values ('f0000000-0000-0000-0000-0000000000cc', 'f0000000-0000-0000-0000-0000000000ee',
+        'Gil''s stew', 'f0000000-0000-0000-0000-00000000911a');
+insert into public.cooking_events (household_id, recipe_id, cooked_by, cooked_at, client_event_id)
+values ('f0000000-0000-0000-0000-0000000000ee', 'f0000000-0000-0000-0000-0000000000cc',
+        'f0000000-0000-0000-0000-00000000911a', now(), gen_random_uuid());
+insert into public.import_jobs (household_id, created_by, source_url, status)
+values ('f0000000-0000-0000-0000-0000000000ee', 'f0000000-0000-0000-0000-00000000911a',
+        'https://example.test/g', 'complete');
+insert into public.recipe_drafts (household_id, user_id, draft_payload)
+values ('f0000000-0000-0000-0000-0000000000ee', 'f0000000-0000-0000-0000-00000000911a', '{}'::jsonb);
+
+-- ---------- nothing beyond the leaver's own rows ----------
+
+-- The checks above name the tables someone thought to check. This one
+-- enumerates every household-scoped table from the catalogue instead, so
+-- a table added later is covered without anyone remembering to come back
+-- here. Getting deletion wrong is not recoverable, and "we checked the
+-- ones we thought of" is the shape that misses one.
+create or replace function pg_temp.household_census(hid uuid)
+returns table (tbl text, n bigint)
+language plpgsql as $census$
+declare r record; c bigint;
+begin
+  for r in
+    select c2.table_name from information_schema.columns c2
+    where c2.table_schema = 'public' and c2.column_name = 'household_id'
+    order by c2.table_name
+  loop
+    execute format('select count(*) from public.%I where household_id = $1', r.table_name)
+      into c using hid;
+    tbl := r.table_name; n := c; return next;
+  end loop;
+end;
+$census$;
+
+create temporary table census_before as
+select * from pg_temp.household_census('f0000000-0000-0000-0000-0000000000ee');
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', 'f0000000-0000-0000-0000-00000000911a', 'role', 'authenticated')::text, true);
+
+-- Gil leaves the household he shares with fay.
+select lives_ok(
+  $$select public.delete_own_account('shared')$$,
+  'gil can delete his account from the shared household'
+);
+
+reset role;
+
+create temporary table census_after as
+select * from pg_temp.household_census('f0000000-0000-0000-0000-0000000000ee');
+
+-- Only bob's own rows may have gone: his membership, and his private
+-- drafts. Every other household-scoped table must be untouched.
+select is_empty(
+  $$select b.tbl, b.n, a.n from census_before b
+      join census_after a using (tbl)
+     where b.n <> a.n
+       and b.tbl not in ('household_membership', 'recipe_drafts')$$,
+  'a departing member deletes nothing from any other household-scoped table'
+);
+
+select is(
+  (select n from census_after where tbl = 'household_membership'),
+  (select n - 1 from census_before where tbl = 'household_membership'),
+  'exactly one membership row goes -- his own'
+);
+
 
 select * from finish();
 rollback;
