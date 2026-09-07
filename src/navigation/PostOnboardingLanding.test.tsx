@@ -3,8 +3,10 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { PostOnboardingLandingProvider, usePostOnboardingLanding } from './PostOnboardingLanding';
 import { logError } from '../observability';
 import * as recipesApi from '../recipes/api';
+import { useSession } from '../session/SessionProvider';
 
 jest.mock('../recipes/api');
+jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
 // ../recipes/api is auto-mocked above, but Jest still loads the real
 // module once to derive its shape — which would otherwise trip
 // src/supabase/instance.ts's missing-env-var throw.
@@ -13,8 +15,14 @@ jest.mock('../observability', () => ({ logError: jest.fn(), trackEvent: jest.fn(
 
 const mockedApi = recipesApi as jest.Mocked<typeof recipesApi>;
 const mockedLogError = logError as jest.Mock;
+const mockedUseSession = useSession as jest.Mock;
 
-beforeEach(() => jest.clearAllMocks());
+const signedInAs = (id: string) => mockedUseSession.mockReturnValue({ session: { user: { id } } });
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  signedInAs('user-1');
+});
 afterEach(() => jest.useRealTimers());
 
 // renderHook is awaited: RTL v14's render is async, and the destructured
@@ -120,6 +128,59 @@ describe('PostOnboardingLandingProvider', () => {
     await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
     expect(result.current.shouldRedirectToLibrary).toBe(false);
     expect(mockedApi.fetchHasAnyRecipes).toHaveBeenCalledTimes(1);
+  });
+
+  // Signing out and onboarding a second account does not restart the
+  // process or unmount this provider (Codex, PR #194). Keyed only by a
+  // "have we decided yet" flag, the second account would inherit the
+  // first's answer and never be asked about its own library.
+  it('decides again for a different account on the same process', async () => {
+    mockedApi.fetchHasAnyRecipes.mockResolvedValue(true);
+    const { result, rerender } = await render();
+
+    await act(async () => result.current.decideLanding());
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
+    expect(result.current.shouldRedirectToLibrary).toBe(false);
+
+    signedInAs('user-2');
+    mockedApi.fetchHasAnyRecipes.mockResolvedValue(false);
+    await act(async () => rerender({}));
+
+    // The previous account's answer must not count as this one's, or the
+    // boundary would let the tabs mount before user-2 had been asked.
+    expect(result.current.hasLandingDecision).toBe(false);
+
+    await act(async () => result.current.decideLanding());
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
+    expect(result.current.shouldRedirectToLibrary).toBe(true);
+    expect(mockedApi.fetchHasAnyRecipes).toHaveBeenCalledTimes(2);
+  });
+
+  // The mirror of prefetch.ts's request fence: a slow request for an
+  // account that has since been signed out of must not answer for
+  // whoever signed in after it.
+  it('ignores a result belonging to an account that has since signed out', async () => {
+    let resolveFirst!: (value: boolean) => void;
+    mockedApi.fetchHasAnyRecipes.mockReturnValue(
+      new Promise<boolean>((r) => {
+        resolveFirst = r;
+      }),
+    );
+    const { result, rerender } = await render();
+
+    await act(async () => result.current.decideLanding());
+
+    signedInAs('user-2');
+    await act(async () => rerender({}));
+    mockedApi.fetchHasAnyRecipes.mockResolvedValue(true);
+    await act(async () => result.current.decideLanding());
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
+
+    // user-1's library was empty; applying it would send user-2 — who
+    // has recipes — to Library.
+    await act(async () => resolveFirst(false));
+
+    expect(result.current.shouldRedirectToLibrary).toBe(false);
   });
 
   // #189's third acceptance criterion lives here: consuming the redirect

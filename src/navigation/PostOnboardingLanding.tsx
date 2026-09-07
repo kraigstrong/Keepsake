@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 
 import { logError } from '../observability';
 import { fetchHasAnyRecipes } from '../recipes/api';
+import { useSession } from '../session/SessionProvider';
 import { withTimeout } from '../shared/withTimeout';
 
 /**
@@ -30,6 +31,13 @@ import { withTimeout } from '../shared/withTimeout';
  * 3. Failing to answer must not strand anyone on the splash. Every
  *    failure path falls through to This Week, which is just the
  *    behavior that shipped before this existed.
+ *
+ * Everything here is keyed by user id, not merely guarded by a "have we
+ * done this yet" flag. Signing out and onboarding a second account does
+ * not restart the process or unmount this provider, so a flag would let
+ * the first account's answer stand for the second — and would let a
+ * slow first request land on a second account that had already taken
+ * over. Same reasoning, and the same fence, as src/thisWeek/prefetch.ts.
  */
 interface PostOnboardingLandingContextValue {
   /**
@@ -60,18 +68,23 @@ const PostOnboardingLandingContext = createContext<PostOnboardingLandingContextV
 const DECISION_TIMEOUT_MS = 2500;
 
 export function PostOnboardingLandingProvider({ children }: { children: ReactNode }) {
-  const [hasLandingDecision, setHasLandingDecision] = useState(false);
-  const [shouldRedirectToLibrary, setShouldRedirectToLibrary] = useState(false);
-  // Guards the whole lifecycle, not just the in-flight window: once a
-  // decision has been made and consumed, a later call must not start a
-  // second one and re-raise the redirect. A ref rather than state
+  const { session } = useSession();
+  const userId = session?.user.id ?? null;
+
+  // Carries the user it was made for, so a decision belonging to a
+  // previous account is not mistaken for this one's. That matters for
+  // the boundary's splash gate specifically: reading a stale `true`
+  // there would let the tabs mount before this account's answer exists.
+  const [decision, setDecision] = useState<{ userId: string; redirect: boolean } | null>(null);
+  // Which user a request has been started for. A ref, not state,
   // because decideLanding is called from an effect that would re-run on
   // any state this changed.
-  const hasStarted = useRef(false);
+  const startedForUserId = useRef<string | null>(null);
 
   const decideLanding = useCallback(() => {
-    if (hasStarted.current) return;
-    hasStarted.current = true;
+    if (!userId || startedForUserId.current === userId) return;
+    startedForUserId.current = userId;
+    const forUserId = userId;
     withTimeout(fetchHasAnyRecipes(), DECISION_TIMEOUT_MS, 'post-onboarding landing')
       .catch((error) => {
         // An invitee onboarding on a bad connection is the realistic
@@ -81,12 +94,23 @@ export function PostOnboardingLandingProvider({ children }: { children: ReactNod
         return true;
       })
       .then((hasRecipes) => {
-        setShouldRedirectToLibrary(!hasRecipes);
-        setHasLandingDecision(true);
+        // A slower request for an account that has since been signed out
+        // of must not answer for whoever signed in after it.
+        if (startedForUserId.current !== forUserId) return;
+        setDecision({ userId: forUserId, redirect: !hasRecipes });
       });
-  }, []);
+  }, [userId]);
 
-  const consumeRedirect = useCallback(() => setShouldRedirectToLibrary(false), []);
+  const hasLandingDecision = decision !== null && decision.userId === userId;
+  const shouldRedirectToLibrary = hasLandingDecision && decision.redirect;
+
+  // Spends the redirect while leaving the decision itself in place —
+  // the boundary's gate reads that, and re-opening it would put the
+  // splash back up.
+  const consumeRedirect = useCallback(
+    () => setDecision((current) => (current ? { ...current, redirect: false } : current)),
+    [],
+  );
 
   return (
     <PostOnboardingLandingContext.Provider
