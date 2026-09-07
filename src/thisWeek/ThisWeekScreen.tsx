@@ -448,7 +448,7 @@ export function ThisWeekScreen() {
       {/* One row, both real Buttons, each flex:1 — previously they hugged
           their own label width with only an 8px gap, so they clumped on
           the left with dead space on the right (developer UX feedback:
-          "smushed"). Add recipes stays the primary/rust button matching
+          "smushed"). Add to plan stays the primary/rust button matching
           the empty state below — Confirm Plan finishes the plan, but
           rust already means "keep building the plan" from the empty
           state, and flipping that meaning once the plan has entries is
@@ -484,7 +484,7 @@ export function ThisWeekScreen() {
         plan.entries.length > 0 && (
           <View style={styles.actionsRow}>
             <View style={styles.actionsRowItem}>
-              <Button title="Add recipes" onPress={goToAddRecipes} testID="this-week-add-recipes" />
+              <Button title="Add to plan" onPress={goToAddRecipes} testID="this-week-add-recipes" />
             </View>
             <View style={styles.actionsRowItem}>
               <Button
@@ -499,12 +499,12 @@ export function ThisWeekScreen() {
         )
       )}
 
-      {/* Below Add recipes/Edit Plan, not below the meal list — the design
+      {/* Below Add to plan/Edit Plan, not below the meal list — the design
           handoff's 1a placement put this at the bottom of the screen, where
           it overlapped the global add FAB (absolutely positioned,
           app/(tabs)/_layout.tsx). Developer feedback 2026-08-26.
           The empty plan renders it inside `content` instead, under the
-          empty state's own Add recipes action. Both branches exist for the
+          empty state's own planning action. Both branches exist for the
           same reason: anything trailing `content` (flex: 1) lands at the
           bottom of the screen, which is where the FAB is. An earlier
           version of this comment claimed the empty case "never had this
@@ -518,7 +518,7 @@ export function ThisWeekScreen() {
             <EmptyState
               title="Nothing planned yet"
               message="Add a recipe to start planning this week's meals."
-              actionLabel="Add recipes"
+              actionLabel="Plan my week"
               onAction={goToAddRecipes}
               testID="this-week-placeholder"
             />

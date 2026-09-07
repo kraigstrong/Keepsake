@@ -6,6 +6,7 @@ import {
   fetchCategories,
   fetchDeletedRecipes,
   fetchDraft,
+  fetchHasAnyRecipes,
   fetchRecipe,
   fetchRecipeVersions,
   fetchRecipes,
@@ -81,6 +82,45 @@ describe('fetchRecipes', () => {
     });
 
     await expect(fetchRecipes()).rejects.toThrow('boom');
+  });
+});
+
+describe('fetchHasAnyRecipes', () => {
+  const respondWith = (data: unknown) => {
+    const limit = jest.fn(() => Promise.resolve({ data, error: null }));
+    mockedFrom.mockReturnValue({ select: () => ({ is: () => ({ is: () => ({ limit }) }) }) });
+    return limit;
+  };
+
+  it('is true when the household has at least one recipe', async () => {
+    respondWith([{ id: 'r1' }]);
+    await expect(fetchHasAnyRecipes()).resolves.toBe(true);
+    expect(mockedFrom).toHaveBeenCalledWith('recipes');
+  });
+
+  it('is false for an empty library', async () => {
+    respondWith([]);
+    await expect(fetchHasAnyRecipes()).resolves.toBe(false);
+  });
+
+  // The caller only ever asks "any or none", so fetching the whole
+  // library to answer it would be waste on the one screen-transition
+  // that is holding a splash open.
+  it('asks for a single row rather than the whole library', async () => {
+    const limit = respondWith([]);
+    await fetchHasAnyRecipes();
+    expect(limit).toHaveBeenCalledWith(1);
+  });
+
+  it('rejects when the query errors', async () => {
+    mockedFrom.mockReturnValue({
+      select: () => ({
+        is: () => ({
+          is: () => ({ limit: () => Promise.resolve({ data: null, error: new Error('nope') }) }),
+        }),
+      }),
+    });
+    await expect(fetchHasAnyRecipes()).rejects.toThrow('nope');
   });
 });
 

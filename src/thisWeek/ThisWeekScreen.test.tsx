@@ -162,13 +162,13 @@ it('shows an error state with retry when the plan fails to load', async () => {
   await waitFor(() => expect(screen.getByTestId('this-week-placeholder')).toBeTruthy());
 });
 
-it('shows the empty state with an Add recipes action', async () => {
+it('shows the empty state with a planning action', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
 
   renderThisWeekScreen();
 
   await waitFor(() => expect(screen.getByTestId('this-week-placeholder')).toBeTruthy());
-  await fireEvent.press(screen.getByText('Add recipes'));
+  await fireEvent.press(screen.getByText('Plan my week'));
 
   expect(push).toHaveBeenCalledWith('/this-week/add?planId=plan-1');
 });
@@ -202,7 +202,7 @@ it('shows the bare multiplier for a recipe with no parsed servings count', async
   expect(screen.getByText('1.5×')).toBeTruthy();
 });
 
-it('shows an Add recipes button (same treatment as the empty state) once the plan has entries', async () => {
+it('shows an Add to plan button (same treatment as the empty state) once the plan has entries', async () => {
   mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(
     plan({ entries: [entry({ id: 'e1', title: 'Herb Roast Chicken' })] }),
   );

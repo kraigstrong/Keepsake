@@ -20,6 +20,10 @@ import {
   submitPendingOutboxItems,
   summarizeOutboxOutcomes,
 } from '../src/import/outboxEngine';
+import {
+  PostOnboardingLandingProvider,
+  usePostOnboardingLanding,
+} from '../src/navigation/PostOnboardingLanding';
 import { initObservability, logError, trackEvent } from '../src/observability';
 import { sweepOrphanedOriginalPhotos } from '../src/photoImport/orphanedPhotoSweep';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
@@ -53,7 +57,9 @@ export default function RootLayout() {
             <DeepLinkProvider>
               <SessionProvider>
                 <HouseholdProvider>
-                  <ConnectivityAwareApp />
+                  <PostOnboardingLandingProvider>
+                    <ConnectivityAwareApp />
+                  </PostOnboardingLandingProvider>
                 </HouseholdProvider>
               </SessionProvider>
             </DeepLinkProvider>
@@ -344,6 +350,40 @@ function AuthenticatedRouteBoundary() {
   const isOnboarded = session !== null && profile !== null && household !== null;
   const needsOnboarding = session !== null && !isOnboarded;
 
+  const { hasLandingDecision, decideLanding } = usePostOnboardingLanding();
+
+  // Only an account that actually passed through onboarding in this
+  // session gets a landing decision (#189) — that is what keeps "the
+  // library is empty" from becoming a standing routing rule for someone
+  // who empties theirs later.
+  //
+  // `needsOnboarding` alone is not that signal, and using it was a real
+  // bug (Codex, PR #194): it is derived from profile/household being
+  // null, which is also true on every cold launch while the household
+  // load is still in flight. An already-onboarded account with an empty
+  // library would have been re-routed to Library on every launch. The
+  // condition below is the one under which the onboarding route is what
+  // actually renders — each of the three early returns further down
+  // precedes the onboarding branch.
+  const isShowingOnboarding =
+    needsOnboarding && !sessionLoading && !householdLoading && !householdLoadError;
+
+  // Stored as the user it happened to, not a boolean, so signing out and
+  // onboarding a second account on the same process does not inherit the
+  // first account's answer. Adjusted during render, the same pattern as
+  // readyCheckedForUserId below — an effect would be a cascading
+  // setState, which this project's react-hooks/set-state-in-effect rule
+  // rejects.
+  const [sawOnboardingForUserId, setSawOnboardingForUserId] = useState<string | null>(null);
+  if (isShowingOnboarding && userId !== null && sawOnboardingForUserId !== userId) {
+    setSawOnboardingForUserId(userId);
+  }
+  const sawOnboarding = userId !== null && sawOnboardingForUserId === userId;
+
+  useEffect(() => {
+    if (isOnboarded && sawOnboarding) decideLanding();
+  }, [isOnboarded, sawOnboarding, decideLanding]);
+
   // Kicks off This Week's network fetch as soon as a session exists —
   // running concurrently with HouseholdProvider's own fetch, while
   // StartupScreen (below) is still showing — instead of waiting for
@@ -411,6 +451,14 @@ function AuthenticatedRouteBoundary() {
     );
   }
   if (isOnboarded && !thisWeekReady) {
+    return <StartupScreen />;
+  }
+  // Held before the Stack, not after: the tabs group's first screen is
+  // This Week, and a <Redirect> away from it only works on that route's
+  // *first* render (app/invite/[token].tsx:53). Mounting the tabs while
+  // the answer is still outstanding would spend that one render on the
+  // wrong screen. Bounded inside the provider, so this cannot hang.
+  if (isOnboarded && sawOnboarding && !hasLandingDecision) {
     return <StartupScreen />;
   }
 
