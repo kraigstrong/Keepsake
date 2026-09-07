@@ -133,6 +133,13 @@ So the offer must be suppressed once the household has seeded, falling back to t
 
 ## 4. Images
 
+**Superseded 2026-09-06 — see ADR-0029 and #192.** The escape hatch in option 2 below fired: a device pass on build 6 found a brand-new library reads as ten text rows, so licensed stock ships for the beta after all. Two things changed the calculus, and both are in ADR-0029:
+
+- The images now live **once**, at a shared `starters/` prefix, not copied per household. That reverses "What raises the stakes" below — replacing one object upgrades every household that already seeded, so stock now and your own photography later stopped being exclusive.
+- Shooting them yourself is still the ending. It is now an in-place swap of ten objects rather than a backfill, and PR 5 stays exactly as scoped.
+
+The original decision, and the reasoning that still stands, follows unchanged.
+
 **Decision (2026-08-30): ship without images, and shoot them yourself when you get to it.** PR 5 below stays scoped as a strictly additive follow-on so the photos can land weeks later without touching anything else.
 
 ### Why not a source site's photo, with attribution
@@ -156,7 +163,7 @@ The same reasoning rules out importing the ten **recipes** from published source
 
 ### What raises the stakes
 
-**Whatever ships is frozen for every household that already seeded.** The upload happens once, at seed time, into that household's Storage. Swapping the bundled asset in a later build only affects households seeding *after* it — fixing an existing one means a backfill against Storage. This is closer to a one-shot decision than a normal asset you can iterate on, which is part of why "no photo" beats "a photo you will want to replace."
+**Whatever ships is frozen for every household that already seeded.** (No longer true as of ADR-0029, which is why the decision above changed — the shared prefix makes this replaceable in place. The reasoning is kept because it is what made "no photo" the right call for PRs 1-4.) The upload happens once, at seed time, into that household's Storage. Swapping the bundled asset in a later build only affects households seeding *after* it — fixing an existing one means a backfill against Storage. This is closer to a one-shot decision than a normal asset you can iterate on, which is part of why "no photo" beats "a photo you will want to replace."
 
 ### Options, for the record
 
