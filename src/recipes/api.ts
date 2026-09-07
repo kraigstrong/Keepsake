@@ -141,7 +141,7 @@ export async function fetchRecipes(): Promise<RecipeSummary[]> {
 }
 
 // Whether the household has anything in its library at all — the
-// post-onboarding landing decision (src/onboarding/postOnboardingLanding.ts)
+// post-onboarding landing decision (src/navigation/PostOnboardingLanding.tsx)
 // only needs "any or none", so this asks for one id rather than reusing
 // fetchRecipes()'s whole list. Same archived/deleted exclusions as
 // Library, because the question is really "is there anything to see".
