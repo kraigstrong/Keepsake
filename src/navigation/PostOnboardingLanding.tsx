@@ -26,14 +26,21 @@ import { withTimeout } from '../shared/withTimeout';
  *    incident behind it) — and redirecting after This Week has already
  *    painted would be a visible flash of the exact screen this is
  *    trying to avoid. So the route boundary holds StartupScreen up
- *    while `isDeciding`.
+ *    until `hasLandingDecision`.
  * 3. Failing to answer must not strand anyone on the splash. Every
  *    failure path falls through to This Week, which is just the
  *    behavior that shipped before this existed.
  */
 interface PostOnboardingLandingContextValue {
-  /** True while the splash must stay up waiting for the answer. */
-  isDeciding: boolean;
+  /**
+   * False until the answer is in. The route boundary holds StartupScreen
+   * up on this rather than on an "is deciding" flag, because the flag
+   * would still be false on the first render after onboarding completes
+   * — the effect that starts the decision has not run yet — and that one
+   * ungated render is enough to mount the tabs and make the redirect
+   * land too late to work.
+   */
+  hasLandingDecision: boolean;
   /**
    * True only between the decision landing and the tab consuming it —
    * false at every other moment, which is what makes this a one-shot
@@ -53,18 +60,18 @@ const PostOnboardingLandingContext = createContext<PostOnboardingLandingContextV
 const DECISION_TIMEOUT_MS = 2500;
 
 export function PostOnboardingLandingProvider({ children }: { children: ReactNode }) {
-  const [isDeciding, setIsDeciding] = useState(false);
+  const [hasLandingDecision, setHasLandingDecision] = useState(false);
   const [shouldRedirectToLibrary, setShouldRedirectToLibrary] = useState(false);
   // Guards the whole lifecycle, not just the in-flight window: once a
   // decision has been made and consumed, a later call must not start a
-  // second one. A ref rather than state because decideLanding is called
-  // from an effect that would re-run on any state this changed.
-  const hasDecided = useRef(false);
+  // second one and re-raise the redirect. A ref rather than state
+  // because decideLanding is called from an effect that would re-run on
+  // any state this changed.
+  const hasStarted = useRef(false);
 
   const decideLanding = useCallback(() => {
-    if (hasDecided.current) return;
-    hasDecided.current = true;
-    setIsDeciding(true);
+    if (hasStarted.current) return;
+    hasStarted.current = true;
     withTimeout(fetchHasAnyRecipes(), DECISION_TIMEOUT_MS, 'post-onboarding landing')
       .catch((error) => {
         // An invitee onboarding on a bad connection is the realistic
@@ -75,7 +82,7 @@ export function PostOnboardingLandingProvider({ children }: { children: ReactNod
       })
       .then((hasRecipes) => {
         setShouldRedirectToLibrary(!hasRecipes);
-        setIsDeciding(false);
+        setHasLandingDecision(true);
       });
   }, []);
 
@@ -83,7 +90,7 @@ export function PostOnboardingLandingProvider({ children }: { children: ReactNod
 
   return (
     <PostOnboardingLandingContext.Provider
-      value={{ isDeciding, shouldRedirectToLibrary, decideLanding, consumeRedirect }}
+      value={{ hasLandingDecision, shouldRedirectToLibrary, decideLanding, consumeRedirect }}
     >
       {children}
     </PostOnboardingLandingContext.Provider>

@@ -20,6 +20,10 @@ import {
   submitPendingOutboxItems,
   summarizeOutboxOutcomes,
 } from '../src/import/outboxEngine';
+import {
+  PostOnboardingLandingProvider,
+  usePostOnboardingLanding,
+} from '../src/navigation/PostOnboardingLanding';
 import { initObservability, logError, trackEvent } from '../src/observability';
 import { sweepOrphanedOriginalPhotos } from '../src/photoImport/orphanedPhotoSweep';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
@@ -53,7 +57,9 @@ export default function RootLayout() {
             <DeepLinkProvider>
               <SessionProvider>
                 <HouseholdProvider>
-                  <ConnectivityAwareApp />
+                  <PostOnboardingLandingProvider>
+                    <ConnectivityAwareApp />
+                  </PostOnboardingLandingProvider>
                 </HouseholdProvider>
               </SessionProvider>
             </DeepLinkProvider>
@@ -344,6 +350,25 @@ function AuthenticatedRouteBoundary() {
   const isOnboarded = session !== null && profile !== null && household !== null;
   const needsOnboarding = session !== null && !isOnboarded;
 
+  const { hasLandingDecision, decideLanding } = usePostOnboardingLanding();
+
+  // Only an account that actually passed through onboarding in this
+  // session gets a landing decision (#189). A cold launch of an
+  // already-onboarded account goes loading -> onboarded without the
+  // onboarding branch ever rendering, which is precisely what keeps
+  // "the library is empty" from becoming a standing routing rule —
+  // someone who empties theirs later is never re-routed.
+  //
+  // Adjusted during render, the same pattern as readyCheckedForUserId
+  // below — an effect would be a cascading setState, which this
+  // project's react-hooks/set-state-in-effect rule rejects.
+  const [sawOnboarding, setSawOnboarding] = useState(false);
+  if (needsOnboarding && !sawOnboarding) setSawOnboarding(true);
+
+  useEffect(() => {
+    if (isOnboarded && sawOnboarding) decideLanding();
+  }, [isOnboarded, sawOnboarding, decideLanding]);
+
   // Kicks off This Week's network fetch as soon as a session exists —
   // running concurrently with HouseholdProvider's own fetch, while
   // StartupScreen (below) is still showing — instead of waiting for
@@ -411,6 +436,14 @@ function AuthenticatedRouteBoundary() {
     );
   }
   if (isOnboarded && !thisWeekReady) {
+    return <StartupScreen />;
+  }
+  // Held before the Stack, not after: the tabs group's first screen is
+  // This Week, and a <Redirect> away from it only works on that route's
+  // *first* render (app/invite/[token].tsx:53). Mounting the tabs while
+  // the answer is still outstanding would spend that one render on the
+  // wrong screen. Bounded inside the provider, so this cannot hang.
+  if (isOnboarded && sawOnboarding && !hasLandingDecision) {
     return <StartupScreen />;
   }
 

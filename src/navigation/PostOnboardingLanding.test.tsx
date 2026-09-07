@@ -26,7 +26,7 @@ describe('PostOnboardingLandingProvider', () => {
   it('starts idle — nothing happens until onboarding asks it to decide', async () => {
     const { result } = await render();
 
-    expect(result.current.isDeciding).toBe(false);
+    expect(result.current.hasLandingDecision).toBe(false);
     expect(result.current.shouldRedirectToLibrary).toBe(false);
     expect(mockedApi.fetchHasAnyRecipes).not.toHaveBeenCalled();
   });
@@ -37,7 +37,7 @@ describe('PostOnboardingLandingProvider', () => {
 
     await act(async () => result.current.decideLanding());
 
-    await waitFor(() => expect(result.current.isDeciding).toBe(false));
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
     expect(result.current.shouldRedirectToLibrary).toBe(true);
   });
 
@@ -50,11 +50,11 @@ describe('PostOnboardingLandingProvider', () => {
 
     await act(async () => result.current.decideLanding());
 
-    await waitFor(() => expect(result.current.isDeciding).toBe(false));
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
     expect(result.current.shouldRedirectToLibrary).toBe(false);
   });
 
-  it('holds the splash while it is deciding', async () => {
+  it('holds the splash until the answer is in', async () => {
     let resolve!: (value: boolean) => void;
     mockedApi.fetchHasAnyRecipes.mockReturnValue(
       new Promise<boolean>((r) => {
@@ -64,10 +64,10 @@ describe('PostOnboardingLandingProvider', () => {
     const { result } = await render();
 
     await act(async () => result.current.decideLanding());
-    expect(result.current.isDeciding).toBe(true);
+    expect(result.current.hasLandingDecision).toBe(false);
 
     await act(async () => resolve(false));
-    expect(result.current.isDeciding).toBe(false);
+    expect(result.current.hasLandingDecision).toBe(true);
   });
 
   // Stranding a new account on the splash would be a far worse failure
@@ -78,7 +78,7 @@ describe('PostOnboardingLandingProvider', () => {
 
     await act(async () => result.current.decideLanding());
 
-    await waitFor(() => expect(result.current.isDeciding).toBe(false));
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
     expect(result.current.shouldRedirectToLibrary).toBe(false);
     expect(mockedLogError).toHaveBeenCalledWith(expect.any(Error), {
       context: 'postOnboardingLanding',
@@ -94,13 +94,13 @@ describe('PostOnboardingLandingProvider', () => {
     const { result } = await render();
 
     await act(async () => result.current.decideLanding());
-    expect(result.current.isDeciding).toBe(true);
+    expect(result.current.hasLandingDecision).toBe(false);
 
     await act(async () => {
       jest.advanceTimersByTime(2500);
     });
 
-    expect(result.current.isDeciding).toBe(false);
+    expect(result.current.hasLandingDecision).toBe(true);
     expect(result.current.shouldRedirectToLibrary).toBe(false);
   });
 
@@ -117,7 +117,7 @@ describe('PostOnboardingLandingProvider', () => {
     await act(async () => result.current.consumeRedirect());
     await act(async () => result.current.decideLanding());
 
-    await waitFor(() => expect(result.current.isDeciding).toBe(false));
+    await waitFor(() => expect(result.current.hasLandingDecision).toBe(true));
     expect(result.current.shouldRedirectToLibrary).toBe(false);
     expect(mockedApi.fetchHasAnyRecipes).toHaveBeenCalledTimes(1);
   });
