@@ -137,6 +137,29 @@ describe('STARTER_RECIPES', () => {
   });
 });
 
+describe('image keys (ADR-0029)', () => {
+  // The same pattern starter_image_path enforces server-side
+  // (20260906120000). Mirrored here because the RPC's response to a key
+  // it rejects is a null path, not an error — a typo would ship as a
+  // recipe that silently never shows its photo, and nothing downstream
+  // would report it.
+  const SERVER_PATTERN = /^[a-z0-9-]{1,64}$/;
+
+  it('gives every starter recipe a key the seed RPC will accept', () => {
+    STARTER_RECIPES.forEach((recipe) => {
+      expect(recipe.imageKey).not.toBeNull();
+      expect(recipe.imageKey).toMatch(SERVER_PATTERN);
+    });
+  });
+
+  // They address one shared object each, so a duplicate is two recipes
+  // wearing the same photo rather than a harmless collision.
+  it('gives each recipe its own key', () => {
+    const keys = STARTER_RECIPES.map((recipe) => recipe.imageKey);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe('parsing', () => {
   it('runs every ingredient line through parseQuantity without throwing', () => {
     for (const recipe of STARTER_RECIPES) {

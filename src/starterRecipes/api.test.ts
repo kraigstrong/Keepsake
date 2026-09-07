@@ -39,6 +39,26 @@ function sentRecipes(): SentRecipe[] {
 afterEach(() => jest.clearAllMocks());
 
 describe('seedStarterRecipes', () => {
+  // A key, not a path: the RPC expands it (ADR-0029). Sending a path
+  // from here would be handing the client the boundary the seed RPC's
+  // allowlist exists to keep.
+  it('sends each recipe an image key rather than a Storage path', async () => {
+    rpcReturns({ data: { seeded: true, recipe_count: 10 }, error: null });
+
+    await seedStarterRecipes('household-1');
+
+    const payload = mockedRpc.mock.calls[0][1].payload as {
+      recipes: { imageKey: string | null }[];
+    };
+    payload.recipes.forEach((recipe) => {
+      expect(recipe.imageKey).toMatch(/^[a-z0-9-]+$/);
+      expect(recipe.imageKey).not.toContain('/');
+    });
+    expect(payload.recipes).not.toContainEqual(
+      expect.objectContaining({ heroImagePath: expect.anything() }),
+    );
+  });
+
   it('sends all ten recipes to the RPC', async () => {
     rpcReturns({ data: { seeded: true, recipe_count: 10 }, error: null });
 
