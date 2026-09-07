@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { DeleteAccountSection } from './DeleteAccountSection';
 import { deleteAccount, prepareAccountDeletion } from '../account/deleteAccount';
@@ -135,6 +136,10 @@ describe('the confirmation is a sheet, and dismissing it is safe (#193)', () => 
     // Only a ScrollView carries this, so it doubles as the assertion
     // that the content is scrollable at all.
     expect(content.props.keyboardShouldPersistTaps).toBe('handled');
+    // And bounded, or there is nothing for it to scroll within: Sheet
+    // grows to fit its content, so an unbounded ScrollView inside one
+    // never overflows and never scrolls.
+    expect(StyleSheet.flatten(content.props.style).maxHeight).toBeGreaterThan(0);
   });
 
   // Backdrop tap and drag-down reach onDismiss, which a sheet asking

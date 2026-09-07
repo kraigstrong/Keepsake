@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import {
   deleteAccount,
@@ -60,6 +60,7 @@ function describe(mode: DeletionMode): string {
 }
 
 export function DeleteAccountSection() {
+  const { height: windowHeight } = useWindowDimensions();
   const [stage, setStage] = useState<Stage>({ kind: 'idle' });
   const [typed, setTyped] = useState('');
 
@@ -177,17 +178,27 @@ export function DeleteAccountSection() {
         )}
 
         {stage.kind === 'confirming' && (
-          // Scrollable because this is the one sheet in the app whose
+          // Bounded and scrollable, because this is the one sheet whose
           // content can outgrow the space the keyboard leaves — the
           // consequence text is a paragraph, and it grows further under
           // Dynamic Type. Being unable to read what is about to be
           // deleted, on the screen asking you to confirm it, is the
-          // failure this issue is about; solving it only for the button
-          // would not be solving it. keyboardShouldPersistTaps for the
-          // same reason SettingsScreen uses it (#128): otherwise the
-          // first tap on Delete is swallowed to dismiss the keyboard.
+          // failure #193 is about; solving it only for the button would
+          // not be solving it.
+          //
+          // Bounded here rather than in Sheet: Sheet has four other
+          // consumers, and giving all of them a height rule to fix one
+          // is a wider change than this is. Library's filter sheet
+          // already carries its own maxHeight for the same reason. Half
+          // the window is the largest this can be and still clear a
+          // keyboard on the smallest supported device — the device pass
+          // #193 asks for is what confirms it.
+          //
+          // keyboardShouldPersistTaps for the same reason SettingsScreen
+          // uses it (#128): otherwise the first tap on Delete is
+          // swallowed to dismiss the keyboard.
           <ScrollView
-            style={styles.sheetScroll}
+            style={{ maxHeight: windowHeight * 0.5 }}
             contentContainerStyle={styles.sheetContent}
             keyboardShouldPersistTaps="handled"
             testID="settings-delete-account-confirm"
@@ -229,9 +240,6 @@ export function DeleteAccountSection() {
 }
 
 const styles = StyleSheet.create({
-  sheetScroll: {
-    flexShrink: 1,
-  },
   sheetContent: {
     gap: spacing.sm,
   },

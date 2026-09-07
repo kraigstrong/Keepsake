@@ -181,7 +181,6 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
             styles.sheet,
             { transform: [{ translateY: Animated.add(sheetTranslateY, clampedDragY) }] },
           ]}
-          testID={testID ? `${testID}-surface` : undefined}
         >
           <PanGestureHandler
             onGestureEvent={onDragGestureEvent}
@@ -211,13 +210,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   sheet: {
-    // Never taller than the screen. React Native defaults flexShrink to
-    // 0 (unlike the web), so without this a sheet whose content exceeds
-    // the space left by the keyboard grows off the *top* of a flex-end
-    // container — not clipped, not scrollable, just unreachable. Content
-    // long enough to need it supplies its own ScrollView; this is what
-    // gives that ScrollView a height to scroll within.
-    flexShrink: 1,
     backgroundColor: colors.background,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,

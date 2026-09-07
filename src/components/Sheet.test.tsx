@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { useReducedMotion } from '../accessibility/useReducedMotion';
 import { Sheet } from './Sheet';
@@ -65,22 +65,6 @@ describe('Sheet', () => {
 
     expect(screen.getByTestId('sheet').props.animationType).toBe('none');
     expect(screen.getByTestId('sheet-backdrop')).toBeOnTheScreen();
-  });
-
-  // React Native defaults flexShrink to 0, so without this a sheet whose
-  // content outgrows the space the keyboard leaves grows off the *top*
-  // of its flex-end container — not clipped, not scrollable, just
-  // unreachable (Codex, PR #195). Asserted structurally because the
-  // overflow itself only exists under a real layout pass.
-  it('bounds itself to the screen so tall content cannot grow off the top', async () => {
-    await render(
-      <Sheet visible onDismiss={() => {}} testID="sheet">
-        <Text>Sheet content</Text>
-      </Sheet>,
-    );
-
-    const style = StyleSheet.flatten(screen.getByTestId('sheet-surface').props.style);
-    expect(style.flexShrink).toBe(1);
   });
 
   // The grabber's actual drag-to-dismiss physics (PanGestureHandler
