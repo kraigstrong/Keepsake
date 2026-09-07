@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { DeleteAccountSection } from './DeleteAccountSection';
 import { deleteAccount, prepareAccountDeletion } from '../account/deleteAccount';
@@ -110,6 +111,145 @@ describe('nothing destructive happens until the phrase is typed', () => {
       expect(screen.getByTestId('settings-delete-account-confirm')).toBeOnTheScreen(),
     );
     expect(screen.getByTestId('settings-delete-account-confirm-button')).toBeDisabled();
+  });
+});
+
+describe('the confirmation is a sheet, and dismissing it is safe (#193)', () => {
+  // The keyboard covered the confirm button and the consequence text
+  // while the confirmation was an inline section at the bottom of
+  // Settings. Sheet carries the KeyboardAvoidingView that fixes it.
+  it('presents the confirmation in the sheet', async () => {
+    await openConfirmation();
+
+    expect(screen.getByTestId('settings-delete-account-sheet')).toBeOnTheScreen();
+  });
+
+  // The consequence text is a paragraph, and it grows under Dynamic
+  // Type. On a small device with the keyboard up it can outgrow the
+  // sheet, and being unable to read what is about to be deleted — on
+  // the screen asking you to confirm it — is the same failure this
+  // issue is about (Codex, PR #195).
+  it('lets the confirmation scroll when it outgrows the sheet', async () => {
+    await openConfirmation();
+
+    const content = screen.getByTestId('settings-delete-account-confirm');
+    // Only a ScrollView carries this, so it doubles as the assertion
+    // that the content is scrollable at all.
+    expect(content.props.keyboardShouldPersistTaps).toBe('handled');
+    // And bounded, or there is nothing for it to scroll within: Sheet
+    // grows to fit its content, so an unbounded ScrollView inside one
+    // never overflows and never scrolls.
+    expect(StyleSheet.flatten(content.props.style).maxHeight).toBeGreaterThan(0);
+  });
+
+  // Backdrop tap and drag-down reach onDismiss, which a sheet asking
+  // about something irreversible has to treat as "no".
+  it('treats a dismiss as keeping the account', async () => {
+    await openConfirmation();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('settings-delete-account-input'), 'delete');
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Dismiss'));
+    });
+
+    expect(screen.queryByTestId('settings-delete-account-confirm')).toBeNull();
+    expect(mockedDelete).not.toHaveBeenCalled();
+  });
+
+  it('ignores a dismiss while the deletion is running', async () => {
+    let finish!: (result: { outcome: string }) => void;
+    mockedDelete.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await openConfirmation();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('settings-delete-account-input'), 'delete');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-confirm-button'));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-delete-account-progress')).toBeOnTheScreen(),
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Dismiss'));
+    });
+
+    expect(screen.getByTestId('settings-delete-account-progress')).toBeOnTheScreen();
+    await act(async () => finish({ outcome: 'deleted' }));
+  });
+
+  // It used to be unmounted while deleting, because the progress view
+  // replaced the whole section. Now it merely sits behind the sheet, and
+  // a modal covering a control is not the same as disabling it.
+  it('cannot re-enter the flow from behind the sheet while deleting', async () => {
+    let finish!: (result: { outcome: string }) => void;
+    mockedDelete.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await openConfirmation();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('settings-delete-account-input'), 'delete');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-confirm-button'));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-delete-account-progress')).toBeOnTheScreen(),
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-button'));
+    });
+
+    expect(mockedPrepare).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('settings-delete-account-progress')).toBeOnTheScreen();
+    await act(async () => finish({ outcome: 'deleted' }));
+  });
+
+  // Closing the sheet to report this would put the message at the bottom
+  // of Settings' scroll view, away from where the person is looking.
+  it('keeps a failure after confirming inside the sheet', async () => {
+    mockedDelete.mockResolvedValue({ outcome: 'failed', message: 'Something went wrong.' });
+    await openConfirmation();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('settings-delete-account-input'), 'delete');
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-confirm-button'));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-delete-account-confirm-error')).toBeOnTheScreen(),
+    );
+    expect(screen.getByTestId('settings-delete-account-sheet')).toBeOnTheScreen();
+    expect(String(screen.getByTestId('settings-delete-account-error').props.children)).toContain(
+      'Something went wrong.',
+    );
+  });
+
+  // A prepare that never got as far as the confirmation has no sheet to
+  // report into.
+  it('reports a failed prepare in the section, not the sheet', async () => {
+    mockedPrepare.mockRejectedValue(new Error('offline'));
+    await render(<DeleteAccountSection />);
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('settings-delete-account-button'));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-delete-account-error')).toBeOnTheScreen(),
+    );
+    expect(screen.queryByTestId('settings-delete-account-confirm-error')).toBeNull();
   });
 });
 
