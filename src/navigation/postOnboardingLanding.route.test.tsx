@@ -88,7 +88,9 @@ jest.mock('../supabase/instance', () => ({
       }
       if (table === 'planning_entries') {
         return {
-          select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
+          select: () => ({
+            eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+          }),
         };
       }
       return {
