@@ -123,6 +123,20 @@ describe('the confirmation is a sheet, and dismissing it is safe (#193)', () => 
     expect(screen.getByTestId('settings-delete-account-sheet')).toBeOnTheScreen();
   });
 
+  // The consequence text is a paragraph, and it grows under Dynamic
+  // Type. On a small device with the keyboard up it can outgrow the
+  // sheet, and being unable to read what is about to be deleted — on
+  // the screen asking you to confirm it — is the same failure this
+  // issue is about (Codex, PR #195).
+  it('lets the confirmation scroll when it outgrows the sheet', async () => {
+    await openConfirmation();
+
+    const content = screen.getByTestId('settings-delete-account-confirm');
+    // Only a ScrollView carries this, so it doubles as the assertion
+    // that the content is scrollable at all.
+    expect(content.props.keyboardShouldPersistTaps).toBe('handled');
+  });
+
   // Backdrop tap and drag-down reach onDismiss, which a sheet asking
   // about something irreversible has to treat as "no".
   it('treats a dismiss as keeping the account', async () => {

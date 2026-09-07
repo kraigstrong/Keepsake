@@ -115,6 +115,15 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
     const { translationY, velocityY } = event.nativeEvent;
     if (translationY > DISMISS_DISTANCE || velocityY > DISMISS_VELOCITY) {
       onDismiss();
+      // A consumer may decline to close — DeleteAccountSection ignores
+      // dismissal while a deletion is running. Leaving the drag offset
+      // in place would strand the sheet part-way down the screen with
+      // no gesture left to correct it, since the reset below only runs
+      // when `visible` actually goes false. setValue, not a spring:
+      // when the dismissal *is* honoured, Modal may already be tearing
+      // the view down, and a native-driven animation on a gone view
+      // crashes (see this file's header).
+      dragY.setValue(0);
       return;
     }
     Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
@@ -172,6 +181,7 @@ export function Sheet({ visible, onDismiss, children, testID }: SheetProps) {
             styles.sheet,
             { transform: [{ translateY: Animated.add(sheetTranslateY, clampedDragY) }] },
           ]}
+          testID={testID ? `${testID}-surface` : undefined}
         >
           <PanGestureHandler
             onGestureEvent={onDragGestureEvent}
@@ -201,6 +211,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   sheet: {
+    // Never taller than the screen. React Native defaults flexShrink to
+    // 0 (unlike the web), so without this a sheet whose content exceeds
+    // the space left by the keyboard grows off the *top* of a flex-end
+    // container — not clipped, not scrollable, just unreachable. Content
+    // long enough to need it supplies its own ScrollView; this is what
+    // gives that ScrollView a height to scroll within.
+    flexShrink: 1,
     backgroundColor: colors.background,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,

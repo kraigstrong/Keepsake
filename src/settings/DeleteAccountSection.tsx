@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   deleteAccount,
@@ -177,7 +177,21 @@ export function DeleteAccountSection() {
         )}
 
         {stage.kind === 'confirming' && (
-          <View style={styles.sheetContent} testID="settings-delete-account-confirm">
+          // Scrollable because this is the one sheet in the app whose
+          // content can outgrow the space the keyboard leaves — the
+          // consequence text is a paragraph, and it grows further under
+          // Dynamic Type. Being unable to read what is about to be
+          // deleted, on the screen asking you to confirm it, is the
+          // failure this issue is about; solving it only for the button
+          // would not be solving it. keyboardShouldPersistTaps for the
+          // same reason SettingsScreen uses it (#128): otherwise the
+          // first tap on Delete is swallowed to dismiss the keyboard.
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={styles.sheetContent}
+            keyboardShouldPersistTaps="handled"
+            testID="settings-delete-account-confirm"
+          >
             <Text style={styles.warningTitle}>Delete your account?</Text>
             <Text style={styles.body} testID="settings-delete-account-consequence">
               {describe(stage.plan.mode)}
@@ -207,7 +221,7 @@ export function DeleteAccountSection() {
               variant="secondary"
               onPress={dismiss}
             />
-          </View>
+          </ScrollView>
         )}
       </Sheet>
     </View>
@@ -215,6 +229,9 @@ export function DeleteAccountSection() {
 }
 
 const styles = StyleSheet.create({
+  sheetScroll: {
+    flexShrink: 1,
+  },
   sheetContent: {
     gap: spacing.sm,
   },
