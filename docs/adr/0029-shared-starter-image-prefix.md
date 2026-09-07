@@ -15,7 +15,13 @@ rows, and the Help Me Choose deck and This Week look bare for the same reason
 The proposal's §4 anticipated this exactly. It chose "ship without images,
 shoot them yourself later", and wrote an escape hatch into the option it
 rejected: fall back to a licensed stock source "only if a device pass says
-images are needed". That condition has now been met.
+images are needed before Phase A and waiting on a camera is not acceptable".
+
+Both halves. The device pass is #192. The second half was answered
+deliberately on 2026-09-06: shooting the ten photos first would put the work on
+the developer and gate the beta archive (#163), and that was judged not
+acceptable for this milestone — with the images replaceable later, which is
+what the rest of this ADR is about.
 
 The constraint that shaped this decision is `recipe-images`. Every one of its
 four policies (`20260802120800_recipe_images_storage.sql`) gates on
@@ -41,11 +47,19 @@ band, with the service role.
 `'starters/' || key || '.jpg'` itself. The RPC already builds its `save_recipe`
 payload as an allowlist that deliberately excludes `heroImagePath`
 (`20260901100000`); forwarding a client-supplied path would have widened that
-boundary, and a validated key keeps it closed — a caller cannot aim
-`hero_image_path` outside the shared prefix.
+boundary, and a validated key keeps it closed — **through this RPC**, a caller
+cannot aim `hero_image_path` outside the shared prefix.
 
-A null or absent `imageKey` yields a null path. Every surface already renders
-`ImagePlaceholder` for one.
+That is a statement about seeding, not a global one. `save_recipe` is granted to
+`authenticated` and writes `hero_image_path` from its payload unvalidated, so
+any user can already put any string in that column on their own recipes. What
+this preserves is the seeding path's own allowlist, not a guarantee the schema
+does not make.
+
+A null or absent `imageKey` yields a null path, which every surface already
+handles: Recipe Detail, the editor and This Week render `ImagePlaceholder`, and
+Help Me Choose's `CardFace` renders its typographic card. So the images and the
+keys need not ship together.
 
 ## Alternatives considered
 
@@ -67,11 +81,29 @@ theoretical, because seeding calls an RPC and so needs the network regardless.
 
 ## Consequences
 
-**The images stay replaceable.** This is the point, and it is what reverses
-§4's objection. Because every seeded recipe points at the same object,
-replacing `starters/<key>.jpg` upgrades every household that has already
-seeded, retroactively, with no backfill and no migration. Shipping licensed
-stock now and replacing it with real photography later are no longer exclusive.
+**The images stay cheaply replaceable — but not "in place".** This is the
+point, and it is what reverses §4's objection, so it is worth stating exactly
+rather than optimistically.
+
+`src/sync/imageCache.ts` is a durable local mirror keyed by path, with no
+revalidation, no ETag and no TTL: `ensureImageCached` returns the cached file
+whenever the row exists and the file is still there, and only LRU eviction over
+its byte budget, an iOS cache purge or the sign-out wipe clears it. Sync
+pre-caches every hero image, so a tester who has seeded has all ten on disk
+within one pass. **Overwriting `starters/<key>.jpg` therefore reaches new
+installs only** — existing devices keep the old bytes indefinitely.
+
+Replacing an image for everyone means uploading under a new key and running one
+`update public.recipes set hero_image_path = ... where hero_image_path = ...`
+against a single shared value. That is still far cheaper than what §4 feared,
+which was copying objects into every household's own Storage and rewriting rows
+per household — but it is a migration, not a no-op, and it is the honest reason
+shipping licensed stock now and real photography later are no longer exclusive.
+
+(The signed-URL cache in `src/recipes/heroImage.ts` is not part of this: a
+signed URL resolves its object at request time, so it would serve new bytes for
+an unchanged path. Its comment claiming paths are never reused has been amended
+— that was true until this ADR.)
 
 **Security.** This is the first object in `recipe-images` not scoped by
 household, so it is a genuine widening of what an authenticated user can read.
@@ -87,6 +119,23 @@ load-bearing, because sweeping it would break every other household.
 
 **A deleted household leaves its starter images alone**, which is correct: they
 were never that household's to delete.
+
+**Permanently deleting a seeded starter asks Storage to remove the shared
+object.** `permanentlyDeleteRecipe` (`src/recipes/api.ts`) passes the row's
+`hero_image_path` to `storage.remove()`, so a user emptying Recently Deleted
+sends `remove(['starters/<key>.jpg'])` — against an object every other
+household depends on. It is refused, because no write policy matches the
+prefix, and the refusal is swallowed there by design. This is the same
+"load-bearing by accident" shape as the deletion sweep above, and it is now
+recorded at that call site so nothing makes that path throw without knowing.
+
+**A photo-import job can name a starter image.** `import-recipe` accepts an
+unvalidated `photoPath` and reads it under the caller's JWT, so now that the
+prefix is readable a caller can produce a recipe whose `original_photo_path`
+points into it — a path the orphan sweep never lists and `permanentlyDeleteRecipe`
+cannot remove. No data is exposed that the caller could not already read, and
+existing import abuse controls bound it. Tracked separately rather than fixed
+here.
 
 **Operational.** Placing the objects is a service-role step against staging and
 production, not a migration — see `docs/deploying-starter-images.md`. Recipes

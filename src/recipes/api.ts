@@ -376,6 +376,13 @@ export async function restoreRecipe(recipeId: string): Promise<void> {
 // point, and an orphaned object is the same accepted low-severity gap
 // as T15, not a reason to surface an error for an action that, from the
 // user's perspective, already completed.
+//
+// That swallow is now load-bearing for a second case (ADR-0029).
+// Permanently deleting a seeded starter recipe asks Storage to remove
+// "starters/<key>.jpg" — an object every other household depends on.
+// It survives because no write policy matches the shared prefix, so the
+// removal is refused and the refusal is dropped here. Worth knowing
+// before anything makes this path throw.
 export async function permanentlyDeleteRecipe(recipeId: string): Promise<void> {
   const { data, error } = await supabase.rpc('permanently_delete_recipe', {
     recipe_id: recipeId,

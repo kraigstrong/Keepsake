@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(21);
+select plan(23);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'alice@example.test'),
@@ -31,6 +31,11 @@ values ('recipe-images', 'starters/sheet-pan-chicken.jpg', null);
 
 insert into storage.objects (bucket_id, name, owner)
 values ('recipe-images', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/private.jpg', null);
+
+-- Stands in for an operator slip: something under the prefix that the
+-- app can never reference, because no valid key expands to it.
+insert into storage.objects (bucket_id, name, owner)
+values ('recipe-images', 'starters/operator-notes.txt', null);
 
 -- ---------- the path helper cannot escape the prefix ----------
 
@@ -144,9 +149,9 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
 
--- Household A already has a recipe from the fixture above, which the
--- emptiness guard would refuse, so this seeds household B's member
--- instead. B has no recipes.
+-- Seeded as household B's member. Either household would do -- the
+-- fixture above inserts storage objects, not recipes, so neither has any
+-- and the RPC's emptiness guard is satisfied by both.
 set local role authenticated;
 select set_config('request.jwt.claims',
   json_build_object('sub', '22222222-2222-2222-2222-222222222222', 'role', 'authenticated')::text, true);
@@ -183,6 +188,21 @@ select is(
   (select hero_image_path from public.recipes where title = 'Escaping Starter'),
   null,
   'a key that tries to escape the prefix yields no path at all');
+
+-- The policy grants exactly what starter_image_path can produce, so an
+-- object placed under the prefix by an operator slip is not
+-- world-readable just for being there.
+select is(
+  (select count(*) from storage.objects
+   where bucket_id = 'recipe-images' and name = 'starters/operator-notes.txt'),
+  0::bigint,
+  'a non-conforming object under the prefix is not readable');
+
+select is(
+  (select count(*) from storage.objects
+   where bucket_id = 'recipe-images' and name = 'starters/sheet-pan-chicken.jpg'),
+  1::bigint,
+  'while a conforming one still is');
 
 select * from finish();
 rollback;

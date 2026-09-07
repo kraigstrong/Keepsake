@@ -16,7 +16,13 @@ create policy "Anyone signed in can read the shared starter images"
   to authenticated
   using (
     bucket_id = 'recipe-images'
-    and (storage.foldername(name))[1] = 'starters'
+    -- Matched against the exact shape starter_image_path can produce,
+    -- not the whole prefix. Granting the prefix would make anything ever
+    -- placed under it world-readable to every signed-in user, including
+    -- something put there by an operator slip -- a stray backup, a
+    -- notes file. This way the readable set is exactly the set the app
+    -- can actually reference.
+    and name ~ '^starters/[a-z0-9-]{1,64}\.jpg$'
   );
 
 -- No write policy, deliberately, and none is needed to keep this prefix
@@ -52,6 +58,11 @@ as $$
     else null
   end;
 $$;
+
+-- Matching the convention every other function here follows: nothing is
+-- executable by `public` by default.
+revoke all on function public.starter_image_path(text) from public;
+grant execute on function public.starter_image_path(text) to authenticated;
 
 comment on function public.starter_image_path(text) is
   'ADR-0029. Expands a starter recipe''s image key to its shared-prefix Storage
