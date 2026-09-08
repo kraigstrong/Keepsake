@@ -145,18 +145,33 @@ describe('image keys (ADR-0029)', () => {
   // would report it.
   const SERVER_PATTERN = /^[a-z0-9-]{1,64}$/;
 
-  it('gives every starter recipe a key the seed RPC will accept', () => {
+  // Null is a supported state, not a gap — a recipe without a photo
+  // renders its placeholder, and most of these have no photo yet. What
+  // must never happen is a key the RPC will silently reject.
+  it('gives every key it does set a shape the seed RPC will accept', () => {
     STARTER_RECIPES.forEach((recipe) => {
-      expect(recipe.imageKey).not.toBeNull();
+      if (recipe.imageKey === null) return;
       expect(recipe.imageKey).toMatch(SERVER_PATTERN);
     });
   });
 
-  // They address one shared object each, so a duplicate is two recipes
-  // wearing the same photo rather than a harmless collision.
-  it('gives each recipe its own key', () => {
-    const keys = STARTER_RECIPES.map((recipe) => recipe.imageKey);
+  // Keys address one shared object each, so a duplicate is two recipes
+  // wearing the same photo rather than a harmless collision. Nulls are
+  // exempt: several recipes having no photo is the normal case.
+  it('gives each recipe that has a key its own', () => {
+    const keys = STARTER_RECIPES.map((recipe) => recipe.imageKey).filter(
+      (key): key is string => key !== null,
+    );
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  // Guards the smoke test in production: this is the one recipe with an
+  // object uploaded behind it (docs/deploying-starter-images.md), so a
+  // rename here would quietly turn the only starter photo into a
+  // placeholder.
+  it('keeps the one key that has an image behind it', () => {
+    const bolognese = STARTER_RECIPES.find((recipe) => recipe.title === 'Weeknight Bolognese');
+    expect(bolognese?.imageKey).toBe('weeknight-bolognese');
   });
 });
 

@@ -20,7 +20,7 @@ export const STARTER_SOURCE_ATTRIBUTION = 'Keepsake starter recipe';
 export const STARTER_RECIPES: StarterRecipe[] = [
   {
     title: 'Sheet-Pan Chicken Thighs with Potatoes and Lemon',
-    imageKey: 'sheet-pan-chicken-thighs',
+    imageKey: null,
     permanentNotes:
       'Crisp-skinned thighs and browned potatoes off one pan, with lemon slices that soften into the juices.',
     activeTimeMinutes: 15,
@@ -62,6 +62,15 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Weeknight Bolognese',
+    // The only one with an object behind it. Licensed stock for the other
+    // nine was tried and abandoned (#192, ADR-0029) — the usable free
+    // corpus is CC BY / CC BY-SA, which needs an attribution surface this
+    // app has nowhere to put, and the CC0 corpus for food turns out to be
+    // museum and Wikimedia material rather than food photography. Nine
+    // nulls rather than nine dangling keys on purpose: a key with no
+    // object still costs a failed signed-URL request per recipe on every
+    // sync pass, forever (src/sync/syncEngine.ts's cacheHeroImages skips
+    // a null path outright).
     imageKey: 'weeknight-bolognese',
     permanentNotes:
       'A short-simmer meat sauce built on milk and tomato paste — an hour, not an afternoon, and it freezes well.',
@@ -111,7 +120,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Ground Beef Tacos with Quick Cabbage Slaw',
-    imageKey: 'ground-beef-tacos',
+    imageKey: null,
     permanentNotes:
       'Skillet beef with a proper spice mix instead of a packet, and a sharp lime slaw that comes together while it simmers.',
     activeTimeMinutes: 25,
@@ -167,7 +176,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Garlic Shrimp and Broccoli Stir-Fry',
-    imageKey: 'garlic-shrimp-stir-fry',
+    imageKey: null,
     permanentNotes:
       'Twenty minutes start to finish, one pan, and a sauce whisked together before anything hits the heat.',
     activeTimeMinutes: 20,
@@ -211,7 +220,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Slow Cooker Pulled Pork',
-    imageKey: 'slow-cooker-pulled-pork',
+    imageKey: null,
     permanentNotes:
       'Fifteen minutes of work, eight hours of nothing, and enough for a crowd or a week of leftovers.',
     activeTimeMinutes: 15,
@@ -257,7 +266,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Black Bean and Sweet Potato Chili',
-    imageKey: 'black-bean-sweet-potato-chili',
+    imageKey: null,
     permanentNotes:
       'One pot, pantry ingredients, and better the next day. Mash some of the sweet potato at the end and it thickens itself.',
     activeTimeMinutes: 15,
@@ -305,7 +314,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Skillet Mac and Cheese',
-    imageKey: 'skillet-mac-and-cheese',
+    imageKey: null,
     permanentNotes:
       'The pasta cooks in the milk, so the starch does the thickening and there is no roux and no second pot.',
     activeTimeMinutes: 25,
@@ -347,7 +356,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Buttermilk Pancakes',
-    imageKey: 'buttermilk-pancakes',
+    imageKey: null,
     permanentNotes:
       'A standard batter that rests ten minutes while the pan heats, which is most of the difference between good and great.',
     activeTimeMinutes: 15,
@@ -390,7 +399,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Brown Butter Chocolate Chip Cookies',
-    imageKey: 'brown-butter-chocolate-chip-cookies',
+    imageKey: null,
     permanentNotes:
       'Browning the butter first is seven extra minutes and the only thing that separates these from any other cookie.',
     activeTimeMinutes: 25,
@@ -442,7 +451,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Grilled Lemon-Herb Chicken',
-    imageKey: 'grilled-lemon-herb-chicken',
+    imageKey: null,
     permanentNotes:
       'A marinade you can mix in a minute and leave for eight hours, and it works just as well in a grill pan indoors.',
     activeTimeMinutes: 15,

@@ -136,7 +136,9 @@ So the offer must be suppressed once the household has seeded, falling back to t
 **Superseded 2026-09-06 — see ADR-0029 and #192.** The escape hatch in option 2 below fired: a device pass on build 6 found a brand-new library reads as ten text rows, so licensed stock ships for the beta after all. Two things changed the calculus, and both are in ADR-0029:
 
 - The images now live **once**, at a shared `starters/` prefix, not copied per household. That defuses "What raises the stakes" below: replacing them costs one upload under a new key plus a single `update` against one shared path, instead of copying objects into every household. Not free — see ADR-0029 on the local image cache — but cheap enough that stock now and your own photography later stopped being exclusive.
-- Shooting them yourself is still the ending. It is now an in-place swap of ten objects rather than a backfill, and PR 5 stays exactly as scoped.
+- Shooting them yourself is still the ending — and as of 2026-09-08 it is the *only* plan again, because option 2 was tried and abandoned. See ADR-0029 for what sourcing actually turned up: the usable free corpus is CC BY / CC BY-SA, whose attribution and ShareAlike terms this app has nowhere to satisfy, and the CC0 corpus for food is museum and Wikimedia material. §4's "cheap" was the premise for reversing the original decision, and it did not hold.
+
+What survives is that the photos can now land **one at a time**, against a shared object, instead of all ten needing to exist before any household seeds. Weeknight Bolognese has a real photograph; the other nine carry no key and render their placeholder.
 
 The original decision, and the reasoning that still stands, follows unchanged.
 

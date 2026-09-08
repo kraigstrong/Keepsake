@@ -51,9 +51,13 @@ describe('seedStarterRecipes', () => {
       recipes: { imageKey: string | null }[];
     };
     payload.recipes.forEach((recipe) => {
+      // Null is the normal case for now — most starters have no photo.
+      if (recipe.imageKey === null) return;
       expect(recipe.imageKey).toMatch(/^[a-z0-9-]+$/);
       expect(recipe.imageKey).not.toContain('/');
     });
+    // And at least one is actually sent, or this asserts nothing.
+    expect(payload.recipes.some((recipe) => recipe.imageKey !== null)).toBe(true);
     expect(payload.recipes).not.toContainEqual(
       expect.objectContaining({ heroImagePath: expect.anything() }),
     );

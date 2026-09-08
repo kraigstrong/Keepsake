@@ -13,14 +13,24 @@ is exactly why putting objects there has to happen out of band.
 
 ## The ten keys
 
-The key is the filename, minus `.jpg`. They come from
-`src/starterRecipes/content.ts`, and a test asserts each one matches the
-`^[a-z0-9-]{1,64}$` pattern the database enforces.
+The key is the filename, minus `.jpg`. It comes from
+`src/starterRecipes/content.ts`, and a test asserts any key that is set matches
+the `^[a-z0-9-]{1,64}$` pattern the database enforces.
+
+**Only one key is set today.** Licensed stock for the rest was tried and
+abandoned — ADR-0029 records what sourcing actually turned up — so the other
+nine are `imageKey: null` and render a placeholder. They are null rather than
+dangling on purpose: a key with no object behind it still costs a failed
+signed-URL request per recipe on every sync pass, indefinitely, while null is
+skipped outright.
+
+Adding a photo is therefore two steps in either order: upload the object, and
+set that recipe's `imageKey`. Nothing needs all ten to exist.
 
 | Recipe                                           | Object                                       |
 | ------------------------------------------------ | -------------------------------------------- |
 | Sheet-Pan Chicken Thighs with Potatoes and Lemon | `starters/sheet-pan-chicken-thighs.jpg`      |
-| Weeknight Bolognese                              | `starters/weeknight-bolognese.jpg`           |
+| Weeknight Bolognese **(uploaded)**               | `starters/weeknight-bolognese.jpg`           |
 | Ground Beef Tacos with Quick Cabbage Slaw        | `starters/ground-beef-tacos.jpg`             |
 | Garlic Shrimp and Broccoli Stir-Fry              | `starters/garlic-shrimp-stir-fry.jpg`        |
 | Slow Cooker Pulled Pork                          | `starters/slow-cooker-pulled-pork.jpg`       |
@@ -44,17 +54,36 @@ view. So these can go up one at a time.
 - **No larger than 1200×1200**, matching `MAX_DIMENSION` in
   `src/recipes/heroImage.ts`. Bigger buys nothing and costs every device's
   image cache, which has a byte budget (ADR-0013).
-- **Stripped of EXIF.** The app re-encodes a user's photo specifically to drop
-  location and device metadata; a shipped asset should not be the exception.
-  Re-saving through any editor does it.
+- **Stripped of EXIF, verified rather than assumed.** The app re-encodes a
+  user's photo specifically to drop location and device metadata; a shipped
+  asset should not be the exception. "Strip EXIF" means different things
+  depending on the tool — several leave an APP1 segment behind, and GPS tags are
+  numeric, so grepping the file for "GPS" proves nothing. Check it:
+
+  ```bash
+  python3 -c "from PIL import Image; im=Image.open('FILE'); \
+    print(dict(im.getexif())); print('gps:', dict(im.getexif().get_ifd(0x8825)))"
+  ```
+
+  Both should be empty. Converting Display P3 to sRGB at the same time is worth
+  it — the app's own uploads land in sRGB, and a P3 JPEG can render differently
+  on surfaces that ignore the profile.
 
 ## Licensing
 
 Whatever ships must permit **commercial use without attribution** — Keepsake is
 intended to be charged for eventually, and there is nowhere in the UI for a
-credit line. `docs/proposals/starter-recipes.md` §4 settled the sourcing
-question: Unsplash and Pexels both qualify, CC0 sources qualify, and anything
-scraped from a recipe site does not, however it is credited.
+credit line.
+
+The plan is now that these are **your own photographs**, which sidesteps the
+question entirely. Licensed stock was tried and abandoned; ADR-0029 records why,
+and the short version is that the free corpus with usable food photography is
+CC BY / CC BY-SA, whose attribution and ShareAlike terms have nowhere to live
+here. Anything scraped from a recipe site was never an option, however credited.
+
+If you do source one externally, record where it came from in this file when you
+place it — photographer, URL, license, date. These licenses are bespoke and can
+change, and "where did this come from" is much harder to answer a year later.
 
 Record where each image came from, in this file, when you place it. The point is
 that a year from now the answer is written down rather than remembered.

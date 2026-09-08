@@ -17,11 +17,30 @@ shoot them yourself later", and wrote an escape hatch into the option it
 rejected: fall back to a licensed stock source "only if a device pass says
 images are needed before Phase A and waiting on a camera is not acceptable".
 
-Both halves. The device pass is #192. The second half was answered
-deliberately on 2026-09-06: shooting the ten photos first would put the work on
-the developer and gate the beta archive (#163), and that was judged not
-acceptable for this milestone — with the images replaceable later, which is
-what the rest of this ADR is about.
+Both halves. The device pass is #192. The second half was answered on
+2026-09-06 — shooting the ten photos first would gate the beta archive (#163)
+— and then **reversed on 2026-09-08, after trying it.** §4 assumed licensed
+stock was cheap, and that assumption was the whole basis for overriding the
+2026-08-30 decision. It did not survive:
+
+- Unsplash and Pexels permit commercial use without attribution, but their
+  search results are now largely paid-stock funnels, and Foodiesfeed has become
+  an iStock affiliate.
+- Openverse's usable food photography is overwhelmingly CC BY / CC BY-SA. Both
+  require crediting the creator, which needs a surface this app does not have;
+  ShareAlike also applies to adaptations, and the square crop and re-encode
+  every shipped asset needs makes one.
+- Filtering Openverse to CC0 returns, for "bolognese", mostly Renaissance
+  paintings from Bologna, dogs of that breed, and churches in Sant'Agata
+  Bolognese. The food photographs that remain are documentary restaurant
+  snapshots. The dishes §4 already flagged as hard — the chili, the mac and
+  cheese, the skillet tacos — are worse.
+
+So the images ship as they are taken, which is where §4 landed in the first
+place. What this ADR still buys is that they can now be taken and added one at
+a time, against a shared object, instead of all ten needing to exist before any
+household seeds. One recipe (Weeknight Bolognese) carries a real photograph, as
+much to prove the path works end to end in production as to fill the screen.
 
 The constraint that shaped this decision is `recipe-images`. Every one of its
 four policies (`20260802120800_recipe_images_storage.sql`) gates on
