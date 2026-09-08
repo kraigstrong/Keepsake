@@ -156,7 +156,7 @@ cannot remove. No data is exposed that the caller could not already read, and
 existing import abuse controls bound it. Tracked separately rather than fixed
 here.
 
-**Operational.** Placing the objects is a service-role step against staging and
-production, not a migration — see `docs/deploying-starter-images.md`. Recipes
+**Operational.** Placing the objects is a service-role step against the live
+project, not a migration — see `docs/deploying-starter-images.md`. Recipes
 seeded before the objects exist render `ImagePlaceholder` and start showing the
 image the moment it lands, since the path is resolved per view.

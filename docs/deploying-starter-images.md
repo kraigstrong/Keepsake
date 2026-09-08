@@ -101,8 +101,10 @@ Upload through the Supabase dashboard's Storage browser
 your dashboard session rather than putting a service-role key on a command line
 at all. That is the recommended route, and for ten files it is also the fastest.
 
-**Do this in staging and production separately.** They are different projects
-with different buckets; nothing about the migration copies objects between them.
+**There is one Supabase project today**, so this is one upload. If a separate
+staging project ever appears — the plan is that it does before this is charged
+for — remember that objects do not travel between projects: nothing about
+pushing the migration copies them, so each environment needs its own upload.
 
 ## Verifying
 
@@ -132,5 +134,6 @@ set hero_image_path = 'starters/<new-key>.jpg'
 where hero_image_path = 'starters/<old-key>.jpg';
 ```
 
-That is a write against production data — treat it with the care ADR-0028's
-service-role exception describes, and take a backup first.
+That is a write against the live database that real accounts are using — treat
+it with the care ADR-0028's service-role exception describes, and take a backup
+first.
