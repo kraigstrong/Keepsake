@@ -24,8 +24,34 @@ dangling on purpose: a key with no object behind it still costs a failed
 signed-URL request per recipe on every sync pass, indefinitely, while null is
 skipped outright.
 
-Adding a photo is therefore two steps in either order: upload the object, and
-set that recipe's `imageKey`. Nothing needs all ten to exist.
+Adding a photo is therefore **three** steps: upload the object, set that
+recipe's `imageKey`, and backfill the households that have already seeded.
+Nothing needs all ten to exist.
+
+That third step is easy to miss and invisible when missed. `seed_starter_recipes`
+stamps `starter_recipes_seeded_at` and refuses to run twice, so a household that
+took the offer before a photo existed has a starter row with a null
+`hero_image_path` and no way to get one from seeding again. Its library keeps
+showing placeholders no matter what you upload:
+
+```sql
+update public.recipes
+set hero_image_path = public.starter_image_path('<key>'),
+    updated_at = now()
+where source_attribution = 'Keepsake starter recipe'
+  and title = '<the recipe title, exactly>'
+  and hero_image_path is null;
+```
+
+`updated_at = now()` is not optional. `recipes.updated_at` is a plain column
+default with no trigger, and sync pages by it — an update that leaves it alone
+changes the server and reaches no device. `hero_image_path is null` is what
+stops this overwriting a photo the owner chose for themselves.
+
+`supabase/migrations/20260908120000_backfill_starter_image_paths.sql` is this
+statement for the first photo, and `backfill_starter_image_paths.test.sql`
+pins the guards. Either write one per photo or run the statement by hand — but
+do one of them.
 
 | Recipe                                           | Object                                       |
 | ------------------------------------------------ | -------------------------------------------- |

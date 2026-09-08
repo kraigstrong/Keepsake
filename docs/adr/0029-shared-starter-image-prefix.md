@@ -156,6 +156,16 @@ cannot remove. No data is exposed that the caller could not already read, and
 existing import abuse controls bound it. Tracked separately rather than fixed
 here.
 
+**Seed-time assignment only reaches households that have not seeded yet.**
+`seed_starter_recipes` stamps `starter_recipes_seeded_at` and refuses a second
+run, so a household that took the offer before a given photo existed keeps a
+null `hero_image_path` forever and shows a placeholder however many objects are
+uploaded (Codex, PR #198). Every photo added therefore needs a backfill as well
+as an upload — one that bumps `updated_at`, because sync pages by it and
+`recipes.updated_at` has no trigger. See
+`docs/deploying-starter-images.md` and
+`supabase/migrations/20260908120000_backfill_starter_image_paths.sql`.
+
 **Operational.** Placing the objects is a service-role step against the live
 project, not a migration — see `docs/deploying-starter-images.md`. Recipes
 seeded before the objects exist render `ImagePlaceholder` and start showing the
