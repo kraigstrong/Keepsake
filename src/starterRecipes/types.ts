@@ -30,6 +30,20 @@ export interface StarterRecipe {
   categories: StarterCategoryRef[];
   /** Lowercase, trimmed, free-form. No new taxonomy values (proposal decision C). */
   tags: string[];
+  /**
+   * Names the shared image at `starters/<imageKey>.jpg` (ADR-0029) — a
+   * key, never a path. The seed RPC validates it and builds the path
+   * itself, so nothing here can point `hero_image_path` at another
+   * household's Storage.
+   *
+   * Null, or a key whose object has not been uploaded yet, renders
+   * `ImagePlaceholder` like any other recipe without a photo. Because
+   * every household points at the same object, replacing it upgrades
+   * households that already seeded — which is what lets licensed stock
+   * ship now and real photography replace it later
+   * (`docs/proposals/starter-recipes.md` §4).
+   */
+  imageKey: string | null;
   ingredientSections: RecipeSection[];
   instructionSections: RecipeSection[];
 }

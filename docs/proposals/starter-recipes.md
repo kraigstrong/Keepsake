@@ -133,6 +133,15 @@ So the offer must be suppressed once the household has seeded, falling back to t
 
 ## 4. Images
 
+**Superseded 2026-09-06 — see ADR-0029 and #192.** The escape hatch in option 2 below fired: a device pass on build 6 found a brand-new library reads as ten text rows, so licensed stock ships for the beta after all. Two things changed the calculus, and both are in ADR-0029:
+
+- The images now live **once**, at a shared `starters/` prefix, not copied per household. That defuses "What raises the stakes" below: replacing them costs one upload under a new key plus a single `update` against one shared path, instead of copying objects into every household. Not free — see ADR-0029 on the local image cache — but cheap enough that stock now and your own photography later stopped being exclusive.
+- Shooting them yourself is still the ending — and as of 2026-09-08 it is the *only* plan again, because option 2 was tried and abandoned. See ADR-0029 for what sourcing actually turned up: the usable free corpus is CC BY / CC BY-SA, whose attribution and ShareAlike terms this app has nowhere to satisfy, and the CC0 corpus for food is museum and Wikimedia material. §4's "cheap" was the premise for reversing the original decision, and it did not hold.
+
+What survives is that the photos can now land **one at a time**, against a shared object, instead of all ten needing to exist before any household seeds. Weeknight Bolognese has a real photograph; the other nine carry no key and render their placeholder.
+
+The original decision, and the reasoning that still stands, follows unchanged.
+
 **Decision (2026-08-30): ship without images, and shoot them yourself when you get to it.** PR 5 below stays scoped as a strictly additive follow-on so the photos can land weeks later without touching anything else.
 
 ### Why not a source site's photo, with attribution
@@ -156,7 +165,7 @@ The same reasoning rules out importing the ten **recipes** from published source
 
 ### What raises the stakes
 
-**Whatever ships is frozen for every household that already seeded.** The upload happens once, at seed time, into that household's Storage. Swapping the bundled asset in a later build only affects households seeding *after* it — fixing an existing one means a backfill against Storage. This is closer to a one-shot decision than a normal asset you can iterate on, which is part of why "no photo" beats "a photo you will want to replace."
+**Whatever ships is frozen for every household that already seeded.** (Much weaker as of ADR-0029, which is why the decision above changed. A shared object means replacement is one Storage upload plus a single `update recipes ... where hero_image_path = ...`, not a per-household backfill — though the durable local image cache means existing devices keep the old bytes until the path changes, so it is a migration rather than nothing. The reasoning is kept because it is what made "no photo" the right call for PRs 1-4.) The upload happens once, at seed time, into that household's Storage. Swapping the bundled asset in a later build only affects households seeding *after* it — fixing an existing one means a backfill against Storage. This is closer to a one-shot decision than a normal asset you can iterate on, which is part of why "no photo" beats "a photo you will want to replace."
 
 ### Options, for the record
 

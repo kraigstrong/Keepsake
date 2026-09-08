@@ -40,6 +40,10 @@ export async function seedStarterRecipes(householdId: string): Promise<SeedStart
           permanentNotes: recipe.permanentNotes,
           sourceAttribution: STARTER_SOURCE_ATTRIBUTION,
           tags: recipe.tags,
+          // A key, not a path — the RPC validates it and builds
+          // "starters/<key>.jpg" itself (ADR-0029), so this cannot aim
+          // hero_image_path anywhere but the shared prefix.
+          imageKey: recipe.imageKey,
           // Resolved to ids by the RPC — ids are environment-specific.
           categories: recipe.categories,
           ingredientSections: recipe.ingredientSections.map((section) => ({

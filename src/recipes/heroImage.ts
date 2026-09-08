@@ -92,9 +92,16 @@ export async function uploadHeroImage(householdId: string, localUri: string): Pr
 // which can genuinely run more than once as a nested tab screen's focus
 // settles) hands its <Image> a changed `uri` for an unchanged photo,
 // which visibly re-fetches/redecodes. Safe to cache by path for the
-// session: a hero image's path is a fresh random id per upload (see
+// session: a user's hero image path is a fresh random id per upload (see
 // uploadHeroImage above), never reused, so a cached URL can't ever point
-// at stale content. Entries do still expire, though — Storage's own
+// at stale content. The starter images (ADR-0029) are the one shared,
+// replaceable path, and they are safe here for a different reason: a
+// signed URL resolves its object at request time, so an unexpired URL
+// for a replaced path serves the new bytes. The durable local mirror in
+// src/sync/imageCache.ts is the layer that genuinely holds stale bytes
+// — see ADR-0029 on what replacing a starter image actually costs.
+//
+// Entries do still expire, though — Storage's own
 // signed-URL lifetime — since a long-lived app process (RN apps can sit
 // backgrounded for a long time without being killed) would otherwise
 // keep handing out a URL Storage has already stopped honoring, with no
