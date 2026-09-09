@@ -12,9 +12,18 @@ const mockedStorageFrom = supabase.storage.from as jest.Mock;
 const mockedFrom = supabase.from as jest.Mock;
 const mockedLogError = logError as jest.Mock;
 
-const NOW = new Date('2026-08-18T00:00:00Z');
-const OLD = '2026-07-01T00:00:00Z'; // 48 days before NOW
-const RECENT = '2026-08-10T00:00:00Z'; // 8 days before NOW
+// Relative to the real clock rather than fixed dates, because the
+// threshold these sit either side of moves and they did not.
+// findOrphanedOriginalPhotos takes `now` as a parameter, but
+// sweepOrphanedOriginalPhotos reads `new Date()` itself, so the tests
+// driving the wrapper were measuring fixed fixtures against real time.
+// They were written as NOW=2026-08-18 with RECENT 8 days behind it; on
+// 2026-09-09 RECENT turned 30 days old, crossed the very expiry boundary
+// it existed to sit inside, and failed CI on every open branch at once.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW = new Date();
+const OLD = new Date(NOW.getTime() - 48 * DAY_MS).toISOString(); // well past the 30-day expiry
+const RECENT = new Date(NOW.getTime() - 8 * DAY_MS).toISOString(); // well inside it
 
 describe('findOrphanedOriginalPhotos', () => {
   it('excludes objects referenced by a recipe, even if old', () => {
