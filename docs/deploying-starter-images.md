@@ -122,10 +122,46 @@ is a **named pipe (FIFO)** served live by a 1Password process. Never `cat` it,
 and never echo the service-role key: it bypasses RLS entirely and is the one
 credential that can write this prefix.
 
-Upload through the Supabase dashboard's Storage browser
-(`recipe-images` → **New folder** `starters` → upload), which authenticates as
-your dashboard session rather than putting a service-role key on a command line
-at all. That is the recommended route, and for ten files it is also the fastest.
+### `starters` is a folder, not a bucket
+
+This is the mistake to avoid, and it has already been made once (2026-09-08).
+The object must be **`starters/<key>.jpg` inside the existing `recipe-images`
+bucket** — not a new bucket named `starters`.
+
+A separate bucket inherits none of this: every policy in
+`20260802120800_recipe_images_storage.sql` and `20260906120000` is scoped to
+`bucket_id = 'recipe-images'`, so a `starters` bucket has no policies at all,
+is not managed by any migration, and `check:drift` does not assert buckets — so
+nothing would ever tell you it exists. The app would show placeholders and
+everything else would look fine.
+
+### The CLI route, which cannot get the path wrong
+
+```bash
+set -a; source devtools.env; set +a
+npx supabase storage cp ./weeknight-bolognese.jpg \
+  ss:///recipe-images/starters/weeknight-bolognese.jpg --experimental
+```
+
+The path is explicit, so there is nothing to misread. Then confirm it is where
+you think:
+
+```bash
+npx supabase storage ls ss:///recipe-images/starters/ --experimental
+```
+
+An empty result means it went somewhere else. Compare against
+`npx supabase storage ls --experimental`, which lists buckets — if `starters`
+appears *there*, it was created as a bucket and needs deleting after the file is
+copied to the right place.
+
+### Or the dashboard
+
+Storage browser → open the **existing** `recipe-images` bucket → **New folder**
+`starters` → upload into it. Authenticates as your dashboard session, so no
+service-role key touches a command line. Just be deliberate about opening the
+bucket first: the "New bucket" and "New folder" buttons are easy to confuse, and
+that is exactly how the mistake above happened.
 
 **There is one Supabase project today**, so this is one upload. If a separate
 staging project ever appears — the plan is that it does before this is charged
