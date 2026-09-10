@@ -41,6 +41,17 @@ updates:
       - dependency-name: "@types/jest"
         update-types: ["version-update:semver-major"]
 
+      # Reanimated raises its react-native-worklets peer floor in *minor*
+      # releases, ahead of what the current Expo SDK allows: 4.6.0 wants
+      # worklets 0.12.x while expo-modules-core@57 caps it at ^0.10.0, so
+      # `npm ci` fails to resolve (PR #202, closed for this). Expo pins
+      # reanimated exactly for that reason — let an SDK upgrade move it.
+      # Patches stay open: 4.5.x keeps the 0.10.x - 0.11.x peer range.
+      - dependency-name: "react-native-reanimated"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
