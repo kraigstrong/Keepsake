@@ -559,6 +559,41 @@ it('Select more shows a retryable error and stays on the terminal state if it fa
   expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy();
 });
 
+it('keeps the loading state up while retrying a reload that failed with a deck already loaded (Codex, PR #213)', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+  mockedApi.getSelectionRound.mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-load-error')).toBeTruthy());
+
+  let resolveRetry: ((round: SelectionRound) => void) | undefined;
+  mockedApi.getSelectionRound.mockReturnValueOnce(
+    new Promise<SelectionRound>((resolve) => {
+      resolveRetry = resolve;
+    }),
+  );
+  // Not awaited: the handler is blocked on the pending retry.
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+
+  // The failed reload left the old round in state — rendering it here
+  // would put live Yes/No controls in front of an in-flight reload.
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-loading')).toBeTruthy());
+  expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull();
+
+  await act(async () => resolveRetry!(testRound({ targetCount: 10 })));
+  await waitFor(() => expect(screen.queryByTestId('swipe-deck-loading')).toBeNull());
+});
+
 it('exhausting the deck with at least one yes navigates straight to the shortlist, replacing the deck in the stack', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
   renderDeck();

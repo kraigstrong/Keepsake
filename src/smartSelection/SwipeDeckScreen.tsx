@@ -138,6 +138,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isSelectingMore, setIsSelectingMore] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -253,11 +254,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     }
   }, [roundId, userId]);
 
-  // Clears the error first, so a retry that stalls shows the loading state
-  // rather than a Try again button that appears to do nothing.
-  function retryLoad() {
+  // Holds the loading state for the whole retry, so a stalled retry doesn't
+  // look like a dead button. Clearing loadError alone isn't enough: a reload
+  // can fail with a round already cached, and showing that deck mid-retry
+  // would let a decision race the reload (Codex, PR #213).
+  async function retryLoad() {
+    setIsRetrying(true);
     setLoadError(false);
-    load();
+    await load();
+    setIsRetrying(false);
   }
 
   // useFocusEffect, not a plain useEffect — matches this codebase's own
@@ -539,7 +544,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     );
   }
 
-  if (round === null) {
+  if (round === null || isRetrying) {
     return (
       <View style={styles.screen} testID="swipe-deck-screen">
         <LoadingState label="Setting up your deck…" testID="swipe-deck-loading" />
