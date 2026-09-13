@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -122,6 +122,80 @@ it('shows a loading state, then an error state with retry on failure', async () 
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
 
   await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+});
+
+// A stalled request never settles on React Native (see withTimeout), so
+// without these bounds the screen sits on "Setting up your deck…" for good.
+describe('stalled requests (#170)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('gives up on a stalled load after ten seconds, and Try again shows the loading state', async () => {
+    jest.useFakeTimers();
+    mockedApi.getSelectionRound.mockReturnValue(new Promise<SelectionRound>(() => {}));
+
+    await renderDeck();
+    expect(screen.getByTestId('swipe-deck-loading')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(9_999);
+    });
+    expect(screen.queryByTestId('swipe-deck-load-error')).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.getByTestId('swipe-deck-load-error')).toBeTruthy();
+
+    // Still stalled: the retry must read as in progress, not as a dead button.
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    });
+    expect(screen.getByTestId('swipe-deck-loading')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByTestId('swipe-deck-load-error')).toBeTruthy();
+
+    mockedApi.getSelectionRound.mockResolvedValue(testRound());
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    });
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  });
+
+  it('shows the deck once a stalled hero image prefetch has had its 2.5 seconds', async () => {
+    jest.useFakeTimers();
+    mockedDeckCards.fetchDeckCardDetails.mockResolvedValue(
+      new Map([
+        [
+          'r1',
+          {
+            title: 'Herb Roast Chicken',
+            heroImagePath: 'household-1/chicken.jpg',
+            totalTimeMinutes: 45,
+          },
+        ],
+      ]),
+    );
+    mockedHeroImage.getHeroImageUrls.mockResolvedValue({
+      'household-1/chicken.jpg': 'https://example.com/chicken.jpg',
+    });
+    jest.spyOn(Image, 'prefetch').mockReturnValue(new Promise<boolean>(() => {}));
+
+    await renderDeck();
+    await waitFor(() => expect(Image.prefetch).toHaveBeenCalled());
+
+    await act(async () => {
+      jest.advanceTimersByTime(2_499);
+    });
+    expect(screen.getByTestId('swipe-deck-loading')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
+  });
 });
 
 it('prefetches every resolved hero image url into the native cache before the deck renders', async () => {
@@ -483,6 +557,41 @@ it('Select more shows a retryable error and stays on the terminal state if it fa
     expect(screen.getByText("Couldn't get more suggestions — try again")).toBeTruthy(),
   );
   expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy();
+});
+
+it('keeps the loading state up while retrying a reload that failed with a deck already loaded (Codex, PR #213)', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(testRound({ targetCount: 10 }));
+  renderDeck();
+
+  await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Tacos')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByText('Sourdough Loaf')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-terminal')).toBeTruthy());
+
+  mockedApi.refillSelectionRound.mockResolvedValueOnce({ addedCount: 1 });
+  mockedApi.getSelectionRound.mockRejectedValueOnce(new Error('offline'));
+  await fireEvent.press(screen.getByTestId('swipe-deck-select-more'));
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-load-error')).toBeTruthy());
+
+  let resolveRetry: ((round: SelectionRound) => void) | undefined;
+  mockedApi.getSelectionRound.mockReturnValueOnce(
+    new Promise<SelectionRound>((resolve) => {
+      resolveRetry = resolve;
+    }),
+  );
+  // Not awaited: the handler is blocked on the pending retry.
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+
+  // The failed reload left the old round in state — rendering it here
+  // would put live Yes/No controls in front of an in-flight reload.
+  await waitFor(() => expect(screen.getByTestId('swipe-deck-loading')).toBeTruthy());
+  expect(screen.queryByTestId('swipe-deck-terminal')).toBeNull();
+
+  await act(async () => resolveRetry!(testRound({ targetCount: 10 })));
+  await waitFor(() => expect(screen.queryByTestId('swipe-deck-loading')).toBeNull());
 });
 
 it('exhausting the deck with at least one yes navigates straight to the shortlist, replacing the deck in the stack', async () => {

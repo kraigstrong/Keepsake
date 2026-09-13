@@ -38,6 +38,7 @@ import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 // SelectionRoundCandidate.reasonCodes as plain string[].
 import type { ReasonCode } from '../../server/selection/scoreCandidates';
 import { useSession } from '../session/SessionProvider';
+import { withTimeout } from '../shared/withTimeout';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface SwipeDeckScreenProps {
@@ -64,6 +65,14 @@ const DEFAULT_TARGET_COUNT = 4;
 // rather than the whole deck (up to 24) — Codex, PR #110: awaiting all
 // of them turned a cosmetic warm-up into a long block on a slow network.
 const PREFETCH_WINDOW_SIZE = 6;
+
+// Bounds on load()'s awaits, which otherwise never settle on a stalled
+// request (see withTimeout). The data stage fails into the retryable error
+// state; the prefetch wait only gives up on warming, because the deck is
+// usable while images are still arriving. Same values as HouseholdProvider's
+// load and app/_layout.tsx's This Week wait.
+const LOAD_TIMEOUT_MS = 10_000;
+const PREFETCH_WAIT_MS = 2500;
 
 /**
  * Up to two reason codes arrive per candidate, priority order; only the
@@ -129,6 +138,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isSelectingMore, setIsSelectingMore] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -144,18 +154,35 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      const [roundData, decisions] = await Promise.all([
-        getSelectionRound(roundId),
-        userId
-          ? getMyDecisionsForRound(roundId, userId)
-          : Promise.resolve(new Map<string, SelectionDecisionRecord>()),
-      ]);
+      const { roundData, decisions, sortedCandidates, details, urlsByPath } = await withTimeout(
+        (async () => {
+          const [fetchedRound, fetchedDecisions] = await Promise.all([
+            getSelectionRound(roundId),
+            userId
+              ? getMyDecisionsForRound(roundId, userId)
+              : Promise.resolve(new Map<string, SelectionDecisionRecord>()),
+          ]);
 
-      // Defensive sort even though get_selection_round already orders by
-      // position — this screen must never depend on the RPC's ordering
-      // being trustworthy on its own.
-      const sortedCandidates = [...roundData.candidates].sort((a, b) => a.position - b.position);
-      const details = await fetchDeckCardDetails(sortedCandidates.map((c) => c.recipeId));
+          // Defensive sort even though get_selection_round already orders by
+          // position — this screen must never depend on the RPC's ordering
+          // being trustworthy on its own.
+          const sorted = [...fetchedRound.candidates].sort((a, b) => a.position - b.position);
+          const fetchedDetails = await fetchDeckCardDetails(sorted.map((c) => c.recipeId));
+
+          const heroPaths = [...fetchedDetails.values()]
+            .map((d) => d.heroImagePath)
+            .filter((path): path is string => path !== null);
+          return {
+            roundData: fetchedRound,
+            decisions: fetchedDecisions,
+            sortedCandidates: sorted,
+            details: fetchedDetails,
+            urlsByPath: heroPaths.length > 0 ? await getHeroImageUrls(heroPaths) : null,
+          };
+        })(),
+        LOAD_TIMEOUT_MS,
+        'swipe deck load',
+      );
 
       // Resume position: the first candidate with no existing decision.
       // If every candidate is already decided, start past the end so the
@@ -163,13 +190,8 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       let startIndex = sortedCandidates.findIndex((c) => !decisions.has(c.recipeId));
       if (startIndex === -1) startIndex = sortedCandidates.length;
 
-      const heroPaths = [...details.values()]
-        .map((d) => d.heroImagePath)
-        .filter((path): path is string => path !== null);
       let urls: Record<string, string> = {};
-      if (heroPaths.length > 0) {
-        const urlsByPath = await getHeroImageUrls(heroPaths);
-
+      if (urlsByPath) {
         // Warms the actual bytes into RN's native image cache ahead of
         // render, same technique as src/thisWeek/prefetch.ts's
         // prefetchThisWeek(). Only the next PREFETCH_WINDOW_SIZE cards
@@ -189,7 +211,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             .filter((url): url is string => url !== undefined);
         const prefetch = (url: string) => Image.prefetch(url).catch(() => false);
 
-        await Promise.all(urlsFor((id) => upcomingIds.has(id)).map(prefetch));
+        await withTimeout(
+          Promise.all(urlsFor((id) => upcomingIds.has(id)).map(prefetch)),
+          PREFETCH_WAIT_MS,
+          'swipe deck prefetch',
+        ).catch(() => {});
         Promise.all(urlsFor((id) => !upcomingIds.has(id)).map(prefetch)).catch(() => {});
 
         details.forEach((detail, recipeId) => {
@@ -227,6 +253,17 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       setLoadError(true);
     }
   }, [roundId, userId]);
+
+  // Holds the loading state for the whole retry, so a stalled retry doesn't
+  // look like a dead button. Clearing loadError alone isn't enough: a reload
+  // can fail with a round already cached, and showing that deck mid-retry
+  // would let a decision race the reload (Codex, PR #213).
+  async function retryLoad() {
+    setIsRetrying(true);
+    setLoadError(false);
+    await load();
+    setIsRetrying(false);
+  }
 
   // useFocusEffect, not a plain useEffect — matches this codebase's own
   // established idiom for a load-on-mount screen with a retry callback
@@ -500,14 +537,14 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         <ErrorState
           title="Couldn't load the deck"
           message="Check your connection and try again."
-          onRetry={load}
+          onRetry={retryLoad}
           testID="swipe-deck-load-error"
         />
       </View>
     );
   }
 
-  if (round === null) {
+  if (round === null || isRetrying) {
     return (
       <View style={styles.screen} testID="swipe-deck-screen">
         <LoadingState label="Setting up your deck…" testID="swipe-deck-loading" />
