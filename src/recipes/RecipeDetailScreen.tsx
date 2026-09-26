@@ -1,6 +1,7 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
 import {
@@ -47,6 +48,10 @@ export interface RecipeDetailScreenProps {
   // duplicate detection) rather than creating a new one — changes the
   // toast wording, nothing else.
   wasDuplicate?: boolean;
+  // Still inside an import flow, but arriving back from Edit → Save
+  // rather than straight from the import — keeps the Done action (#217)
+  // without re-firing the toast.
+  fromImport?: boolean;
 }
 
 /**
@@ -59,8 +64,14 @@ export function RecipeDetailScreen({
   recipeId,
   justImported = false,
   wasDuplicate = false,
+  fromImport = false,
 }: RecipeDetailScreenProps) {
   const router = useRouter();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  // Import is always launched from the tabs' add sheet (#217), so Done
+  // pops the whole recipe stack to reveal whichever tab that was.
+  const showImportDone = justImported || fromImport;
   const { session } = useSession();
   const { household } = useHousehold();
   const { showToast } = useToast();
@@ -332,229 +343,246 @@ export function RecipeDetailScreen({
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      testID="recipe-detail-screen"
-    >
-      <View style={styles.heroContainer}>
-        <ImagePlaceholder width="100%" height={200} testID="recipe-hero-placeholder" />
-        {heroImageUrl && (
-          <Animated.Image
-            source={{ uri: heroImageUrl }}
-            style={[styles.heroImage, styles.heroImageOverlay, { opacity: heroOpacity }]}
-            onLoad={() => {
-              Animated.timing(heroOpacity, {
-                toValue: 1,
-                duration: 200,
-                useNativeDriver: true,
-              }).start();
-            }}
-            testID="recipe-hero"
-          />
-        )}
-      </View>
-
-      <Text style={styles.title}>{recipe.title}</Text>
-
-      {timingParts.length > 0 && <Text style={styles.timing}>{timingParts.join(' · ')}</Text>}
-
-      {(categoryValues.length > 0 || recipe.tags.length > 0) && (
-        <View style={styles.chipRow}>
-          {categoryValues.map((value) => (
-            <Chip key={value} label={value} testID={`recipe-detail-category-${value}`} />
-          ))}
-          {recipe.tags.map((tag) => (
-            <Chip key={tag} label={tag} testID={`recipe-detail-tag-${tag}`} />
-          ))}
-        </View>
-      )}
-
-      <View style={styles.scalingControls} testID="recipe-scaling-controls">
-        <View style={styles.chipRow}>
-          {SCALE_PRESETS.map((preset) => (
-            <Chip
-              key={preset.label}
-              label={preset.label}
-              selected={multiplier === preset.multiplier}
-              onPress={() => setMultiplier(preset.multiplier)}
-              testID={`recipe-scale-preset-${preset.multiplier}`}
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        testID="recipe-detail-screen"
+      >
+        <View style={styles.heroContainer}>
+          <ImagePlaceholder width="100%" height={200} testID="recipe-hero-placeholder" />
+          {heroImageUrl && (
+            <Animated.Image
+              source={{ uri: heroImageUrl }}
+              style={[styles.heroImage, styles.heroImageOverlay, { opacity: heroOpacity }]}
+              onLoad={() => {
+                Animated.timing(heroOpacity, {
+                  toValue: 1,
+                  duration: 200,
+                  useNativeDriver: true,
+                }).start();
+              }}
+              testID="recipe-hero"
             />
-          ))}
-        </View>
-
-        {scaledServings != null && (
-          <View style={styles.servingsRow} testID="recipe-servings-stepper">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Fewer servings"
-              onPress={() => adjustServings(-1)}
-              testID="recipe-servings-decrement"
-            >
-              <Text style={styles.servingsButton}>−</Text>
-            </Pressable>
-            <Text style={styles.servingsLabel}>{scaledServings} servings</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="More servings"
-              onPress={() => adjustServings(1)}
-              testID="recipe-servings-increment"
-            >
-              <Text style={styles.servingsButton}>+</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {preferredUnitSystem && (
-          <View style={styles.chipRow}>
-            <Chip
-              label="Original"
-              selected={displayMode === 'original'}
-              onPress={() => setDisplayMode('original')}
-              testID="recipe-display-original"
-            />
-            <Chip
-              label="Preferred"
-              selected={displayMode === 'preferred'}
-              onPress={() => setDisplayMode('preferred')}
-              testID="recipe-display-preferred"
-            />
-          </View>
-        )}
-      </View>
-
-      {displayedIngredientSections.map((section, sectionIndex) => (
-        <View key={sectionIndex} style={styles.section}>
-          <Text style={styles.sectionHeading}>{section.title ?? 'Ingredients'}</Text>
-          {section.lines.map((line, lineIndex) => (
-            <Text key={lineIndex} style={styles.line}>
-              {'•'} {line}
-            </Text>
-          ))}
-        </View>
-      ))}
-
-      {recipe.instructionSections.map((section, sectionIndex) => (
-        <View key={sectionIndex} style={styles.section}>
-          <Text style={styles.sectionHeading}>{section.title ?? 'Instructions'}</Text>
-          {section.lines.map((line, lineIndex) => (
-            <Text key={lineIndex} style={styles.line}>
-              {lineIndex + 1}. {line}
-            </Text>
-          ))}
-        </View>
-      ))}
-
-      {recipe.permanentNotes && (
-        <View style={styles.section}>
-          <Text style={styles.sectionHeading}>Notes</Text>
-          <Text style={styles.line}>{recipe.permanentNotes}</Text>
-        </View>
-      )}
-
-      {(recipe.sourceUrl ?? recipe.sourceAttribution) && (
-        <View style={styles.section}>
-          <Text style={styles.sectionHeading}>Source</Text>
-          {recipe.sourceAttribution && <Text style={styles.line}>{recipe.sourceAttribution}</Text>}
-          {recipe.sourceUrl && (
-            <Pressable
-              onPress={() => openExternalUrl(recipe.sourceUrl)}
-              testID="recipe-detail-source-url"
-            >
-              <Text style={[styles.line, styles.link]}>{recipe.sourceUrl}</Text>
-            </Pressable>
           )}
         </View>
-      )}
 
-      {cookingHistory.length > 0 && (
-        <View style={styles.section} testID="recipe-detail-cooking-history">
-          <Text style={styles.sectionHeading}>Cooking History</Text>
-          {/* Already newest-first (getCookingHistory) — NOTE-03's "newest
+        <Text style={styles.title}>{recipe.title}</Text>
+
+        {timingParts.length > 0 && <Text style={styles.timing}>{timingParts.join(' · ')}</Text>}
+
+        {(categoryValues.length > 0 || recipe.tags.length > 0) && (
+          <View style={styles.chipRow}>
+            {categoryValues.map((value) => (
+              <Chip key={value} label={value} testID={`recipe-detail-category-${value}`} />
+            ))}
+            {recipe.tags.map((tag) => (
+              <Chip key={tag} label={tag} testID={`recipe-detail-tag-${tag}`} />
+            ))}
+          </View>
+        )}
+
+        <View style={styles.scalingControls} testID="recipe-scaling-controls">
+          <View style={styles.chipRow}>
+            {SCALE_PRESETS.map((preset) => (
+              <Chip
+                key={preset.label}
+                label={preset.label}
+                selected={multiplier === preset.multiplier}
+                onPress={() => setMultiplier(preset.multiplier)}
+                testID={`recipe-scale-preset-${preset.multiplier}`}
+              />
+            ))}
+          </View>
+
+          {scaledServings != null && (
+            <View style={styles.servingsRow} testID="recipe-servings-stepper">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fewer servings"
+                onPress={() => adjustServings(-1)}
+                testID="recipe-servings-decrement"
+              >
+                <Text style={styles.servingsButton}>−</Text>
+              </Pressable>
+              <Text style={styles.servingsLabel}>{scaledServings} servings</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="More servings"
+                onPress={() => adjustServings(1)}
+                testID="recipe-servings-increment"
+              >
+                <Text style={styles.servingsButton}>+</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {preferredUnitSystem && (
+            <View style={styles.chipRow}>
+              <Chip
+                label="Original"
+                selected={displayMode === 'original'}
+                onPress={() => setDisplayMode('original')}
+                testID="recipe-display-original"
+              />
+              <Chip
+                label="Preferred"
+                selected={displayMode === 'preferred'}
+                onPress={() => setDisplayMode('preferred')}
+                testID="recipe-display-preferred"
+              />
+            </View>
+          )}
+        </View>
+
+        {displayedIngredientSections.map((section, sectionIndex) => (
+          <View key={sectionIndex} style={styles.section}>
+            <Text style={styles.sectionHeading}>{section.title ?? 'Ingredients'}</Text>
+            {section.lines.map((line, lineIndex) => (
+              <Text key={lineIndex} style={styles.line}>
+                {'•'} {line}
+              </Text>
+            ))}
+          </View>
+        ))}
+
+        {recipe.instructionSections.map((section, sectionIndex) => (
+          <View key={sectionIndex} style={styles.section}>
+            <Text style={styles.sectionHeading}>{section.title ?? 'Instructions'}</Text>
+            {section.lines.map((line, lineIndex) => (
+              <Text key={lineIndex} style={styles.line}>
+                {lineIndex + 1}. {line}
+              </Text>
+            ))}
+          </View>
+        ))}
+
+        {recipe.permanentNotes && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Notes</Text>
+            <Text style={styles.line}>{recipe.permanentNotes}</Text>
+          </View>
+        )}
+
+        {(recipe.sourceUrl ?? recipe.sourceAttribution) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Source</Text>
+            {recipe.sourceAttribution && (
+              <Text style={styles.line}>{recipe.sourceAttribution}</Text>
+            )}
+            {recipe.sourceUrl && (
+              <Pressable
+                onPress={() => openExternalUrl(recipe.sourceUrl)}
+                testID="recipe-detail-source-url"
+              >
+                <Text style={[styles.line, styles.link]}>{recipe.sourceUrl}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {cookingHistory.length > 0 && (
+          <View style={styles.section} testID="recipe-detail-cooking-history">
+            <Text style={styles.sectionHeading}>Cooking History</Text>
+            {/* Already newest-first (getCookingHistory) — NOTE-03's "newest
               note preview appears near top" is exactly this ordering,
               not a separate preview element. */}
-          {cookingHistory.map((event) => (
-            <View key={event.id} style={styles.cookingHistoryRow}>
-              <Text style={styles.line}>{formatCookedAt(event.cookedAt)}</Text>
-              {event.note && <Text style={styles.cookingHistoryNote}>{event.note}</Text>}
-            </View>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.actions}>
-        <Pressable
-          style={styles.editButton}
-          accessibilityRole="button"
-          onPress={() => router.push(`/recipe/${recipeId}/edit`)}
-          testID="recipe-detail-edit-button"
-        >
-          <Text style={styles.editButtonLabel}>Edit</Text>
-        </Pressable>
-        {recipe.version > 1 && (
-          <Pressable
-            style={styles.editButton}
-            accessibilityRole="button"
-            onPress={() => router.push(`/recipe/${recipeId}/history`)}
-            testID="recipe-detail-history-button"
-          >
-            <Text style={styles.editButtonLabel}>History</Text>
-          </Pressable>
+            {cookingHistory.map((event) => (
+              <View key={event.id} style={styles.cookingHistoryRow}>
+                <Text style={styles.line}>{formatCookedAt(event.cookedAt)}</Text>
+                {event.note && <Text style={styles.cookingHistoryNote}>{event.note}</Text>}
+              </View>
+            ))}
+          </View>
         )}
-        {recipe.originalPhotoPath && (
+
+        <View style={styles.actions}>
           <Pressable
             style={styles.editButton}
             accessibilityRole="button"
             onPress={() =>
-              router.push(
-                `/recipe/${recipeId}/original-photo?path=${encodeURIComponent(recipe.originalPhotoPath!)}`,
-              )
+              router.push(`/recipe/${recipeId}/edit${showImportDone ? '?fromImport=1' : ''}`)
             }
-            testID="recipe-detail-original-photo-button"
+            testID="recipe-detail-edit-button"
           >
-            <Text style={styles.editButtonLabel}>Original Photo</Text>
+            <Text style={styles.editButtonLabel}>Edit</Text>
           </Pressable>
-        )}
-        <Pressable
-          style={styles.editButton}
-          accessibilityRole="button"
-          onPress={handleToggleArchive}
-          testID="recipe-detail-archive-button"
-        >
-          <Text style={styles.editButtonLabel}>{recipe.archivedAt ? 'Unarchive' : 'Archive'}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.editButton}
-          accessibilityRole="button"
-          onPress={handleDelete}
-          testID="recipe-detail-delete-button"
-        >
-          <Text style={styles.editButtonLabel}>Delete</Text>
-        </Pressable>
-      </View>
+          {recipe.version > 1 && (
+            <Pressable
+              style={styles.editButton}
+              accessibilityRole="button"
+              onPress={() => router.push(`/recipe/${recipeId}/history`)}
+              testID="recipe-detail-history-button"
+            >
+              <Text style={styles.editButtonLabel}>History</Text>
+            </Pressable>
+          )}
+          {recipe.originalPhotoPath && (
+            <Pressable
+              style={styles.editButton}
+              accessibilityRole="button"
+              onPress={() =>
+                router.push(
+                  `/recipe/${recipeId}/original-photo?path=${encodeURIComponent(recipe.originalPhotoPath!)}`,
+                )
+              }
+              testID="recipe-detail-original-photo-button"
+            >
+              <Text style={styles.editButtonLabel}>Original Photo</Text>
+            </Pressable>
+          )}
+          <Pressable
+            style={styles.editButton}
+            accessibilityRole="button"
+            onPress={handleToggleArchive}
+            testID="recipe-detail-archive-button"
+          >
+            <Text style={styles.editButtonLabel}>
+              {recipe.archivedAt ? 'Unarchive' : 'Archive'}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.editButton}
+            accessibilityRole="button"
+            onPress={handleDelete}
+            testID="recipe-detail-delete-button"
+          >
+            <Text style={styles.editButtonLabel}>Delete</Text>
+          </Pressable>
+        </View>
 
-      <Button
-        title="Start Cooking"
-        onPress={() => router.push(`/recipe/${recipeId}/cook`)}
-        testID="recipe-detail-start-cooking"
-      />
+        <Button
+          title="Start Cooking"
+          onPress={() => router.push(`/recipe/${recipeId}/cook`)}
+          testID="recipe-detail-start-cooking"
+        />
 
-      {/* LIFE-01 (ADR-0025): Archive hides a recipe from Planning —
+        {/* LIFE-01 (ADR-0025): Archive hides a recipe from Planning —
           add_to_weekly_plan now rejects an archived recipe id
           server-side, so this stays hidden rather than offering a
           button that would just error. Not shown for a deleted recipe
           either, but Recipe Detail is never reached for one (Recently
           Deleted doesn't navigate into it), so archivedAt is the only
           state this actually needs to check. */}
-      {!recipe.archivedAt && (
-        <Button
-          title="Add to This Week"
-          variant="secondary"
-          onPress={handleAddToThisWeek}
-          testID="recipe-detail-add-to-this-week"
-        />
+        {!recipe.archivedAt && (
+          <Button
+            title="Add to This Week"
+            variant="secondary"
+            onPress={handleAddToThisWeek}
+            testID="recipe-detail-add-to-this-week"
+          />
+        )}
+      </ScrollView>
+      {showImportDone && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Button
+            title="Done"
+            onPress={() => navigation.getParent()?.goBack()}
+            testID="recipe-detail-import-done"
+          />
+        </View>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -571,6 +599,12 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   heroContainer: {
     width: '100%',

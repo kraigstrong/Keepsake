@@ -23,6 +23,10 @@ function renderRecipeDetailScreen(props: RecipeDetailScreenProps) {
 }
 
 jest.mock('./api');
+jest.mock(
+  'react-native-safe-area-context',
+  () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
+);
 jest.mock('./heroImage');
 jest.mock('../components/confirm');
 // formatCookedAt stays real (jest.requireActual) — this suite asserts
@@ -45,6 +49,7 @@ jest.mock('../thisWeek/api');
 let mockLastFocusEffect: (() => void) | null = null;
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
+  useNavigation: () => ({ getParent: () => ({ goBack: mockParentGoBack }) }),
   useFocusEffect: jest.fn((effect: () => void) => {
     if (effect !== mockLastFocusEffect) {
       mockLastFocusEffect = effect;
@@ -70,6 +75,7 @@ const mockedConfirm = confirm as jest.Mock;
 
 const push = jest.fn();
 const back = jest.fn();
+const mockParentGoBack = jest.fn();
 
 const recipe: api.Recipe = {
   id: 'recipe-1',
@@ -368,6 +374,46 @@ it('shows no toast when navigated to normally (not from an import)', async () =>
 
   expect(screen.queryByText('Recipe imported')).toBeNull();
   expect(screen.queryByText('Already in your library')).toBeNull();
+});
+
+it('offers a Done action after an import that returns to the originating tab', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1', justImported: true });
+
+  await fireEvent.press(screen.getByTestId('recipe-detail-import-done'));
+
+  // Pops the whole recipe stack, not just this screen — back() alone
+  // would land on the earlier detail screen after an Edit → Save.
+  expect(mockParentGoBack).toHaveBeenCalledTimes(1);
+  expect(back).not.toHaveBeenCalled();
+});
+
+it('keeps the Done action, without the toast, when returning from an edit mid-import', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1', fromImport: true });
+
+  expect(screen.getByTestId('recipe-detail-import-done')).toBeTruthy();
+  expect(screen.queryByText('Recipe imported')).toBeNull();
+});
+
+it('shows no Done action when navigated to normally', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+  expect(screen.queryByTestId('recipe-detail-import-done')).toBeNull();
+});
+
+it('carries the import context into the editor', async () => {
+  mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+  await renderRecipeDetailScreen({ recipeId: 'recipe-1', justImported: true });
+
+  await fireEvent.press(screen.getByTestId('recipe-detail-edit-button'));
+
+  expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit?fromImport=1');
 });
 
 it('adds the recipe to This Week at the currently selected multiplier', async () => {
