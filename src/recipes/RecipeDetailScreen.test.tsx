@@ -578,6 +578,35 @@ describe('refreshing on refocus', () => {
     expect(screen.queryByTestId('recipe-hero')).toBeNull();
   });
 
+  it('does not let a slower initial fetch overwrite the refreshed recipe', async () => {
+    mockedOfflineRecipes.readLocalRecipe.mockResolvedValue(recipe);
+    let resolveInitial: (value: api.Recipe) => void = () => {};
+    mockedApi.fetchRecipe.mockReturnValueOnce(new Promise((resolve) => (resolveInitial = resolve)));
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, title: 'Lemon Roast Chicken' });
+    await refocus();
+    expect(screen.getByText('Lemon Roast Chicken')).toBeTruthy();
+
+    await act(async () => resolveInitial(recipe));
+    expect(screen.getByText('Lemon Roast Chicken')).toBeTruthy();
+  });
+
+  it('does not let a slower initial hero load bring back a removed image', async () => {
+    let resolveInitialHero: (value: string) => void = () => {};
+    mockedHeroImage.getHeroImageUrl.mockReturnValueOnce(
+      new Promise((resolve) => (resolveInitialHero = resolve)),
+    );
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, heroImagePath: null });
+    await refocus();
+
+    await act(async () => resolveInitialHero('https://signed.example.com/existing.jpg'));
+    expect(screen.queryByTestId('recipe-hero')).toBeNull();
+  });
+
   it('keeps showing the recipe when the refresh fails', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(recipe);
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });

@@ -109,6 +109,10 @@ export function RecipeDetailScreen({
   // Which recipe the focus effect below last ran for — tells a refocus
   // apart from the first focus, which the load effect already covers.
   const focusedRecipeIdRef = useRef<string | null>(null);
+  // Bumped by every recipe load/refresh. Only the newest may write the
+  // recipe or hero image — the initial load isn't cancelled on blur, so a
+  // slow pre-save response could otherwise land after a refocus refresh.
+  const loadGenerationRef = useRef(0);
 
   const loadHeroImage = useCallback(
     async (heroImagePath: string | null, isCancelled: () => boolean) => {
@@ -182,15 +186,17 @@ export function RecipeDetailScreen({
         .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
 
       if (focusedRecipeIdRef.current === recipeId) {
+        const generation = ++loadGenerationRef.current;
+        const isStale = () => cancelled || loadGenerationRef.current !== generation;
         fetchRecipe(recipeId)
           .then((freshRecipe) => {
-            if (cancelled) return;
+            if (isStale()) return;
             setRecipe(freshRecipe);
             if (freshRecipe.heroImagePath !== heroPathRef.current) {
               heroOpacity.setValue(0);
               heroPathRef.current = null;
               setHeroImageUrl(null);
-              loadHeroImage(freshRecipe.heroImagePath, () => cancelled);
+              loadHeroImage(freshRecipe.heroImagePath, isStale);
             }
           })
           .catch(() => undefined); // offline — what's already showing stands
@@ -207,7 +213,8 @@ export function RecipeDetailScreen({
     let cancelled = false;
     heroOpacity.setValue(0);
 
-    const isCancelled = () => cancelled;
+    const generation = ++loadGenerationRef.current;
+    const isStale = () => cancelled || loadGenerationRef.current !== generation;
 
     // Local-first (ADR-0013 / OFF-01): a cache hit shows instantly and
     // works offline. A live fetch always runs alongside/after it too —
@@ -234,7 +241,7 @@ export function RecipeDetailScreen({
           setRecipe(localRecipe);
           setCategories(localCategories);
           setIsLoading(false);
-          loadHeroImage(localRecipe.heroImagePath, isCancelled);
+          loadHeroImage(localRecipe.heroImagePath, isStale);
         }
       }
 
@@ -244,11 +251,12 @@ export function RecipeDetailScreen({
           fetchCategories(),
         ]);
         if (cancelled) return;
-        setRecipe(freshRecipe);
         setCategories(freshCategories);
         setIsLoading(false);
         setLoadError(false);
-        loadHeroImage(freshRecipe.heroImagePath, isCancelled);
+        if (isStale()) return;
+        setRecipe(freshRecipe);
+        loadHeroImage(freshRecipe.heroImagePath, isStale);
       } catch {
         if (cancelled || haveData) return;
         setLoadError(true);
