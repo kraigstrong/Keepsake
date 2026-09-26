@@ -36,6 +36,9 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface RecipeEditorScreenProps {
   recipeId?: string;
+  // Passed back to the detail screen on save so it keeps its import
+  // Done action (#217).
+  fromImport?: boolean;
 }
 
 const GROUP_LABELS: Record<CategoryGroup, string> = {
@@ -69,7 +72,7 @@ function toEditableIngredientSections(
  * recipe is loaded first, so one form covers both rather than forking
  * into separate screens.
  */
-export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
+export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEditorScreenProps) {
   const router = useRouter();
   const { household } = useHousehold();
 
@@ -306,7 +309,7 @@ export function RecipeEditorScreen({ recipeId }: RecipeEditorScreenProps) {
         instructionSections: cleanSections(instructionSections),
       };
       const { id } = await saveRecipe(payload);
-      router.replace(`/recipe/${id}`);
+      router.replace(`/recipe/${id}${fromImport ? '?fromImport=1' : ''}`);
     } catch (err) {
       if (isRecipeConflictError(err)) {
         setHasConflict(true);

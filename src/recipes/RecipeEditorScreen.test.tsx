@@ -234,6 +234,17 @@ describe('RecipeEditorScreen — edit mode', () => {
     expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
   }, 15000);
 
+  it('returns to the detail screen still inside the import flow when editing mid-import', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+
+    await render(<RecipeEditorScreen recipeId="recipe-1" fromImport />);
+
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(replace).toHaveBeenCalledWith('/recipe/recipe-1?fromImport=1');
+  }, 15000);
+
   it('prefers an existing draft over the server copy', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
     mockedApi.fetchDraft.mockResolvedValue({
