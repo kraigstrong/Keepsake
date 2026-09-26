@@ -8,6 +8,8 @@ import { act } from 'react';
 import { router } from 'expo-router';
 import { cleanup, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
+import { isRecipeDetailBeneath } from '../recipes/recipeStack';
+
 // End-to-end coverage: the recipe routes (app/recipe/) are reachable
 // through the real authenticated route boundary, not just as isolated
 // component tests — this is what would have caught app/_layout.tsx
@@ -124,8 +126,10 @@ jest.mock('expo-linking', () => ({
 }));
 
 describe('recipe routes', () => {
+  let rendered: ReturnType<typeof renderRouter>;
+
   beforeAll(async () => {
-    renderRouter('./app', { initialUrl: '/' });
+    rendered = renderRouter('./app', { initialUrl: '/' });
     await act(async () => {});
     await waitFor(() => {
       expect(screen.getByTestId('this-week-placeholder')).toBeOnTheScreen();
@@ -200,6 +204,23 @@ describe('recipe routes', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cooking-mode-loading')).toBeOnTheScreen();
     });
+  });
+
+  // Pins the route name/params isRecipeDetailBeneath matches on to the
+  // real recipe Stack (#221) — the editor/history component tests only
+  // see a hand-built state.
+  it('recognizes the detail screen beneath a screen pushed from it', async () => {
+    act(() => router.push('/recipe/recipe-2'));
+    await waitFor(() => expect(rendered.getPathname()).toBe('/recipe/recipe-2'));
+    act(() => router.push('/recipe/recipe-2/edit'));
+    await waitFor(() => expect(rendered.getPathname()).toBe('/recipe/recipe-2/edit'));
+
+    type State = { routes: { name: string; state?: State }[]; index: number };
+    const root = rendered.getRouterState() as unknown as State;
+    const recipeStack = root.routes[0]?.state?.routes.find((r) => r.name === 'recipe')?.state;
+
+    expect(isRecipeDetailBeneath(recipeStack, 'recipe-2')).toBe(true);
+    expect(isRecipeDetailBeneath(recipeStack, 'recipe-1')).toBe(false);
   });
 
   afterAll(() => cleanup());

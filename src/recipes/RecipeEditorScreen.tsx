@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -17,6 +17,7 @@ import {
   saveDraft,
   saveRecipe,
 } from './api';
+import { isRecipeDetailBeneath } from './recipeStack';
 import { parseQuantity } from '../../server/units/parseQuantity';
 import { parseServings } from '../../server/units/parseServings';
 import {
@@ -36,8 +37,8 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export interface RecipeEditorScreenProps {
   recipeId?: string;
-  // Passed back to the detail screen on save so it keeps its import
-  // Done action (#217).
+  // Carried onto the detail screen if save has to replace rather than go
+  // back to it, so it keeps its import Done action (#217).
   fromImport?: boolean;
 }
 
@@ -74,6 +75,7 @@ function toEditableIngredientSections(
  */
 export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEditorScreenProps) {
   const router = useRouter();
+  const navigation = useNavigation();
   const { household } = useHousehold();
 
   const [isLoading, setIsLoading] = useState(recipeId != null);
@@ -309,7 +311,9 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
         instructionSections: cleanSections(instructionSections),
       };
       const { id } = await saveRecipe(payload);
-      router.replace(`/recipe/${id}${fromImport ? '?fromImport=1' : ''}`);
+      // The detail screen beneath refreshes itself on refocus.
+      if (recipeId && isRecipeDetailBeneath(navigation.getState(), recipeId)) router.back();
+      else router.replace(`/recipe/${id}${fromImport ? '?fromImport=1' : ''}`);
     } catch (err) {
       if (isRecipeConflictError(err)) {
         setHasConflict(true);

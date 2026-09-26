@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 
 import * as api from './api';
 import * as heroImage from './heroImage';
@@ -8,7 +8,7 @@ import { useHousehold } from '../household/HouseholdProvider';
 
 jest.mock('./api');
 jest.mock('./heroImage');
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+jest.mock('expo-router', () => ({ useRouter: jest.fn(), useNavigation: jest.fn() }));
 jest.mock('../household/HouseholdProvider', () => ({ useHousehold: jest.fn() }));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
@@ -18,13 +18,24 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedHeroImage = heroImage as jest.Mocked<typeof heroImage>;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseNavigation = useNavigation as jest.Mock;
 const mockedUseHousehold = useHousehold as jest.Mock;
 
 const replace = jest.fn();
+const back = jest.fn();
+
+// The recipe Stack's state as the editor sees it. Defaults to the editor
+// alone (e.g. reached by deep link); tests covering the usual path from
+// the detail screen put that route beneath it.
+function stackWith(...routes: { name: string; params?: { id: string } }[]) {
+  return { index: routes.length - 1, routes };
+}
+const editRoute = { name: '[id]/edit', params: { id: 'recipe-1' } };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedUseRouter.mockReturnValue({ replace });
+  mockedUseRouter.mockReturnValue({ replace, back });
+  mockedUseNavigation.mockReturnValue({ getState: () => stackWith(editRoute) });
   mockedUseHousehold.mockReturnValue({ household: { id: 'household-1' } });
   mockedApi.fetchCategories.mockResolvedValue([
     { id: 'cat-protein-chicken', groupName: 'protein', value: 'Chicken' },
@@ -243,6 +254,38 @@ describe('RecipeEditorScreen — edit mode', () => {
     await fireEvent.press(screen.getByTestId('recipe-save-button'));
 
     expect(replace).toHaveBeenCalledWith('/recipe/recipe-1?fromImport=1');
+  }, 15000);
+
+  // #221: replacing here would stack a second detail screen on top of
+  // the one Edit was pushed from.
+  it("goes back to the recipe's detail screen when Edit was opened from it", async () => {
+    mockedUseNavigation.mockReturnValue({
+      getState: () => stackWith({ name: '[id]/index', params: { id: 'recipe-1' } }, editRoute),
+    });
+    mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+
+    await render(<RecipeEditorScreen recipeId="recipe-1" fromImport />);
+
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(back).toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  }, 15000);
+
+  it("replaces when the screen beneath is a different recipe's detail", async () => {
+    mockedUseNavigation.mockReturnValue({
+      getState: () => stackWith({ name: '[id]/index', params: { id: 'recipe-9' } }, editRoute),
+    });
+    mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+
+    await render(<RecipeEditorScreen recipeId="recipe-1" />);
+
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(back).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
   }, 15000);
 
   it('prefers an existing draft over the server copy', async () => {
