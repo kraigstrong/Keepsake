@@ -149,12 +149,18 @@ function seemsUncertain(extraction: RecipeExtraction): boolean {
   return hasNoIngredients || hasNoInstructions || hasCriticalUncertainty;
 }
 
+// Blank strings don't count — the schema allows them, so `items: [""]`
+// would otherwise pass as content.
+function hasText(lines: string[]): boolean {
+  return lines.some((line) => line.trim().length > 0);
+}
+
 function hasIngredients(extraction: RecipeExtraction): boolean {
-  return extraction.ingredientSections.some((section) => section.items.length > 0);
+  return extraction.ingredientSections.some((section) => hasText(section.items));
 }
 
 function hasInstructions(extraction: RecipeExtraction): boolean {
-  return extraction.instructionSections.some((section) => section.steps.length > 0);
+  return extraction.instructionSections.some((section) => hasText(section.steps));
 }
 
 /**

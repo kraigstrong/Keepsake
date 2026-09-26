@@ -301,6 +301,16 @@ describe('hasRecipeContent (#219)', () => {
     );
   });
 
+  it('treats blank or whitespace-only lines as empty', () => {
+    expect(
+      hasRecipeContent({
+        ...base,
+        ingredientSections: [{ heading: null, items: ['', '  '] }],
+        instructionSections: [{ heading: 'Method', steps: ['\n'] }],
+      }),
+    ).toBe(false);
+  });
+
   it('keeps a partial extraction with only ingredients or only instructions', () => {
     expect(hasRecipeContent({ ...base, instructionSections: noInstructions })).toBe(true);
     expect(hasRecipeContent({ ...base, ingredientSections: noIngredients })).toBe(true);
