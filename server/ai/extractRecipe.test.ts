@@ -5,6 +5,8 @@ import {
   buildImageExtractionSystemPrompt,
   extractRecipe,
   extractRecipeFromImage,
+  hasRecipeContent,
+  type RecipeExtraction,
   RecipeExtractionSchema,
 } from './extractRecipe';
 import { MESSY_RECIPE_PAGE_TEXT } from './fixtures/messyRecipePage';
@@ -264,6 +266,48 @@ describe('extractRecipe — model selection', () => {
 
       expect(client.messages.parse).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('hasRecipeContent (#219)', () => {
+  const base: RecipeExtraction = {
+    title: '22 Chicken Thigh Recipes',
+    activeTimeMinutes: null,
+    totalTimeMinutes: null,
+    yield: null,
+    ingredientSections: [{ heading: null, items: ['1 lb chicken thighs'] }],
+    instructionSections: [{ heading: null, steps: ['Roast it.'] }],
+    suggestedCategories: [],
+    suggestedTags: [],
+    notes: null,
+    uncertainFields: [],
+  };
+  const noIngredients = [{ heading: null, items: [] }];
+  const noInstructions = [{ heading: null, steps: [] }];
+
+  it('rejects an extraction with neither ingredients nor instructions', () => {
+    expect(
+      hasRecipeContent({
+        ...base,
+        ingredientSections: noIngredients,
+        instructionSections: noInstructions,
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects one whose sections are missing entirely', () => {
+    expect(hasRecipeContent({ ...base, ingredientSections: [], instructionSections: [] })).toBe(
+      false,
+    );
+  });
+
+  it('keeps a partial extraction with only ingredients or only instructions', () => {
+    expect(hasRecipeContent({ ...base, instructionSections: noInstructions })).toBe(true);
+    expect(hasRecipeContent({ ...base, ingredientSections: noIngredients })).toBe(true);
+  });
+
+  it('keeps a full extraction', () => {
+    expect(hasRecipeContent(base)).toBe(true);
   });
 });
 
