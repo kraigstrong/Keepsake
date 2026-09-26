@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 import { Linking } from 'react-native';
 
@@ -497,6 +497,97 @@ it('shows a locked-plan-specific toast when the current week is confirmed', asyn
   await waitFor(() =>
     expect(screen.getByText("This week's plan is locked — reopen it to add recipes")).toBeTruthy(),
   );
+});
+
+// #221: the editor and history restore return here with router.back(),
+// to this same still-mounted instance.
+describe('refreshing on refocus', () => {
+  beforeEach(() => {
+    mockedHeroImage.getHeroImageUrl.mockResolvedValue('https://signed.example.com/existing.jpg');
+  });
+
+  async function refocus() {
+    await act(async () => mockLastFocusEffect?.());
+  }
+
+  it('does not refetch the recipe on the first focus', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    expect(mockedApi.fetchRecipe).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the saved changes when refocused, without the loading state', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
+
+    let resolveRefresh: (value: api.Recipe) => void = () => {};
+    mockedApi.fetchRecipe.mockReturnValue(new Promise((resolve) => (resolveRefresh = resolve)));
+    await refocus();
+    expect(screen.queryByTestId('recipe-detail-loading')).toBeNull();
+    expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
+
+    await act(async () => resolveRefresh({ ...recipe, title: 'Lemon Roast Chicken' }));
+    expect(screen.getByText('Lemon Roast Chicken')).toBeTruthy();
+  });
+
+  it('does not reload an unchanged hero image', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+    const heroLoads = mockedOfflineRecipes.readCachedImageUri.mock.calls.length;
+
+    mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, title: 'Lemon Roast Chicken' });
+    await refocus();
+
+    expect(screen.getByText('Lemon Roast Chicken')).toBeTruthy();
+    expect(mockedOfflineRecipes.readCachedImageUri).toHaveBeenCalledTimes(heroLoads);
+    expect(screen.getByTestId('recipe-hero')).toHaveProp('source', {
+      uri: 'https://signed.example.com/existing.jpg',
+    });
+  });
+
+  it('loads a changed hero image', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    mockedHeroImage.getHeroImageUrl.mockImplementation(
+      async (path) => `https://signed.example.com/${path}`,
+    );
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+
+    mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, heroImagePath: 'household-1/new.jpg' });
+    await refocus();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('recipe-hero')).toHaveProp('source', {
+        uri: 'https://signed.example.com/household-1/new.jpg',
+      }),
+    );
+  });
+
+  it('drops the hero image when the edit removed it', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await waitFor(() => expect(screen.getByTestId('recipe-hero')).toBeTruthy());
+
+    mockedApi.fetchRecipe.mockResolvedValue({ ...recipe, heroImagePath: null });
+    await refocus();
+
+    expect(screen.queryByTestId('recipe-hero')).toBeNull();
+  });
+
+  it('keeps showing the recipe when the refresh fails', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    mockedApi.fetchRecipe.mockRejectedValue(new Error('offline'));
+    await refocus();
+
+    expect(screen.getByText('Herb Roast Chicken')).toBeTruthy();
+    expect(screen.queryByTestId('recipe-detail-load-error')).toBeNull();
+  });
 });
 
 describe('cooking history (Phase 15, REC-05/NOTE-01..03)', () => {
