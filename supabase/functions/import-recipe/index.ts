@@ -44,6 +44,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   extractRecipe,
   extractRecipeFromImage,
+  hasRecipeContent,
   type RecipeExtraction,
 } from '../../../server/ai/extractRecipe.ts';
 import { extractHeroImageUrl } from '../../../server/import/extractHeroImageUrl.ts';
@@ -463,6 +464,9 @@ Deno.serve(async (req: Request) => {
         console.error(`Photo recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
       }
+      if (!hasRecipeContent(extraction)) {
+        return await fail(422, "Couldn't find a recipe in this photo.");
+      }
 
       // The uploaded original doubles as the initial hero image (no
       // og:image-equivalent exists for a photo import) — the user can
@@ -506,6 +510,13 @@ Deno.serve(async (req: Request) => {
       } catch (error) {
         console.error(`URL recipe extraction failed for job ${job.id}:`, errorMessage(error));
         return await fail(502, `Recipe extraction failed: ${errorMessage(error)}`);
+      }
+      // Before the hero image fetch, so a rejected page leaves nothing in Storage.
+      if (!hasRecipeContent(extraction)) {
+        return await fail(
+          422,
+          "This page doesn't look like a single recipe. Try a link to one recipe.",
+        );
       }
 
       // Hero image acquisition (IMG-01) — best-effort. A failure here

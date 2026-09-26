@@ -141,16 +141,35 @@ const CRITICAL_FIELDS = new Set(['title', 'ingredientSections', 'instructionSect
  * NOT trigger escalation on its own.
  */
 function seemsUncertain(extraction: RecipeExtraction): boolean {
-  const hasNoIngredients = extraction.ingredientSections.every(
-    (section) => section.items.length === 0,
-  );
-  const hasNoInstructions = extraction.instructionSections.every(
-    (section) => section.steps.length === 0,
-  );
+  const hasNoIngredients = !hasIngredients(extraction);
+  const hasNoInstructions = !hasInstructions(extraction);
   const hasCriticalUncertainty = extraction.uncertainFields.some((field) =>
     CRITICAL_FIELDS.has(field),
   );
   return hasNoIngredients || hasNoInstructions || hasCriticalUncertainty;
+}
+
+// Blank strings don't count — the schema allows them, so `items: [""]`
+// would otherwise pass as content.
+function hasText(lines: string[]): boolean {
+  return lines.some((line) => line.trim().length > 0);
+}
+
+function hasIngredients(extraction: RecipeExtraction): boolean {
+  return extraction.ingredientSections.some((section) => hasText(section.items));
+}
+
+function hasInstructions(extraction: RecipeExtraction): boolean {
+  return extraction.instructionSections.some((section) => hasText(section.steps));
+}
+
+/**
+ * Whether an extraction is worth saving at all (#219). Only a result with
+ * neither ingredients nor instructions is rejected — a partial one is
+ * kept, since the photo prompt deliberately extracts whatever is legible.
+ */
+export function hasRecipeContent(extraction: RecipeExtraction): boolean {
+  return hasIngredients(extraction) || hasInstructions(extraction);
 }
 
 // Anthropic's `messages` content accepts a plain string or an array of
