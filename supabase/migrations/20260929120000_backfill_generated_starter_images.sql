@@ -27,10 +27,10 @@ where r.source_attribution = 'Keepsake starter recipe'
   and r.hero_image_path is null;
 
 -- The Bolognese image was replaced, under a new key because devices cache
--- by path and would otherwise keep the old bytes. Nothing but the seed can
--- have written a starters/ path (no client write policy reaches that
--- prefix, ADR-0029), so matching on the path alone is exact. The old
--- object stays in Storage for builds that still seed the old key.
+-- by path and would otherwise keep the old bytes. Matched on the path
+-- alone: any row still on it is showing the old Bolognese photo, whether
+-- seeded, renamed or restored, so moving it to the new one is the intent.
+-- The old object stays in Storage (docs/deploying-starter-images.md).
 update public.recipes
 set hero_image_path = public.starter_image_path('weeknight-bolognese-v2'),
     updated_at = now()

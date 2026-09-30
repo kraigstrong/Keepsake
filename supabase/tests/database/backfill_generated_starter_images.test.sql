@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(8);
+select plan(9);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'alice@example.test');
@@ -34,6 +34,11 @@ values
   -- Bolognese on the replaced image: the row the second statement exists for.
   ('c0000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    'Weeknight Bolognese', '11111111-1111-1111-1111-111111111111',
+   'Keepsake starter recipe', 'starters/weeknight-bolognese.jpg',
+   '2026-01-01T00:00:00Z'),
+  -- A seeded Bolognese the owner renamed: still showing the old photo.
+  ('c0000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'Nonna''s Bolognese', '11111111-1111-1111-1111-111111111111',
    'Keepsake starter recipe', 'starters/weeknight-bolognese.jpg',
    '2026-01-01T00:00:00Z');
 
@@ -96,6 +101,11 @@ select ok(
   (select updated_at from public.recipes where id = 'c0000000-0000-0000-0000-000000000004')
     > '2026-01-01T00:00:00Z'::timestamptz,
   'and its updated_at moves too');
+
+select is(
+  (select hero_image_path from public.recipes where id = 'c0000000-0000-0000-0000-000000000005'),
+  'starters/weeknight-bolognese-v2.jpg',
+  'so does one the owner renamed, since the path alone decides');
 
 -- A key starter_image_path rejects expands to null, which the updates
 -- above would write without complaint.

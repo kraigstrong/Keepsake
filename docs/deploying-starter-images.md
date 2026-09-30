@@ -64,8 +64,9 @@ do one of them.
 | Brown Butter Chocolate Chip Cookies              | `starters/brown-butter-chocolate-chip-cookies.jpg` |
 | Grilled Lemon-Herb Chicken                       | `starters/grilled-lemon-herb-chicken.jpg`          |
 
-`starters/weeknight-bolognese.jpg` is the replaced Bolognese. Leave it in place:
-builds from before #192 still seed that key.
+`starters/weeknight-bolognese.jpg` is the replaced Bolognese. **Never delete it:**
+builds from before #192 still seed that key, and restoring an older version of
+a seeded Bolognese brings the old path back from its snapshot.
 
 A missing object is not an error: the recipe renders its placeholder and starts
 showing the photo the moment the object lands, because the path is resolved per
@@ -204,7 +205,8 @@ statement per image against the environment:
 
 ```sql
 update public.recipes
-set hero_image_path = 'starters/<new-key>.jpg'
+set hero_image_path = 'starters/<new-key>.jpg',
+    updated_at = now()
 where hero_image_path = 'starters/<old-key>.jpg';
 ```
 
