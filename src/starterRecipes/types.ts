@@ -37,11 +37,9 @@ export interface StarterRecipe {
    * household's Storage.
    *
    * Null, or a key whose object has not been uploaded yet, renders
-   * `ImagePlaceholder` like any other recipe without a photo. Because
-   * every household points at the same object, replacing it upgrades
-   * households that already seeded — which is what lets licensed stock
-   * ship now and real photography replace it later
-   * (`docs/proposals/starter-recipes.md` §4).
+   * `ImagePlaceholder` like any other recipe without a photo. Replacing
+   * an image means a new key, not an overwrite — devices cache by path
+   * (`docs/deploying-starter-images.md`).
    */
   imageKey: string | null;
   ingredientSections: RecipeSection[];

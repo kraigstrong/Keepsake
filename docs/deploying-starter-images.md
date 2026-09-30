@@ -17,14 +17,12 @@ The key is the filename, minus `.jpg`. It comes from
 `src/starterRecipes/content.ts`, and a test asserts any key that is set matches
 the `^[a-z0-9-]{1,64}$` pattern the database enforces.
 
-**Only one key is set today.** Licensed stock for the rest was tried and
-abandoned — ADR-0029 records what sourcing actually turned up — so the other
-nine are `imageKey: null` and render a placeholder. They are null rather than
-dangling on purpose: a key with no object behind it still costs a failed
-signed-URL request per recipe on every sync pass, indefinitely, while null is
-skipped outright.
+**All ten keys are set** (#192). A key with no object behind it costs a failed
+signed-URL request per recipe on every sync pass, indefinitely, while a null key
+is skipped outright — so upload the object *before* the key reaches a build or a
+backfill, and prefer null over a key you are not about to upload.
 
-Adding a photo is therefore **three** steps: upload the object, set that
+Adding a photo is **three** steps: upload the object, set that
 recipe's `imageKey`, and backfill the households that have already seeded.
 Nothing needs all ten to exist.
 
@@ -49,22 +47,26 @@ changes the server and reaches no device. `hero_image_path is null` is what
 stops this overwriting a photo the owner chose for themselves.
 
 `supabase/migrations/20260908120000_backfill_starter_image_paths.sql` is this
-statement for the first photo, and `backfill_starter_image_paths.test.sql`
-pins the guards. Either write one per photo or run the statement by hand — but
+statement for the first photo, and `20260929120000_backfill_generated_starter_images.sql`
+for the full set; their tests pin the guards. Either write one per photo or run the statement by hand — but
 do one of them.
 
-| Recipe                                           | Object                                       |
-| ------------------------------------------------ | -------------------------------------------- |
-| Sheet-Pan Chicken Thighs with Potatoes and Lemon | `starters/sheet-pan-chicken-thighs.jpg`      |
-| Weeknight Bolognese **(uploaded)**               | `starters/weeknight-bolognese.jpg`           |
-| Ground Beef Tacos with Quick Cabbage Slaw        | `starters/ground-beef-tacos.jpg`             |
-| Garlic Shrimp and Broccoli Stir-Fry              | `starters/garlic-shrimp-stir-fry.jpg`        |
-| Slow Cooker Pulled Pork                          | `starters/slow-cooker-pulled-pork.jpg`       |
-| Black Bean and Sweet Potato Chili                | `starters/black-bean-sweet-potato-chili.jpg` |
-| Skillet Mac and Cheese                           | `starters/skillet-mac-and-cheese.jpg`        |
-| Buttermilk Pancakes                              | `starters/buttermilk-pancakes.jpg`           |
+| Recipe                                           | Object                                             |
+| ------------------------------------------------ | -------------------------------------------------- |
+| Sheet-Pan Chicken Thighs with Potatoes and Lemon | `starters/sheet-pan-chicken-thighs.jpg`            |
+| Weeknight Bolognese                              | `starters/weeknight-bolognese-v2.jpg`              |
+| Ground Beef Tacos with Quick Cabbage Slaw        | `starters/ground-beef-tacos.jpg`                   |
+| Garlic Shrimp and Broccoli Stir-Fry              | `starters/garlic-shrimp-stir-fry.jpg`              |
+| Slow Cooker Pulled Pork                          | `starters/slow-cooker-pulled-pork.jpg`             |
+| Black Bean and Sweet Potato Chili                | `starters/black-bean-sweet-potato-chili.jpg`       |
+| Skillet Mac and Cheese                           | `starters/skillet-mac-and-cheese.jpg`              |
+| Buttermilk Pancakes                              | `starters/buttermilk-pancakes.jpg`                 |
 | Brown Butter Chocolate Chip Cookies              | `starters/brown-butter-chocolate-chip-cookies.jpg` |
-| Grilled Lemon-Herb Chicken                       | `starters/grilled-lemon-herb-chicken.jpg`    |
+| Grilled Lemon-Herb Chicken                       | `starters/grilled-lemon-herb-chicken.jpg`          |
+
+`starters/weeknight-bolognese.jpg` is the replaced Bolognese. **Never delete it:**
+builds from before #192 still seed that key, and restoring an older version of
+a seeded Bolognese brings the old path back from its snapshot.
 
 A missing object is not an error: the recipe renders its placeholder and starts
 showing the photo the moment the object lands, because the path is resolved per
@@ -101,8 +103,8 @@ Whatever ships must permit **commercial use without attribution** — Keepsake i
 intended to be charged for eventually, and there is nowhere in the UI for a
 credit line.
 
-The plan is now that these are **your own photographs**, which sidesteps the
-question entirely. Licensed stock was tried and abandoned; ADR-0029 records why,
+The long-term plan is **your own photographs**, which sidesteps the question
+entirely. Licensed stock was tried and abandoned; ADR-0029 records why,
 and the short version is that the free corpus with usable food photography is
 CC BY / CC BY-SA, whose attribution and ShareAlike terms have nowhere to live
 here. Anything scraped from a recipe site was never an option, however credited.
@@ -113,6 +115,17 @@ change, and "where did this come from" is much harder to answer a year later.
 
 Record where each image came from, in this file, when you place it. The point is
 that a year from now the answer is written down rather than remembered.
+
+### Where the current set came from
+
+All ten were **generated with Meta AI (Muse Image)**, 2026-09-29, for the
+friends-and-family preview (#192). Meta's AI terms
+(<https://www.facebook.com/policies/other-policies/ais-terms>, read 2026-09-29)
+require no attribution but say nothing either way about commercial use or who
+owns an output, and put responsibility for using it on the user. That is fine for
+an unpaid preview and **does not meet the bar above**: replace these with your own
+photography before Keepsake is charged for. Preparing them stripped all metadata,
+including any AI-provenance data Meta embeds; the terms do not prohibit that.
 
 ## Placing them
 
@@ -137,13 +150,18 @@ everything else would look fine.
 
 ### The CLI route, which cannot get the path wrong
 
+Name each file exactly as its object in the table above (`<key>.jpg`), put them
+in one folder, and copy the folder:
+
 ```bash
 set -a; source devtools.env; set +a
-npx supabase storage cp ./weeknight-bolognese.jpg \
-  ss:///recipe-images/starters/weeknight-bolognese.jpg --experimental
+for f in ./starter-images/*.jpg; do
+  npx supabase storage cp "$f" "ss:///recipe-images/starters/$(basename "$f")" --experimental
+done
 ```
 
-The path is explicit, so there is nothing to misread. Then confirm it is where
+The destination path is explicit, so there is nothing to misread. The filename
+is the key, so check the names against the table before copying. Then confirm it is where
 you think:
 
 ```bash
@@ -192,7 +210,8 @@ statement per image against the environment:
 
 ```sql
 update public.recipes
-set hero_image_path = 'starters/<new-key>.jpg'
+set hero_image_path = 'starters/<new-key>.jpg',
+    updated_at = now()
 where hero_image_path = 'starters/<old-key>.jpg';
 ```
 
