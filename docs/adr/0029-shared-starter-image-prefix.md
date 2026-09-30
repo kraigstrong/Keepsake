@@ -170,3 +170,13 @@ as an upload — one that bumps `updated_at`, because sync pages by it and
 project, not a migration — see `docs/deploying-starter-images.md`. Recipes
 seeded before the objects exist render `ImagePlaceholder` and start showing the
 image the moment it lands, since the path is resolved per view.
+
+## Amendment (2026-09-29)
+
+All ten starter images now exist, **generated with Meta AI** rather than
+photographed. Friends-and-family testing wasn't going to wait on a camera. The
+shared prefix, read policy and backfill model above are unchanged; so is the plan to
+replace these with real photography before Keepsake is charged for, since Meta's
+terms are silent on commercial use. Provenance and the licensing position are in
+`docs/deploying-starter-images.md`. The Bolognese photograph was replaced too,
+under a new key (`weeknight-bolognese-v2`), so the set is consistent.
