@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 
 import * as api from './api';
 import { RecipeVersionHistoryScreen } from './RecipeVersionHistoryScreen';
 
 jest.mock('./api');
-jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
+jest.mock('expo-router', () => ({ useRouter: jest.fn(), useNavigation: jest.fn() }));
 // ./api is auto-mocked above, but Jest still loads the real module once to
 // derive its shape — which would otherwise trip src/supabase/instance.ts's
 // missing-env-var throw.
@@ -13,8 +13,18 @@ jest.mock('../supabase/instance', () => ({ supabase: {} }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedUseRouter = useRouter as jest.Mock;
+const mockedUseNavigation = useNavigation as jest.Mock;
 
 const replace = jest.fn();
+const back = jest.fn();
+
+// The recipe Stack's state as this screen sees it. Defaults to History
+// alone (e.g. reached by deep link); the test covering the usual path
+// from the detail screen puts that route beneath it.
+function stackWith(...routes: { name: string; params?: { id: string } }[]) {
+  return { index: routes.length - 1, routes };
+}
+const historyRoute = { name: '[id]/history', params: { id: 'recipe-1' } };
 
 const versions: api.RecipeVersionSummary[] = [
   { id: 'v3', versionNumber: 3, createdAt: '2026-08-03T12:00:00Z' },
@@ -24,7 +34,8 @@ const versions: api.RecipeVersionSummary[] = [
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockedUseRouter.mockReturnValue({ replace });
+  mockedUseRouter.mockReturnValue({ replace, back });
+  mockedUseNavigation.mockReturnValue({ getState: () => stackWith(historyRoute) });
 });
 
 it('lists versions newest-first, without a restore action on the newest', async () => {
@@ -60,6 +71,23 @@ it('restores a version and navigates to the recipe detail screen', async () => {
   expect(replace).toHaveBeenCalledWith('/recipe/recipe-1');
 });
 
+// #221: replacing here would stack a second detail screen on top of the
+// one History was pushed from.
+it("goes back to the recipe's detail screen after restoring, when History was opened from it", async () => {
+  mockedUseNavigation.mockReturnValue({
+    getState: () => stackWith({ name: '[id]/index', params: { id: 'recipe-1' } }, historyRoute),
+  });
+  mockedApi.fetchRecipeVersions.mockResolvedValue(versions);
+  mockedApi.restoreRecipeVersion.mockResolvedValue({ id: 'recipe-1' });
+
+  await render(<RecipeVersionHistoryScreen recipeId="recipe-1" />);
+
+  await fireEvent.press(screen.getByTestId('recipe-history-restore-v1'));
+
+  expect(back).toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+});
+
 it('shows an error and stays put when restoring fails', async () => {
   mockedApi.fetchRecipeVersions.mockResolvedValue(versions);
   mockedApi.restoreRecipeVersion.mockRejectedValue(new Error('boom'));
@@ -70,4 +98,5 @@ it('shows an error and stays put when restoring fails', async () => {
 
   expect(screen.getByTestId('recipe-history-error')).toBeTruthy();
   expect(replace).not.toHaveBeenCalled();
+  expect(back).not.toHaveBeenCalled();
 });

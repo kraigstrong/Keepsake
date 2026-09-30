@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -103,6 +103,41 @@ export function RecipeDetailScreen({
   // render, and useRef().current trips react-hooks/refs even though
   // this exact pattern is correct here.
   const [heroOpacity] = useState(() => new Animated.Value(0));
+  // The path the on-screen hero image was loaded from, so a refocus
+  // refresh can leave an unchanged image alone rather than re-fade it.
+  const heroPathRef = useRef<string | null>(null);
+  // Which recipe the focus effect below last ran for — tells a refocus
+  // apart from the first focus, which the load effect already covers.
+  const focusedRecipeIdRef = useRef<string | null>(null);
+  // Bumped by every recipe load/refresh. Only the newest may write the
+  // recipe or hero image — the initial load isn't cancelled on blur, so a
+  // slow pre-save response could otherwise land after a refocus refresh.
+  const loadGenerationRef = useRef(0);
+
+  const loadHeroImage = useCallback(
+    async (heroImagePath: string | null, isCancelled: () => boolean) => {
+      if (!heroImagePath || isCancelled()) return;
+      const cachedUri = await readCachedImageUri(heroImagePath).catch(() => null);
+      if (isCancelled()) return;
+      if (cachedUri) {
+        heroPathRef.current = heroImagePath;
+        setHeroImageUrl(cachedUri);
+        return;
+      }
+      const signedUrl = await getHeroImageUrl(heroImagePath).catch(() => null);
+      if (!signedUrl || isCancelled()) return;
+      // Cache it now, not just display it — otherwise a recipe from a
+      // just-completed import (which hasn't had a full sync pass yet,
+      // Phase 6's own pre-caching) stays slow to view *every* time,
+      // re-fetching a signed URL and re-downloading over the network on
+      // every visit rather than only the first.
+      const localUri = await cacheHeroImage(heroImagePath, signedUrl).catch(() => null);
+      if (isCancelled()) return;
+      heroPathRef.current = heroImagePath;
+      setHeroImageUrl(localUri ?? signedUrl);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (justImported) showToast(wasDuplicate ? 'Already in your library' : 'Recipe imported');
@@ -136,6 +171,11 @@ export function RecipeDetailScreen({
   // just-recorded event wouldn't appear until the screen was fully
   // closed and reopened. Same pattern ThisWeekScreen uses to refresh on
   // return.
+  //
+  // The editor and version restore return here the same way (#221), so a
+  // refocus also re-reads the recipe. That refresh never sets isLoading
+  // and only reloads the hero image if its path changed, so returning
+  // doesn't flash the loading state or re-fade an unchanged photo.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -144,15 +184,37 @@ export function RecipeDetailScreen({
           if (!cancelled) setCookingHistory(events);
         })
         .catch(() => undefined); // supplementary content — a failed load just shows no history, not a broken screen
+
+      if (focusedRecipeIdRef.current === recipeId) {
+        const generation = ++loadGenerationRef.current;
+        const isStale = () => cancelled || loadGenerationRef.current !== generation;
+        fetchRecipe(recipeId)
+          .then((freshRecipe) => {
+            if (isStale()) return;
+            setRecipe(freshRecipe);
+            if (freshRecipe.heroImagePath !== heroPathRef.current) {
+              heroOpacity.setValue(0);
+              heroPathRef.current = null;
+              setHeroImageUrl(null);
+              loadHeroImage(freshRecipe.heroImagePath, isStale);
+            }
+          })
+          .catch(() => undefined); // offline — what's already showing stands
+      }
+      focusedRecipeIdRef.current = recipeId;
+
       return () => {
         cancelled = true;
       };
-    }, [recipeId]),
+    }, [recipeId, heroOpacity, loadHeroImage]),
   );
 
   useEffect(() => {
     let cancelled = false;
     heroOpacity.setValue(0);
+
+    const generation = ++loadGenerationRef.current;
+    const isStale = () => cancelled || loadGenerationRef.current !== generation;
 
     // Local-first (ADR-0013 / OFF-01): a cache hit shows instantly and
     // works offline. A live fetch always runs alongside/after it too —
@@ -160,25 +222,6 @@ export function RecipeDetailScreen({
     // stale local data when online. The live fetch's failure only
     // becomes a visible error if the local read had nothing to show;
     // otherwise it's silently offline and the local data stands.
-    async function loadHeroImage(heroImagePath: string | null) {
-      if (!heroImagePath || cancelled) return;
-      const cachedUri = await readCachedImageUri(heroImagePath).catch(() => null);
-      if (cancelled) return;
-      if (cachedUri) {
-        setHeroImageUrl(cachedUri);
-        return;
-      }
-      const signedUrl = await getHeroImageUrl(heroImagePath).catch(() => null);
-      if (!signedUrl || cancelled) return;
-      // Cache it now, not just display it — otherwise a recipe from a
-      // just-completed import (which hasn't had a full sync pass yet,
-      // Phase 6's own pre-caching) stays slow to view *every* time,
-      // re-fetching a signed URL and re-downloading over the network on
-      // every visit rather than only the first.
-      const localUri = await cacheHeroImage(heroImagePath, signedUrl).catch(() => null);
-      if (!cancelled) setHeroImageUrl(localUri ?? signedUrl);
-    }
-
     async function load() {
       let haveData = false;
 
@@ -198,7 +241,7 @@ export function RecipeDetailScreen({
           setRecipe(localRecipe);
           setCategories(localCategories);
           setIsLoading(false);
-          loadHeroImage(localRecipe.heroImagePath);
+          loadHeroImage(localRecipe.heroImagePath, isStale);
         }
       }
 
@@ -208,11 +251,12 @@ export function RecipeDetailScreen({
           fetchCategories(),
         ]);
         if (cancelled) return;
-        setRecipe(freshRecipe);
         setCategories(freshCategories);
         setIsLoading(false);
         setLoadError(false);
-        loadHeroImage(freshRecipe.heroImagePath);
+        if (isStale()) return;
+        setRecipe(freshRecipe);
+        loadHeroImage(freshRecipe.heroImagePath, isStale);
       } catch {
         if (cancelled || haveData) return;
         setLoadError(true);
@@ -225,10 +269,10 @@ export function RecipeDetailScreen({
     return () => {
       cancelled = true;
     };
-    // heroOpacity's identity never changes (useState with no setter
-    // call) — listed to satisfy exhaustive-deps, not because it should
-    // ever actually re-trigger this effect.
-  }, [recipeId, heroOpacity, household]);
+    // heroOpacity and loadHeroImage never change identity — listed to
+    // satisfy exhaustive-deps, not because they should ever actually
+    // re-trigger this effect.
+  }, [recipeId, heroOpacity, household, loadHeroImage]);
 
   if (isLoading) {
     return <LoadingState label="Loading recipe…" testID="recipe-detail-loading" />;

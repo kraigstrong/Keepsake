@@ -1,8 +1,9 @@
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchRecipeVersions, restoreRecipeVersion, type RecipeVersionSummary } from './api';
+import { isRecipeDetailBeneath } from './recipeStack';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
@@ -20,6 +21,7 @@ export interface RecipeVersionHistoryScreenProps {
  */
 export function RecipeVersionHistoryScreen({ recipeId }: RecipeVersionHistoryScreenProps) {
   const router = useRouter();
+  const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [versions, setVersions] = useState<RecipeVersionSummary[]>([]);
@@ -52,7 +54,9 @@ export function RecipeVersionHistoryScreen({ recipeId }: RecipeVersionHistoryScr
     setRestoringId(versionId);
     try {
       const { id } = await restoreRecipeVersion(versionId);
-      router.replace(`/recipe/${id}`);
+      // The detail screen beneath refreshes itself on refocus.
+      if (isRecipeDetailBeneath(navigation.getState(), recipeId)) router.back();
+      else router.replace(`/recipe/${id}`);
     } catch {
       setRestoreError('Could not restore that version. Try again.');
       setRestoringId(null);
