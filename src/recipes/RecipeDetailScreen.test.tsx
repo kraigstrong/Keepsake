@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
-import { Linking } from 'react-native';
+import { ActionSheetIOS, Linking } from 'react-native';
 
 import * as api from './api';
 import * as heroImage from './heroImage';
@@ -47,7 +47,13 @@ jest.mock('../thisWeek/api');
 // only calling a *new* callback identity, same pattern
 // ThisWeekScreen.test.tsx uses for its own useFocusEffect usage.
 let mockLastFocusEffect: (() => void) | null = null;
+// Stack.Screen renders its headerRight inline, so the header's More
+// button is pressable like any other element in the tree.
 jest.mock('expo-router', () => ({
+  Stack: {
+    Screen: ({ options }: { options?: { headerRight?: () => import('react').ReactNode } }) =>
+      options?.headerRight?.() ?? null,
+  },
   useRouter: jest.fn(),
   useNavigation: () => ({ getParent: () => ({ goBack: mockParentGoBack }) }),
   useFocusEffect: jest.fn((effect: () => void) => {
@@ -72,6 +78,25 @@ const mockedOfflineRecipes = offlineRecipes as jest.Mocked<typeof offlineRecipes
 const mockedThisWeekApi = thisWeekApi as jest.Mocked<typeof thisWeekApi>;
 const mockedUseRouter = useRouter as jest.Mock;
 const mockedConfirm = confirm as jest.Mock;
+let mockedShowActionSheet: jest.SpyInstance<
+  void,
+  Parameters<typeof ActionSheetIOS.showActionSheetWithOptions>
+>;
+
+// Opens the More menu and returns the labels it offered, in order.
+async function openMoreMenu(): Promise<string[]> {
+  await fireEvent.press(screen.getByTestId('recipe-detail-more-button'));
+  const [options] = mockedShowActionSheet.mock.calls.at(-1)!;
+  return options.options;
+}
+
+async function chooseMoreMenuAction(label: string) {
+  const labels = await openMoreMenu();
+  const index = labels.indexOf(label);
+  if (index === -1) throw new Error(`More menu has no "${label}": ${labels.join(', ')}`);
+  const [, callback] = mockedShowActionSheet.mock.calls.at(-1)!;
+  await act(async () => callback(index));
+}
 
 const push = jest.fn();
 const back = jest.fn();
@@ -150,6 +175,9 @@ beforeEach(() => {
   mockedThisWeekApi.addRecipeToThisWeek.mockResolvedValue(undefined);
   mockedCookingApi.getCookingHistory.mockResolvedValue([]);
   jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+  mockedShowActionSheet = jest
+    .spyOn(ActionSheetIOS, 'showActionSheetWithOptions')
+    .mockImplementation(() => undefined);
 });
 
 it('shows a loading state, then the recipe', async () => {
@@ -182,7 +210,7 @@ it('navigates to the edit screen', async () => {
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-  await fireEvent.press(screen.getByTestId('recipe-detail-edit-button'));
+  await chooseMoreMenuAction('Edit');
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit');
 });
@@ -192,25 +220,25 @@ it('navigates to the history screen when more than one version exists', async ()
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-  await fireEvent.press(screen.getByTestId('recipe-detail-history-button'));
+  await chooseMoreMenuAction('History');
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/history');
 });
 
-it('hides the History button when the recipe has only one version', async () => {
+it('leaves History out of the More menu when the recipe has only one version', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-  expect(screen.queryByTestId('recipe-detail-history-button')).toBeNull();
+  expect(await openMoreMenu()).not.toContain('History');
 });
 
-it('does not show an Original Photo button when the recipe has no original_photo_path', async () => {
+it('leaves Original Photo out of the More menu when the recipe has no original_photo_path', async () => {
   mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-  expect(screen.queryByTestId('recipe-detail-original-photo-button')).toBeNull();
+  expect(await openMoreMenu()).not.toContain('Original Photo');
 });
 
 it('navigates to the original photo screen, url-encoding the path, when one exists', async () => {
@@ -221,7 +249,7 @@ it('navigates to the original photo screen, url-encoding the path, when one exis
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-  await fireEvent.press(screen.getByTestId('recipe-detail-original-photo-button'));
+  await chooseMoreMenuAction('Original Photo');
 
   expect(push).toHaveBeenCalledWith(
     '/recipe/recipe-1/original-photo?path=household-1%2Foriginals%2Fphoto%20one.jpg',
@@ -411,7 +439,7 @@ it('carries the import context into the editor', async () => {
 
   await renderRecipeDetailScreen({ recipeId: 'recipe-1', justImported: true });
 
-  await fireEvent.press(screen.getByTestId('recipe-detail-edit-button'));
+  await chooseMoreMenuAction('Edit');
 
   expect(push).toHaveBeenCalledWith('/recipe/recipe-1/edit?fromImport=1');
 });
@@ -663,28 +691,63 @@ describe('cooking history (Phase 15, REC-05/NOTE-01..03)', () => {
   });
 });
 
-describe('archive/delete (Phase 16, ADR-0025)', () => {
-  it('shows an Archive button for an active recipe', async () => {
+describe('More menu (#226)', () => {
+  it('offers Edit, Archive and Delete for a single-version recipe with no photo, then Cancel', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(recipe);
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
 
-    expect(screen.getByText('Archive')).toBeTruthy();
+    expect(await openMoreMenu()).toEqual(['Edit', 'Archive', 'Delete', 'Cancel']);
   });
 
-  it('archives the recipe and flips the button to Unarchive', async () => {
+  it('offers every action in order, with Delete marked destructive', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      ...recipe,
+      version: 3,
+      originalPhotoPath: 'household-1/originals/photo.jpg',
+    });
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+
+    expect(await openMoreMenu()).toEqual([
+      'Edit',
+      'History',
+      'Original Photo',
+      'Archive',
+      'Delete',
+      'Cancel',
+    ]);
+    const [options] = mockedShowActionSheet.mock.calls.at(-1)!;
+    expect(options.destructiveButtonIndex).toBe(4);
+    expect(options.cancelButtonIndex).toBe(5);
+  });
+
+  it('does nothing when the menu is cancelled', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue(recipe);
+
+    await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
+    await chooseMoreMenuAction('Cancel');
+
+    expect(mockedApi.archiveRecipe).not.toHaveBeenCalled();
+    expect(mockedConfirm).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('archive/delete (Phase 16, ADR-0025)', () => {
+  it('archives the recipe and offers Unarchive afterwards', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(recipe);
     mockedApi.archiveRecipe.mockResolvedValue(undefined);
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+    await chooseMoreMenuAction('Archive');
 
     await waitFor(() => expect(mockedApi.archiveRecipe).toHaveBeenCalledWith('recipe-1'));
     expect(screen.getByText('Recipe archived')).toBeTruthy();
-    expect(screen.getByText('Unarchive')).toBeTruthy();
+    expect(await openMoreMenu()).toContain('Unarchive');
   });
 
-  it('unarchives an already-archived recipe and flips the button back to Archive', async () => {
+  it('unarchives an already-archived recipe and offers Archive afterwards', async () => {
     mockedApi.fetchRecipe.mockResolvedValue({
       ...recipe,
       archivedAt: '2026-08-10T00:00:00.000Z',
@@ -692,24 +755,22 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     mockedApi.unarchiveRecipe.mockResolvedValue(undefined);
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    expect(screen.getByText('Unarchive')).toBeTruthy();
-
-    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+    await chooseMoreMenuAction('Unarchive');
 
     await waitFor(() => expect(mockedApi.unarchiveRecipe).toHaveBeenCalledWith('recipe-1'));
     expect(screen.getByText('Recipe unarchived')).toBeTruthy();
-    expect(screen.getByText('Archive')).toBeTruthy();
+    expect(await openMoreMenu()).toContain('Archive');
   });
 
-  it('shows an error toast when archiving fails, without flipping the button', async () => {
+  it('shows an error toast when archiving fails, and still offers Archive', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(recipe);
     mockedApi.archiveRecipe.mockRejectedValue(new Error('offline'));
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+    await chooseMoreMenuAction('Archive');
 
     await waitFor(() => expect(screen.getByText("Couldn't archive recipe")).toBeTruthy());
-    expect(screen.getByText('Archive')).toBeTruthy();
+    expect(await openMoreMenu()).toContain('Archive');
   });
 
   it('does nothing when Delete is pressed and the confirmation is declined', async () => {
@@ -717,7 +778,7 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     mockedConfirm.mockResolvedValue(false);
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+    await chooseMoreMenuAction('Delete');
 
     await waitFor(() => expect(mockedConfirm).toHaveBeenCalled());
     expect(mockedApi.deleteRecipe).not.toHaveBeenCalled();
@@ -730,7 +791,7 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     mockedApi.deleteRecipe.mockResolvedValue(undefined);
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+    await chooseMoreMenuAction('Delete');
 
     await waitFor(() => expect(mockedApi.deleteRecipe).toHaveBeenCalledWith('recipe-1'));
     expect(back).toHaveBeenCalled();
@@ -742,7 +803,7 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     mockedApi.deleteRecipe.mockRejectedValue(new Error('offline'));
 
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
-    await fireEvent.press(screen.getByTestId('recipe-detail-delete-button'));
+    await chooseMoreMenuAction('Delete');
 
     await waitFor(() => expect(screen.getByText("Couldn't delete recipe")).toBeTruthy());
     expect(back).not.toHaveBeenCalled();
@@ -766,7 +827,7 @@ describe('archive/delete (Phase 16, ADR-0025)', () => {
     await renderRecipeDetailScreen({ recipeId: 'recipe-1' });
     expect(screen.getByTestId('recipe-detail-add-to-this-week')).toBeTruthy();
 
-    await fireEvent.press(screen.getByTestId('recipe-detail-archive-button'));
+    await chooseMoreMenuAction('Archive');
 
     await waitFor(() => expect(screen.queryByTestId('recipe-detail-add-to-this-week')).toBeNull());
   });
