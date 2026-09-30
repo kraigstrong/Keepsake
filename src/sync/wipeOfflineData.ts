@@ -1,6 +1,7 @@
 import { clearQueuedShares } from '../appGroup/appGroupHandoff';
 import { wipeDatabase } from '../db/database';
 import { defaultImageStore, type ImageStore } from './imageCache';
+import { cancelHeroImageCaching } from './syncEngine';
 
 /**
  * Sign-out wipe (ADR-0013): the whole local SQLite database file plus
@@ -9,6 +10,7 @@ import { defaultImageStore, type ImageStore } from './imageCache';
  * never a second household's cache to preserve.
  */
 export async function wipeOfflineData(imageStore: ImageStore = defaultImageStore): Promise<void> {
+  cancelHeroImageCaching();
   await wipeDatabase();
   imageStore.deleteDirectory();
 }
@@ -23,6 +25,7 @@ export async function wipeOfflineData(imageStore: ImageStore = defaultImageStore
 export async function wipeOfflineDataForAccountDeletion(
   imageStore: ImageStore = defaultImageStore,
 ): Promise<void> {
+  cancelHeroImageCaching();
   await wipeDatabase({ includeOutboxes: true });
   imageStore.deleteDirectory();
   // The native share-inbox is a third queue, outside SQLite entirely. A

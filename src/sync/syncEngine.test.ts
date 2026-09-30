@@ -10,7 +10,7 @@ import {
   writeSyncState,
 } from './local';
 import { fetchAllCategories, fetchChangedRecipes, fetchDeletedRecipes } from './remote';
-import { syncHousehold } from './syncEngine';
+import { cancelHeroImageCaching, heroImageCachingSettled, syncHousehold } from './syncEngine';
 import {
   EMPTY_CURSOR,
   SYNC_PAGE_SIZE,
@@ -89,11 +89,33 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockedGetDatabase.mockResolvedValue(FAKE_DB);
   mockedReadSyncState.mockResolvedValue(EMPTY_CURSOR);
-  mockedFetchChangedRecipes.mockResolvedValue([]);
-  mockedFetchDeletedRecipes.mockResolvedValue([]);
+  // mockReset, not just clearAllMocks: a test's unconsumed
+  // mockResolvedValueOnce would otherwise feed the next test's sync.
+  mockedFetchChangedRecipes.mockReset().mockResolvedValue([]);
+  mockedFetchDeletedRecipes.mockReset().mockResolvedValue([]);
   mockedFetchAllCategories.mockResolvedValue([]);
-  mockedGetHeroImageUrl.mockResolvedValue('https://signed.example/hero.jpg');
+  mockedGetHeroImageUrl.mockReset().mockResolvedValue('https://signed.example/hero.jpg');
+  mockedEnsureImageCached.mockReset();
 });
+
+// The download queue is module state — let each test's queue drain so the
+// next one starts behind nothing.
+afterEach(() => heroImageCachingSettled());
+
+async function waitForCallCount(mock: jest.Mock, count: number) {
+  for (let i = 0; i < 20 && mock.mock.calls.length < count; i++) {
+    await Promise.resolve();
+  }
+  expect(mock).toHaveBeenCalledTimes(count);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
 
 describe('syncHousehold', () => {
   it('does nothing to local recipes when there is nothing new, but still refreshes categories', async () => {
@@ -175,6 +197,7 @@ describe('syncHousehold', () => {
       .mockResolvedValueOnce([]);
 
     await syncHousehold('h1');
+    await heroImageCachingSettled();
 
     expect(mockedGetHeroImageUrl).toHaveBeenCalledTimes(1);
     expect(mockedGetHeroImageUrl).toHaveBeenCalledWith('h1/r1.jpg');
@@ -192,6 +215,7 @@ describe('syncHousehold', () => {
       .mockResolvedValueOnce([]);
 
     await syncHousehold('h1');
+    await heroImageCachingSettled();
 
     expect(mockedEnsureImageCached).not.toHaveBeenCalled();
   });
@@ -203,6 +227,7 @@ describe('syncHousehold', () => {
       .mockResolvedValueOnce([]);
 
     await expect(syncHousehold('h1')).resolves.toBeUndefined();
+    await heroImageCachingSettled();
 
     expect(mockedLogError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -210,6 +235,83 @@ describe('syncHousehold', () => {
     );
     // The recipe's own data still synced despite the image failure.
     expect(mockedUpsertRecipes).toHaveBeenCalled();
+  });
+
+  it('returns before hero images finish downloading (#200)', async () => {
+    const signedUrl = deferred<string>();
+    mockedGetHeroImageUrl.mockReturnValueOnce(signedUrl.promise);
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg')])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+
+    expect(mockedUpsertRecipes).toHaveBeenCalled();
+    expect(mockedEnsureImageCached).not.toHaveBeenCalled();
+
+    signedUrl.resolve('https://signed.example/hero.jpg');
+    await heroImageCachingSettled();
+
+    expect(mockedEnsureImageCached).toHaveBeenCalledWith(
+      FAKE_DB,
+      'h1/r1.jpg',
+      'https://signed.example/hero.jpg',
+    );
+  });
+
+  it('downloads one image at a time, even across overlapping syncs', async () => {
+    const firstDownload = deferred<string>();
+    mockedEnsureImageCached.mockReturnValueOnce(firstDownload.promise);
+    mockedFetchChangedRecipes
+      // A short page ends a pass, so each sync makes exactly one fetch.
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg')])
+      .mockResolvedValueOnce([makeRecipe('r2', '2026-08-06T00:00:00.000Z', 'h1/r2.jpg')]);
+
+    await syncHousehold('h1');
+    await syncHousehold('h1');
+    await waitForCallCount(mockedEnsureImageCached, 1);
+
+    expect(mockedGetHeroImageUrl).not.toHaveBeenCalledWith('h1/r2.jpg');
+
+    firstDownload.resolve('file:///r1.jpg');
+    await heroImageCachingSettled();
+
+    expect(mockedEnsureImageCached).toHaveBeenLastCalledWith(
+      FAKE_DB,
+      'h1/r2.jpg',
+      'https://signed.example/hero.jpg',
+    );
+  });
+
+  it('drops queued downloads once cancelled, including one still resolving its URL', async () => {
+    const signedUrl = deferred<string>();
+    mockedGetHeroImageUrl.mockReturnValueOnce(signedUrl.promise);
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([
+        makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg'),
+        makeRecipe('r2', '2026-08-05T00:00:00.000Z', 'h1/r2.jpg'),
+      ])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+    cancelHeroImageCaching();
+    signedUrl.resolve('https://signed.example/hero.jpg');
+    await heroImageCachingSettled();
+
+    expect(mockedEnsureImageCached).not.toHaveBeenCalled();
+    expect(mockedGetHeroImageUrl).not.toHaveBeenCalledWith('h1/r2.jpg');
+  });
+
+  it('still downloads for a sync that starts after a cancel', async () => {
+    cancelHeroImageCaching();
+    mockedFetchChangedRecipes
+      .mockResolvedValueOnce([makeRecipe('r1', '2026-08-05T00:00:00.000Z', 'h1/r1.jpg')])
+      .mockResolvedValueOnce([]);
+
+    await syncHousehold('h1');
+    await heroImageCachingSettled();
+
+    expect(mockedEnsureImageCached).toHaveBeenCalledTimes(1);
   });
 
   it('always refreshes categories, even with nothing else to sync', async () => {

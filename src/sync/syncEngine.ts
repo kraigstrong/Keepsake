@@ -18,18 +18,50 @@ import { SYNC_PAGE_SIZE, type SyncCursor, type SyncedRecipe } from './types';
 // is additive, not sync-blocking). Pre-caches while online (sync only
 // runs when reachable) so the image is already local by the time the
 // user might open this recipe offline.
-async function cacheHeroImages(db: LocalDb, recipes: SyncedRecipe[]): Promise<void> {
+async function cacheHeroImages(
+  db: LocalDb,
+  recipes: SyncedRecipe[],
+  generation: number,
+): Promise<void> {
   for (const recipe of recipes) {
+    if (generation !== heroImageGeneration) return;
     if (!recipe.heroImagePath) continue;
     try {
       const signedUrl = await getHeroImageUrl(recipe.heroImagePath);
-      if (signedUrl) {
+      if (signedUrl && generation === heroImageGeneration) {
         await ensureImageCached(db, recipe.heroImagePath, signedUrl);
       }
     } catch (error) {
       logError(error, { context: 'cacheHeroImage', recipeId: recipe.id });
     }
   }
+}
+
+// Downloads run after sync returns, so screens repaint on recipe data
+// rather than waiting on photos (#200). One queue, one download at a
+// time: evictOverBudget reads-then-deletes, so sync never runs two at once.
+let heroImageQueue: Promise<void> = Promise.resolve();
+let heroImageGeneration = 0;
+
+function scheduleHeroImageCaching(db: LocalDb, recipes: SyncedRecipe[]): void {
+  if (!recipes.some((recipe) => recipe.heroImagePath)) return;
+  const generation = heroImageGeneration;
+  heroImageQueue = heroImageQueue.then(() => cacheHeroImages(db, recipes, generation));
+}
+
+/**
+ * Drops queued downloads. The sign-out wipe calls this first — the wipe
+ * reuses the open connection, so a download landing after it would
+ * write the previous household's photo back into the cleared cache.
+ * A download already in flight still finishes.
+ */
+export function cancelHeroImageCaching(): void {
+  heroImageGeneration++;
+}
+
+/** Resolves once every download queued so far has settled. */
+export function heroImageCachingSettled(): Promise<void> {
+  return heroImageQueue;
 }
 
 /**
@@ -51,7 +83,7 @@ async function syncChangedRecipes(
     if (page.length === 0) break;
 
     await upsertRecipes(db, page, categoryLabelsById);
-    await cacheHeroImages(db, page);
+    scheduleHeroImageCaching(db, page);
     const last = page[page.length - 1]!; // just checked page.length > 0 above
     current = { ...current, recipesCursorUpdatedAt: last.updatedAt, recipesCursorId: last.id };
     await writeSyncState(db, householdId, current);
