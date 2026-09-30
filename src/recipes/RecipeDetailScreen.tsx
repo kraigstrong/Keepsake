@@ -1,6 +1,15 @@
-import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Animated,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { UnitSystem } from '../../server/units/quantityVocabulary';
@@ -20,6 +29,7 @@ import { type CookingEvent, formatCookedAt, getCookingHistory } from '../cooking
 import { Chip } from '../components/Chip';
 import { confirm } from '../components/confirm';
 import { ErrorState } from '../components/ErrorState';
+import { MoreIcon } from '../components/icons/MoreIcon';
 import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { LoadingState } from '../components/LoadingState';
 import { useToast } from '../components/Toast';
@@ -56,7 +66,7 @@ export interface RecipeDetailScreenProps {
 
 /**
  * Read-only view of a saved recipe — editing happens on a separate
- * screen (/recipe/[id]/edit) reached via the Edit action below, rather
+ * screen (/recipe/[id]/edit) reached via the header's Edit action, rather
  * than an inline-editable detail view, matching REC-09's "no clutter"
  * shape (nothing here but what's meant to be read while cooking).
  */
@@ -386,8 +396,63 @@ export function RecipeDetailScreen({
     }
   }
 
+  function openEditor() {
+    router.push(`/recipe/${recipeId}/edit${showImportDone ? '?fromImport=1' : ''}`);
+  }
+
+  // Everything besides the footer's two actions lives here, so the
+  // screen itself carries only what's used every visit (#226).
+  function openMoreMenu() {
+    if (!recipe) return;
+    const originalPhotoPath = recipe.originalPhotoPath;
+    const items: { label: string; onSelect: () => void; destructive?: boolean }[] = [
+      { label: 'Edit', onSelect: openEditor },
+    ];
+    if (recipe.version > 1) {
+      items.push({ label: 'History', onSelect: () => router.push(`/recipe/${recipeId}/history`) });
+    }
+    if (originalPhotoPath) {
+      items.push({
+        label: 'Original Photo',
+        onSelect: () =>
+          router.push(
+            `/recipe/${recipeId}/original-photo?path=${encodeURIComponent(originalPhotoPath)}`,
+          ),
+      });
+    }
+    items.push({
+      label: recipe.archivedAt ? 'Unarchive' : 'Archive',
+      onSelect: handleToggleArchive,
+    });
+    items.push({ label: 'Delete', onSelect: handleDelete, destructive: true });
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: [...items.map((item) => item.label), 'Cancel'],
+        destructiveButtonIndex: items.findIndex((item) => item.destructive),
+        cancelButtonIndex: items.length,
+      },
+      (index) => items[index]?.onSelect(),
+    );
+  }
+
   return (
     <View style={styles.screen}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={openMoreMenu}
+              accessibilityRole="button"
+              accessibilityLabel="More actions"
+              style={styles.headerAction}
+              testID="recipe-detail-more-button"
+            >
+              <MoreIcon color={colors.textPrimary} size={26} />
+            </Pressable>
+          ),
+        }}
+      />
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.content}
@@ -539,93 +604,39 @@ export function RecipeDetailScreen({
             ))}
           </View>
         )}
-
-        <View style={styles.actions}>
-          <Pressable
-            style={styles.editButton}
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(`/recipe/${recipeId}/edit${showImportDone ? '?fromImport=1' : ''}`)
-            }
-            testID="recipe-detail-edit-button"
-          >
-            <Text style={styles.editButtonLabel}>Edit</Text>
-          </Pressable>
-          {recipe.version > 1 && (
-            <Pressable
-              style={styles.editButton}
-              accessibilityRole="button"
-              onPress={() => router.push(`/recipe/${recipeId}/history`)}
-              testID="recipe-detail-history-button"
-            >
-              <Text style={styles.editButtonLabel}>History</Text>
-            </Pressable>
-          )}
-          {recipe.originalPhotoPath && (
-            <Pressable
-              style={styles.editButton}
-              accessibilityRole="button"
-              onPress={() =>
-                router.push(
-                  `/recipe/${recipeId}/original-photo?path=${encodeURIComponent(recipe.originalPhotoPath!)}`,
-                )
-              }
-              testID="recipe-detail-original-photo-button"
-            >
-              <Text style={styles.editButtonLabel}>Original Photo</Text>
-            </Pressable>
-          )}
-          <Pressable
-            style={styles.editButton}
-            accessibilityRole="button"
-            onPress={handleToggleArchive}
-            testID="recipe-detail-archive-button"
-          >
-            <Text style={styles.editButtonLabel}>
-              {recipe.archivedAt ? 'Unarchive' : 'Archive'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={styles.editButton}
-            accessibilityRole="button"
-            onPress={handleDelete}
-            testID="recipe-detail-delete-button"
-          >
-            <Text style={styles.editButtonLabel}>Delete</Text>
-          </Pressable>
-        </View>
-
-        <Button
-          title="Start Cooking"
-          onPress={() => router.push(`/recipe/${recipeId}/cook`)}
-          testID="recipe-detail-start-cooking"
-        />
-
-        {/* LIFE-01 (ADR-0025): Archive hides a recipe from Planning —
-          add_to_weekly_plan now rejects an archived recipe id
-          server-side, so this stays hidden rather than offering a
-          button that would just error. Not shown for a deleted recipe
-          either, but Recipe Detail is never reached for one (Recently
-          Deleted doesn't navigate into it), so archivedAt is the only
-          state this actually needs to check. */}
-        {!recipe.archivedAt && (
-          <Button
-            title="Add to This Week"
-            variant="secondary"
-            onPress={handleAddToThisWeek}
-            testID="recipe-detail-add-to-this-week"
-          />
-        )}
       </ScrollView>
-      {showImportDone && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+        <View style={styles.footerRow}>
+          {/* LIFE-01 (ADR-0025): add_to_weekly_plan rejects an archived
+            recipe server-side, so the button is hidden rather than
+            offered to fail. */}
+          {!recipe.archivedAt && (
+            <View style={styles.footerButton}>
+              <Button
+                title="Add to This Week"
+                variant="secondary"
+                onPress={handleAddToThisWeek}
+                testID="recipe-detail-add-to-this-week"
+              />
+            </View>
+          )}
+          <View style={styles.footerButton}>
+            <Button
+              title="Start Cooking"
+              onPress={() => router.push(`/recipe/${recipeId}/cook`)}
+              testID="recipe-detail-start-cooking"
+            />
+          </View>
+        </View>
+        {showImportDone && (
           <Button
             title="Done"
+            variant="outlineAccent"
             onPress={() => navigation.getParent()?.goBack()}
             testID="recipe-detail-import-done"
           />
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 }
@@ -647,8 +658,16 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+    gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  footerButton: {
+    flex: 1,
   },
   heroContainer: {
     width: '100%',
@@ -716,22 +735,9 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
   },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  editButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  editButtonLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: '600',
+  // Padding rather than hitSlop: the native header clips touches to the
+  // bar item's own bounds, so hitSlop past them never registers.
+  headerAction: {
+    padding: spacing.xs,
   },
 });
