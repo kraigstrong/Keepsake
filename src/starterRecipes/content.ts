@@ -20,7 +20,7 @@ export const STARTER_SOURCE_ATTRIBUTION = 'Keepsake starter recipe';
 export const STARTER_RECIPES: StarterRecipe[] = [
   {
     title: 'Sheet-Pan Chicken Thighs with Potatoes and Lemon',
-    imageKey: null,
+    imageKey: 'sheet-pan-chicken-thighs',
     permanentNotes:
       'Crisp-skinned thighs and browned potatoes off one pan, with lemon slices that soften into the juices.',
     activeTimeMinutes: 15,
@@ -62,16 +62,9 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Weeknight Bolognese',
-    // The only one with an object behind it. Licensed stock for the other
-    // nine was tried and abandoned (#192, ADR-0029) — the usable free
-    // corpus is CC BY / CC BY-SA, which needs an attribution surface this
-    // app has nowhere to put, and the CC0 corpus for food turns out to be
-    // museum and Wikimedia material rather than food photography. Nine
-    // nulls rather than nine dangling keys on purpose: a key with no
-    // object still costs a failed signed-URL request per recipe on every
-    // sync pass, forever (src/sync/syncEngine.ts's cacheHeroImages skips
-    // a null path outright).
-    imageKey: 'weeknight-bolognese',
+    // -v2 because devices cache images by path with no revalidation, so a
+    // replacement needs a new key to reach them (deploying-starter-images.md).
+    imageKey: 'weeknight-bolognese-v2',
     permanentNotes:
       'A short-simmer meat sauce built on milk and tomato paste — an hour, not an afternoon, and it freezes well.',
     activeTimeMinutes: 20,
@@ -120,7 +113,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Ground Beef Tacos with Quick Cabbage Slaw',
-    imageKey: null,
+    imageKey: 'ground-beef-tacos',
     permanentNotes:
       'Skillet beef with a proper spice mix instead of a packet, and a sharp lime slaw that comes together while it simmers.',
     activeTimeMinutes: 25,
@@ -176,7 +169,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Garlic Shrimp and Broccoli Stir-Fry',
-    imageKey: null,
+    imageKey: 'garlic-shrimp-stir-fry',
     permanentNotes:
       'Twenty minutes start to finish, one pan, and a sauce whisked together before anything hits the heat.',
     activeTimeMinutes: 20,
@@ -220,7 +213,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Slow Cooker Pulled Pork',
-    imageKey: null,
+    imageKey: 'slow-cooker-pulled-pork',
     permanentNotes:
       'Fifteen minutes of work, eight hours of nothing, and enough for a crowd or a week of leftovers.',
     activeTimeMinutes: 15,
@@ -266,7 +259,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Black Bean and Sweet Potato Chili',
-    imageKey: null,
+    imageKey: 'black-bean-sweet-potato-chili',
     permanentNotes:
       'One pot, pantry ingredients, and better the next day. Mash some of the sweet potato at the end and it thickens itself.',
     activeTimeMinutes: 15,
@@ -314,7 +307,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Skillet Mac and Cheese',
-    imageKey: null,
+    imageKey: 'skillet-mac-and-cheese',
     permanentNotes:
       'The pasta cooks in the milk, so the starch does the thickening and there is no roux and no second pot.',
     activeTimeMinutes: 25,
@@ -356,7 +349,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Buttermilk Pancakes',
-    imageKey: null,
+    imageKey: 'buttermilk-pancakes',
     permanentNotes:
       'A standard batter that rests ten minutes while the pan heats, which is most of the difference between good and great.',
     activeTimeMinutes: 15,
@@ -399,7 +392,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Brown Butter Chocolate Chip Cookies',
-    imageKey: null,
+    imageKey: 'brown-butter-chocolate-chip-cookies',
     permanentNotes:
       'Browning the butter first is seven extra minutes and the only thing that separates these from any other cookie.',
     activeTimeMinutes: 25,
@@ -451,7 +444,7 @@ export const STARTER_RECIPES: StarterRecipe[] = [
   },
   {
     title: 'Grilled Lemon-Herb Chicken',
-    imageKey: null,
+    imageKey: 'grilled-lemon-herb-chicken',
     permanentNotes:
       'A marinade you can mix in a minute and leave for eight hours, and it works just as well in a grill pan indoors.',
     activeTimeMinutes: 15,

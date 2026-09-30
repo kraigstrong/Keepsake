@@ -27,4 +27,7 @@ regexes = [
   # credentials.
   '''abcdefghijklmnopqrstuvwxyz012345''',
   '''zyxwvutsrqponmlkjihgfedcba098765''',
+  # src/starterRecipes/content.ts — a public Storage object name assigned
+  # to a field called imageKey, not a credential.
+  '''weeknight-bolognese-v2''',
 ]

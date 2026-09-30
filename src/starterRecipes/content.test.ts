@@ -165,13 +165,24 @@ describe('image keys (ADR-0029)', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  // Guards the smoke test in production: this is the one recipe with an
-  // object uploaded behind it (docs/deploying-starter-images.md), so a
-  // rename here would quietly turn the only starter photo into a
-  // placeholder.
-  it('keeps the one key that has an image behind it', () => {
-    const bolognese = STARTER_RECIPES.find((recipe) => recipe.title === 'Weeknight Bolognese');
-    expect(bolognese?.imageKey).toBe('weeknight-bolognese');
+  // Every key has an object uploaded behind it and a backfill row keyed on
+  // it (docs/deploying-starter-images.md), so a rename here would quietly
+  // turn that recipe's photo into a placeholder.
+  it('keeps the keys that have images behind them', () => {
+    expect(
+      Object.fromEntries(STARTER_RECIPES.map((recipe) => [recipe.title, recipe.imageKey])),
+    ).toEqual({
+      'Sheet-Pan Chicken Thighs with Potatoes and Lemon': 'sheet-pan-chicken-thighs',
+      'Weeknight Bolognese': 'weeknight-bolognese-v2',
+      'Ground Beef Tacos with Quick Cabbage Slaw': 'ground-beef-tacos',
+      'Garlic Shrimp and Broccoli Stir-Fry': 'garlic-shrimp-stir-fry',
+      'Slow Cooker Pulled Pork': 'slow-cooker-pulled-pork',
+      'Black Bean and Sweet Potato Chili': 'black-bean-sweet-potato-chili',
+      'Skillet Mac and Cheese': 'skillet-mac-and-cheese',
+      'Buttermilk Pancakes': 'buttermilk-pancakes',
+      'Brown Butter Chocolate Chip Cookies': 'brown-butter-chocolate-chip-cookies',
+      'Grilled Lemon-Herb Chicken': 'grilled-lemon-herb-chicken',
+    });
   });
 });
 
