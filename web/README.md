@@ -30,9 +30,7 @@ Do not point the project at the repository root — that would try to build the 
 
 ## Before it fronts an App Review submission
 
-- The contact address is `support@timetutor.app`, chosen 2026-09-02 because it already forwards and
-  ImprovMX's free tier covers only one domain. It works, but it names the wrong product for anyone
-  who looks — worth swapping for an address on this domain before external App Review.
-  forwardemail.net covers unlimited domains free if ImprovMX's single-domain limit is the blocker.
+- The contact address is `support@brightbench.app` (forwardemail.net). Any DNS change for it must
+  leave Resend's SPF/DKIM records intact — they carry the sign-in OTP email.
 - Re-read the policy as the accountable party. It was drafted from the app's actual data flows, but
   it is not legal advice.
