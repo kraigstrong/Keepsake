@@ -150,13 +150,18 @@ everything else would look fine.
 
 ### The CLI route, which cannot get the path wrong
 
+Name each file exactly as its object in the table above (`<key>.jpg`), put them
+in one folder, and copy the folder:
+
 ```bash
 set -a; source devtools.env; set +a
-npx supabase storage cp ./weeknight-bolognese.jpg \
-  ss:///recipe-images/starters/weeknight-bolognese.jpg --experimental
+for f in ./starter-images/*.jpg; do
+  npx supabase storage cp "$f" "ss:///recipe-images/starters/$(basename "$f")" --experimental
+done
 ```
 
-The path is explicit, so there is nothing to misread. Then confirm it is where
+The destination path is explicit, so there is nothing to misread. The filename
+is the key, so check the names against the table before copying. Then confirm it is where
 you think:
 
 ```bash
