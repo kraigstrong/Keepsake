@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { startSelectionRound } from './api';
+import { Chip } from '../components/Chip';
+import { useMealsOnlyPreference } from '../recipes/useMealsOnlyPreference';
 import { Button } from '../components/Button';
 import { Sheet } from '../components/Sheet';
 import { useToast } from '../components/Toast';
@@ -26,6 +28,7 @@ export interface StartRoundSheetProps {
 export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
   const router = useRouter();
   const { showToast } = useToast();
+  const { mealsOnly, setMealsOnly, ready } = useMealsOnlyPreference('planning', visible);
   const [targetCount, setTargetCount] = useState(DEFAULT_TARGET_COUNT);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -38,7 +41,7 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
   async function handlePickOnMyOwn() {
     setIsStarting(true);
     try {
-      const { roundId } = await startSelectionRound({ mode: 'solo', targetCount });
+      const { roundId } = await startSelectionRound({ mode: 'solo', targetCount, mealsOnly });
       onDismiss();
       router.push(`/smart-selection/${roundId}`);
     } catch (error) {
@@ -98,10 +101,18 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
         <Text style={styles.caption}>Just a target — you can stop anytime.</Text>
       </View>
 
+      {ready && (
+        <Chip
+          label="Meals only"
+          selected={mealsOnly}
+          onPress={() => setMealsOnly(!mealsOnly)}
+          testID="start-round-meals-only"
+        />
+      )}
       <Button
         title="Pick on my own"
         onPress={handlePickOnMyOwn}
-        disabled={isStarting}
+        disabled={isStarting || !ready}
         testID="start-round-solo"
       />
     </Sheet>

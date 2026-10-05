@@ -61,6 +61,7 @@ function makeRecipe(
     version: 1,
     title: id,
     heroImagePath,
+    isMeal: true,
     originalPhotoPath: null,
     activeTimeMinutes: null,
     totalTimeMinutes: null,

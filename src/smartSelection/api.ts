@@ -23,6 +23,7 @@ export interface SelectionRoundCandidate {
 }
 
 export interface SelectionRound {
+  mealsOnly: boolean;
   id: string;
   householdId: string;
   createdBy: string | null;
@@ -59,6 +60,7 @@ interface SelectionRoundCandidateRow {
 }
 
 interface SelectionRoundRow {
+  meals_only: boolean;
   id: string;
   household_id: string;
   // Nullable since ADR-0028: a round outlives the member who started it,
@@ -86,6 +88,7 @@ function mapSelectionRound(row: SelectionRoundRow): SelectionRound {
     householdId: row.household_id,
     createdBy: row.created_by,
     mode: row.mode,
+    mealsOnly: row.meals_only,
     status: row.status,
     targetCount: row.target_count,
     closesAt: row.closes_at,
@@ -111,6 +114,7 @@ function mapSelectionRound(row: SelectionRoundRow): SelectionRound {
 }
 
 export interface StartSelectionRoundRequest {
+  mealsOnly?: boolean;
   mode: SelectionRoundMode;
   /** Ignored by the Edge Function/create_selection_round in solo mode. */
   participantUserIds?: string[];

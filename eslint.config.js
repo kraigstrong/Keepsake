@@ -44,6 +44,8 @@ module.exports = [
       // lintable by this Node/RN project's ESLint config. See
       // tsconfig.json's matching exclusion for the full reasoning.
       'supabase/functions/*',
+      // Generated local Edge runtime files may include credentials; never lint them.
+      'supabase/.temp/**',
       // Design-tool-generated reference material (docs/design/), not app
       // source — same treatment as the Deno exclusion above.
       'docs/design/**/*.js',

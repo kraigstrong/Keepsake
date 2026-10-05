@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 import { scoreCandidates } from '../../server/selection/scoreCandidates';
@@ -7,13 +7,14 @@ import { parseServings } from '../../server/units/parseServings';
 import { STARTER_RECIPES, STARTER_SOURCE_ATTRIBUTION } from './content';
 import type { StarterCategoryRef } from './types';
 
-// Mirrors the taxonomy seeded by 20260803100000_recipe_schema.sql.
+// Mirrors the taxonomy seeded by the forward migration chain.
 // Hand-written on purpose so a typo in content.ts fails here rather
 // than silently attaching zero categories on staging — category ids
 // are gen_random_uuid() defaults and differ per environment, so the
 // (group, value) pair is the only thing that travels.
 const SEEDED_CATEGORIES: StarterCategoryRef[] = [
   { group: 'protein', value: 'Chicken' },
+  { group: 'protein', value: 'Turkey' },
   { group: 'protein', value: 'Beef' },
   { group: 'protein', value: 'Pork' },
   { group: 'protein', value: 'Seafood' },
@@ -34,20 +35,22 @@ describe('SEEDED_CATEGORIES', () => {
   // test passing against a stale copy — the exact drift that would ship
   // wrong to staging.
   it('matches the taxonomy actually seeded by the migration', () => {
-    const sql = readFileSync(
-      join(__dirname, '../../supabase/migrations/20260803100000_recipe_schema.sql'),
-      'utf8',
-    );
-    const insertBlock =
-      /insert into public\.categories \(group_name, value\) values([\s\S]*?);/.exec(sql);
-    const values = insertBlock?.[1];
-    expect(values).toBeDefined();
+    const migrationDir = join(__dirname, '../../supabase/migrations');
+    const fromMigration = new Set<string>();
+    for (const file of readdirSync(migrationDir)
+      .filter((name) => name.endsWith('.sql'))
+      .sort()) {
+      const sql = readFileSync(join(migrationDir, file), 'utf8');
+      for (const [, values] of sql.matchAll(
+        /insert into public\.categories \(group_name, value\) values([\s\S]*?);/g,
+      )) {
+        for (const [, group, value] of (values ?? '').matchAll(/\('([^']+)',\s*'([^']+)'\)/g)) {
+          fromMigration.add(`${group}:${value}`);
+        }
+      }
+    }
 
-    const fromMigration = [...(values ?? '').matchAll(/\('([^']+)',\s*'([^']+)'\)/g)].map(
-      ([, group, value]) => `${group}:${value}`,
-    );
-
-    expect(fromMigration.sort()).toEqual(SEEDED_CATEGORIES.map(key).sort());
+    expect([...fromMigration].sort()).toEqual(SEEDED_CATEGORIES.map(key).sort());
   });
 });
 

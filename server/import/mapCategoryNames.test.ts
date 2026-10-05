@@ -33,3 +33,8 @@ describe('mapCategoryNamesToIds', () => {
     expect(mapCategoryNamesToIds([], CATEGORIES)).toEqual([]);
   });
 });
+
+it('maps Turkey from the fetched vocabulary without treating it as Chicken', () => {
+  const categories = [...CATEGORIES, { id: 'cat-turkey', value: 'Turkey' }];
+  expect(mapCategoryNamesToIds(['turkey'], categories)).toEqual(['cat-turkey']);
+});

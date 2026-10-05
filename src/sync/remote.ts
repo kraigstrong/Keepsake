@@ -24,6 +24,7 @@ interface FetchedIngredientLine extends FetchedLine {
   ingredient_text: string | null;
 }
 interface FetchedRecipeRow {
+  is_meal: boolean;
   id: string;
   household_id: string;
   version: number;
@@ -58,6 +59,7 @@ function toSyncedRecipe(row: FetchedRecipeRow): SyncedRecipe {
     householdId: row.household_id,
     version: row.version,
     title: row.title,
+    isMeal: row.is_meal,
     heroImagePath: row.hero_image_path,
     originalPhotoPath: row.original_photo_path,
     activeTimeMinutes: row.active_time_minutes,
@@ -106,7 +108,7 @@ export async function fetchChangedRecipes(
 ): Promise<SyncedRecipe[]> {
   let query = supabase.from('recipes').select(
     `id, household_id, version, title, hero_image_path, original_photo_path, active_time_minutes,
-       total_time_minutes, yield_text, servings_count, planned_count, permanent_notes, source_url, source_attribution, tags,
+       total_time_minutes, yield_text, servings_count, is_meal, planned_count, permanent_notes, source_url, source_attribution, tags,
        created_at, updated_at, archived_at, deleted_at,
        recipe_ingredient_sections (
          title, sort_order,

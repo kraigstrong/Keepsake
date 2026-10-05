@@ -117,8 +117,8 @@ export async function upsertRecipes(
            (id, household_id, version, title, hero_image_path, original_photo_path,
             active_time_minutes, total_time_minutes, yield_text, servings_count, planned_count, permanent_notes, source_url,
             source_attribution, tags, category_ids, ingredient_sections, instruction_sections,
-            created_at, updated_at, archived_at, deleted_at, synced_at)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, archived_at, deleted_at, synced_at, is_meal)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          on conflict (id) do update set
            household_id = excluded.household_id,
            version = excluded.version,
@@ -141,7 +141,8 @@ export async function upsertRecipes(
            updated_at = excluded.updated_at,
            archived_at = excluded.archived_at,
            deleted_at = excluded.deleted_at,
-           synced_at = excluded.synced_at`,
+           synced_at = excluded.synced_at,
+           is_meal = excluded.is_meal`,
         recipe.id,
         recipe.householdId,
         recipe.version,
@@ -165,6 +166,7 @@ export async function upsertRecipes(
         recipe.archivedAt,
         recipe.deletedAt,
         new Date().toISOString(),
+        recipe.isMeal ? 1 : 0,
       );
       await indexRecipeForSearch(db, recipe, categoryLabelsById);
     }

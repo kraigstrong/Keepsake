@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // CI dependency scan (.github/workflows/ci.yml's "Dependency scan"
 // job). Runs `npm audit --omit=dev` itself and fails on any high/
-// critical advisory whose root package isn't in the reviewed allowlist
+// critical advisory that isn't in the reviewed advisory allowlist
 // below — narrower than a blanket `--audit-level` drop, which would
 // silently swallow *any* future high-severity finding, not just the
-// two currently known ones.
+// specific advisories reviewed below.
 //
 // Usage: node scripts/check-npm-audit.mjs
 
@@ -13,7 +13,7 @@ import { execSync } from 'node:child_process';
 // Each entry is a root package `npm audit` flags directly (i.e. it has
 // a real advisory attached, not just "depends on a vulnerable version
 // of X" from being somewhere in the dependency chain) — reviewed and
-// accepted because neither is reachable by any real input to the
+// accepted because these specific flaws are not reachable by input to the
 // shipped app or server:
 //
 // - image-size (high, GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq): only
@@ -27,10 +27,26 @@ import { execSync } from 'node:child_process';
 //   processor); this app never calls nanoid directly, so there's no
 //   path for it to be invoked with the size=0 that triggers the bug.
 //
+// - braces (high, GHSA-vfj7-8cjw-p6xm): Metro file watchers use
+//   micromatch -> braces for developer-configured glob patterns, not
+//   recipe content, uploaded images, or imported URLs. Jest also uses
+//   it for local test-file matching. No patched release as of 2026-10-04.
+// - node-forge (high, GHSA-86w9-cpqp-85rv): only pulled in by @expo/cli
+//   and @expo/code-signing-certificates for development/build signing.
+//   The app and Edge Functions do not import it. This exception does
+//   not cover tooling processing untrusted certificates or signatures;
+//   revisit before enabling that workflow. No patched release as of
+//   2026-10-04.
+//
 // Re-run without this allowlist periodically (or watch for
 // `npm audit fix` proposing a non-breaking upgrade) to see whether
-// either has a real fix upstream yet.
-const ALLOWLISTED_PACKAGES = ['image-size', 'nanoid'];
+// any has a real fix upstream yet.
+const ALLOWLISTED_ADVISORIES = {
+  'image-size': ['GHSA-w3rx-r6r6-pgpr', 'GHSA-5p2g-fcmc-qvqq'],
+  nanoid: ['GHSA-2v37-7h3g-55p8'],
+  braces: ['GHSA-vfj7-8cjw-p6xm'],
+  'node-forge': ['GHSA-86w9-cpqp-85rv'],
+};
 
 function runAudit() {
   try {
@@ -58,10 +74,12 @@ for (const [name, info] of Object.entries(vulnerabilities)) {
   const advisories = info.via.filter((entry) => typeof entry === 'object');
   if (advisories.length === 0) continue;
 
-  if (ALLOWLISTED_PACKAGES.includes(name)) {
-    allowlisted.push({ name, severity: info.severity, advisories });
-  } else {
-    flagged.push({ name, severity: info.severity, advisories });
+  for (const advisory of advisories) {
+    const accepted = (ALLOWLISTED_ADVISORIES[name] ?? []).some(
+      (id) => advisory.url === `https://github.com/advisories/${id}`,
+    );
+    const target = accepted ? allowlisted : flagged;
+    target.push({ name, severity: info.severity, advisories: [advisory] });
   }
 }
 
@@ -85,7 +103,7 @@ if (flagged.length > 0) {
   console.error(
     "\nReview each one: if it's a real, reachable risk, fix it (or note why it can't be " +
       "fixed yet). If it's build-tooling-only like the existing allowlist entries, add it to " +
-      'ALLOWLISTED_PACKAGES in scripts/check-npm-audit.mjs with the same reasoning.',
+      'ALLOWLISTED_ADVISORIES in scripts/check-npm-audit.mjs with the same reasoning.',
   );
   process.exit(1);
 }

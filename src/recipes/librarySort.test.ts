@@ -11,6 +11,7 @@ function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
     categoryIds: [],
     tags: [],
     plannedCount: 0,
+    isMeal: true,
     ...overrides,
   };
 }
@@ -55,6 +56,7 @@ describe('sortRecipes: frequentlySelected', () => {
         title: 'New',
         createdAt: '2026-08-14T00:00:00.000Z',
         plannedCount: 0,
+        isMeal: true,
       }),
       recipe({
         id: 'old-planned',

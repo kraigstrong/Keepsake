@@ -11,13 +11,14 @@ import type { LibraryRecipe } from '../sync/offlineRecipes';
  */
 export interface LibraryFilters {
   categoryIds: string[];
+  mealsOnly?: boolean;
 }
 
 export const EMPTY_FILTERS: LibraryFilters = { categoryIds: [] };
 
 /** LIB-04: the count shown on the filter sheet's badge. */
 export function activeFilterCount(filters: LibraryFilters): number {
-  return filters.categoryIds.length;
+  return filters.categoryIds.length + (filters.mealsOnly ? 1 : 0);
 }
 
 export function filterRecipes(recipes: LibraryRecipe[], filters: LibraryFilters): LibraryRecipe[] {
@@ -25,8 +26,9 @@ export function filterRecipes(recipes: LibraryRecipe[], filters: LibraryFilters)
 
   return recipes.filter(
     (recipe) =>
-      filters.categoryIds.length === 0 ||
-      filters.categoryIds.some((id) => recipe.categoryIds.includes(id)),
+      (!filters.mealsOnly || recipe.isMeal) &&
+      (filters.categoryIds.length === 0 ||
+        filters.categoryIds.some((id) => recipe.categoryIds.includes(id))),
   );
 }
 

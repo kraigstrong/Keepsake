@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
@@ -21,7 +22,8 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const mockedUseRouter = useRouter as jest.Mock;
 const push = jest.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
 });
@@ -53,7 +55,11 @@ it('calls startSelectionRound with the current target count and navigates to the
   await fireEvent.press(screen.getByTestId('start-round-solo'));
 
   await waitFor(() =>
-    expect(mockedApi.startSelectionRound).toHaveBeenCalledWith({ mode: 'solo', targetCount: 5 }),
+    expect(mockedApi.startSelectionRound).toHaveBeenCalledWith({
+      mode: 'solo',
+      targetCount: 5,
+      mealsOnly: false,
+    }),
   );
   expect(onDismiss).toHaveBeenCalled();
   expect(push).toHaveBeenCalledWith('/smart-selection/round-1');
@@ -75,4 +81,21 @@ it('surfaces the thrown error message and leaves the sheet open on a conflict', 
   );
   expect(onDismiss).not.toHaveBeenCalled();
   expect(push).not.toHaveBeenCalled();
+});
+
+it('uses the remembered planning preference when starting a round', async () => {
+  await AsyncStorage.setItem('keepsake.planning.mealsOnly', 'true');
+  mockedApi.startSelectionRound.mockResolvedValue({ roundId: 'meals-round', candidateCount: 3 });
+  await renderSheet();
+  await waitFor(() =>
+    expect(screen.getByTestId('start-round-meals-only')).toHaveProp('accessibilityState', {
+      selected: true,
+    }),
+  );
+  await fireEvent.press(screen.getByTestId('start-round-solo'));
+  expect(mockedApi.startSelectionRound).toHaveBeenCalledWith({
+    mode: 'solo',
+    targetCount: 4,
+    mealsOnly: true,
+  });
 });

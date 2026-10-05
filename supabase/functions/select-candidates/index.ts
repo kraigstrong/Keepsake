@@ -56,6 +56,7 @@ function errorMessage(error: unknown): string {
 
 interface RequestBody {
   mode?: unknown;
+  mealsOnly?: unknown;
   participantUserIds?: unknown;
   targetCount?: unknown;
   closesAt?: unknown;
@@ -64,6 +65,7 @@ interface RequestBody {
 
 interface ParsedCreateRequest {
   kind: 'create';
+  mealsOnly: boolean;
   mode: 'solo' | 'group';
   participantUserIds: string[];
   targetCount: number;
@@ -88,10 +90,14 @@ function parseRequestBody(body: RequestBody): ParsedRequest | Response {
     if (
       body.mode !== undefined ||
       body.participantUserIds !== undefined ||
-      body.closesAt !== undefined
+      body.closesAt !== undefined ||
+      body.mealsOnly !== undefined
     ) {
       return jsonResponse(
-        { error: '"roundId" cannot be combined with "mode", "participantUserIds", or "closesAt"' },
+        {
+          error:
+            '"roundId" cannot be combined with "mode", "participantUserIds", "closesAt", or "mealsOnly"',
+        },
         400,
       );
     }
@@ -146,7 +152,17 @@ function parseRequestBody(body: RequestBody): ParsedRequest | Response {
     closesAt = body.closesAt;
   }
 
-  return { kind: 'create', mode: body.mode, participantUserIds, targetCount, closesAt };
+  if (body.mealsOnly !== undefined && typeof body.mealsOnly !== 'boolean') {
+    return jsonResponse({ error: '"mealsOnly" must be a boolean' }, 400);
+  }
+  return {
+    kind: 'create',
+    mode: body.mode,
+    participantUserIds,
+    targetCount,
+    closesAt,
+    mealsOnly: body.mealsOnly ?? false,
+  };
 }
 
 /**
@@ -181,13 +197,18 @@ async function fetchCurrentThisWeekRecipeIds(supabase: SupabaseClient): Promise<
 // pool with no possible tie going into scoreCandidates — that module's
 // own stableHash tie-break (over roundId + recipeId) is what actually
 // orders the deck; this order never reaches the client.
-async function fetchEligibleRecipeIds(supabase: SupabaseClient): Promise<string[]> {
-  const { data, error } = await supabase
+async function fetchEligibleRecipeIds(
+  supabase: SupabaseClient,
+  mealsOnly: boolean,
+): Promise<string[]> {
+  let query = supabase
     .from('recipes')
     .select('id')
     .is('archived_at', null)
     .is('deleted_at', null)
     .order('id', { ascending: true });
+  if (mealsOnly) query = query.eq('is_meal', true);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => (r as { id: string }).id);
 }
@@ -210,6 +231,7 @@ interface RoundStatusRow {
   status: string;
   target_count: number | null;
   candidate_strategy_version: string | null;
+  meals_only: boolean;
 }
 
 /**
@@ -230,7 +252,7 @@ async function handleAppendRequest(
 
   const { data: round, error: roundError } = await supabase
     .from('selection_rounds')
-    .select('id, status, target_count, candidate_strategy_version')
+    .select('id, status, target_count, candidate_strategy_version, meals_only')
     .eq('id', roundId)
     .maybeSingle();
   if (roundError) {
@@ -282,7 +304,7 @@ async function handleAppendRequest(
   try {
     const [eligibleRecipeIds, fetchedThisWeekRecipeIds, existingRoundCandidateRecipeIds] =
       await Promise.all([
-        fetchEligibleRecipeIds(supabase),
+        fetchEligibleRecipeIds(supabase, (round as RoundStatusRow).meals_only),
         fetchCurrentThisWeekRecipeIds(supabase),
         fetchExistingRoundCandidateRecipeIds(supabase, roundId),
       ]);
@@ -358,11 +380,12 @@ async function handleCreateRequest(
   // Step 1: claim a pending round (ADR-0027 decision 1a) — born
   // pending_candidates, recoverable by retry if anything below fails.
   const { data: created, error: createError } = await supabase
-    .rpc('create_selection_round', {
+    .rpc('create_selection_round_with_filters', {
       mode: parsed.mode,
       participant_user_ids: parsed.participantUserIds,
       target_count: parsed.targetCount,
       closes_at: parsed.closesAt,
+      meals_only: parsed.mealsOnly,
     })
     .single();
 
@@ -413,7 +436,7 @@ async function handleCreateRequest(
   let thisWeekRecipeIds: Set<string>;
   try {
     const [eligibleRecipeIds, fetchedThisWeekRecipeIds] = await Promise.all([
-      fetchEligibleRecipeIds(supabase),
+      fetchEligibleRecipeIds(supabase, parsed.mealsOnly),
       fetchCurrentThisWeekRecipeIds(supabase),
     ]);
     thisWeekRecipeIds = fetchedThisWeekRecipeIds;
@@ -433,7 +456,9 @@ async function handleCreateRequest(
   if (candidateRecipeIds.length === 0) {
     return jsonResponse(
       {
-        error: `Round ${roundId} was created, but no eligible recipes are available for a deck.`,
+        error: parsed.mealsOnly
+          ? 'No meals are available to suggest. Turn off Meals only to include non-meals, or add a meal recipe.'
+          : 'No recipes are available to suggest. Add a recipe or check what is already in This Week.',
         roundId,
       },
       422,

@@ -6,6 +6,7 @@ import {
   buildTitleMatchQuery,
   mergeTiers,
   type SearchRow,
+  type SearchFilters,
 } from './buildSearchQuery';
 import { trackEvent } from '../observability';
 
@@ -43,6 +44,7 @@ export async function searchRecipes(
   query: string,
   householdId: string,
   limit = 20,
+  filters: SearchFilters = {},
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (trimmed.length === 0) return [];
@@ -50,9 +52,9 @@ export async function searchRecipes(
   const startedAt = Date.now();
   const db = await getDatabase();
 
-  const title = buildTitleMatchQuery(trimmed, householdId, limit);
-  const ingredients = buildIngredientsMatchQuery(trimmed, householdId, limit);
-  const everything = buildEverythingMatchQuery(trimmed, householdId, limit);
+  const title = buildTitleMatchQuery(trimmed, householdId, limit, filters);
+  const ingredients = buildIngredientsMatchQuery(trimmed, householdId, limit, filters);
+  const everything = buildEverythingMatchQuery(trimmed, householdId, limit, filters);
 
   const [titleRows, ingredientRows, everythingRows] = await Promise.all([
     db.getAllAsync<SearchRow>(title.sql, title.params),
@@ -65,7 +67,7 @@ export async function searchRecipes(
   if (merged.length > 0) {
     results = toResults(merged);
   } else {
-    const fuzzy = buildFuzzyMatchQuery(trimmed, householdId, limit);
+    const fuzzy = buildFuzzyMatchQuery(trimmed, householdId, limit, filters);
     const fuzzyRows = await db.getAllAsync<SearchRow>(fuzzy.sql, fuzzy.params);
     results = toResults(fuzzyRows);
   }

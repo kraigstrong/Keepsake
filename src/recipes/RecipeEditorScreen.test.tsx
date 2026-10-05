@@ -176,6 +176,7 @@ describe('RecipeEditorScreen — edit mode', () => {
     version: 1,
     title: 'Herb Roast Chicken',
     heroImagePath: 'household-1/existing.jpg',
+    isMeal: true,
     originalPhotoPath: null,
     activeTimeMinutes: 20,
     totalTimeMinutes: 70,
@@ -204,6 +205,28 @@ describe('RecipeEditorScreen — edit mode', () => {
     archivedAt: null,
     deletedAt: null,
   };
+
+  it('loads and preserves Turkey on an existing recipe', async () => {
+    mockedApi.fetchCategories.mockResolvedValue([
+      { id: 'cat-turkey', groupName: 'protein', value: 'Turkey' },
+    ]);
+    mockedApi.fetchRecipe.mockResolvedValue({
+      ...existingRecipe,
+      heroImagePath: null,
+      categoryIds: ['cat-turkey'],
+    });
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+    await render(<RecipeEditorScreen recipeId="recipe-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('recipe-category-cat-turkey')).toHaveProp('accessibilityState', {
+        selected: true,
+      }),
+    );
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryIds: ['cat-turkey'] }),
+    );
+  });
 
   it('loads and populates the fetched recipe', async () => {
     mockedApi.fetchRecipe.mockResolvedValue(existingRecipe);
@@ -336,4 +359,74 @@ describe('RecipeEditorScreen — edit mode', () => {
 
     expect(mockedApi.saveRecipe).toHaveBeenCalledWith(expect.objectContaining({ baseVersion: 2 }));
   }, 15000);
+});
+
+describe('Meal classification', () => {
+  it('defaults a new recipe to Meal and saves an explicit Non-meal choice', async () => {
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'cake' });
+    await render(<RecipeEditorScreen />);
+    expect(screen.getByTestId('recipe-type-meal')).toHaveProp('accessibilityState', {
+      selected: true,
+    });
+    await fireEvent.changeText(screen.getByTestId('recipe-title-input'), 'Cake');
+    await fireEvent.press(screen.getByTestId('recipe-type-non-meal'));
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(expect.objectContaining({ isMeal: false }));
+  });
+
+  it('loads an existing non-meal and preserves it when an old draft lacks classification', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      id: 'cake',
+      title: 'Cake',
+      version: 1,
+      isMeal: false,
+      heroImagePath: null,
+      originalPhotoPath: null,
+      activeTimeMinutes: null,
+      totalTimeMinutes: null,
+      yieldText: null,
+      servingsCount: null,
+      permanentNotes: null,
+      sourceUrl: null,
+      sourceAttribution: null,
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [],
+      instructionSections: [],
+      archivedAt: null,
+      deletedAt: null,
+    });
+    mockedApi.fetchDraft.mockResolvedValue({
+      title: 'Cake draft',
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [],
+      instructionSections: [],
+    });
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'cake' });
+    await render(<RecipeEditorScreen recipeId="cake" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('recipe-title-input')).toHaveProp('value', 'Cake draft'),
+    );
+    expect(screen.getByTestId('recipe-type-non-meal')).toHaveProp('accessibilityState', {
+      selected: true,
+    });
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(expect.objectContaining({ isMeal: false }));
+  });
+});
+
+it('offers Turkey when creating a recipe and saves its category assignment', async () => {
+  mockedApi.fetchCategories.mockResolvedValue([
+    { id: 'cat-turkey', groupName: 'protein', value: 'Turkey' },
+  ]);
+  mockedApi.saveRecipe.mockResolvedValue({ id: 'turkey-recipe' });
+  await render(<RecipeEditorScreen />);
+  await waitFor(() => expect(screen.getByTestId('recipe-category-cat-turkey')).toBeTruthy());
+  await fireEvent.changeText(screen.getByTestId('recipe-title-input'), 'Turkey meatballs');
+  await fireEvent.press(screen.getByTestId('recipe-category-cat-turkey'));
+  await fireEvent.press(screen.getByTestId('recipe-save-button'));
+  expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
+    expect.objectContaining({ categoryIds: ['cat-turkey'] }),
+  );
 });

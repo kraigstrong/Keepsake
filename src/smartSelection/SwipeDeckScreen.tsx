@@ -571,6 +571,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         </Text>
         <Text style={styles.headerYes}>{yesCount} yes</Text>
       </View>
+      {round.mealsOnly && (
+        <Text style={styles.mealsOnlyLabel} testID="swipe-deck-meals-only">
+          Meals only
+        </Text>
+      )}
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} />
       </View>
@@ -828,6 +833,12 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.accent,
     fontWeight: '600',
+  },
+  mealsOnlyLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   headerPosition: {
     ...typography.body,

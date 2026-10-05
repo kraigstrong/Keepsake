@@ -153,9 +153,10 @@ jobs:
       #
       # scripts/check-npm-audit.mjs wraps the raw `npm audit` (rather than
       # a bare --audit-level=high) so that a *new* high/critical finding
-      # anywhere still fails the build — it only tolerates the two
+      # anywhere still fails the build — it only tolerates the
       # specific, reviewed advisories documented in that script's own
-      # allowlist (image-size, nanoid — both build-tooling-only, no
+      # allowlist (each exception is scoped to an advisory ID and has no
       # reachable path from real input to the shipped app), not every
       # future high-severity finding.
+      - run: node --test scripts/check-npm-audit.test.mjs
       - run: node scripts/check-npm-audit.mjs

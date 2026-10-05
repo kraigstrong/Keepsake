@@ -11,6 +11,7 @@ import {
   toggleCategoryFilter,
   type LibraryFilters,
 } from './libraryFilters';
+import { useMealsOnlyPreference } from './useMealsOnlyPreference';
 import { SORT_MODES, sortRecipes, type SortMode } from './librarySort';
 import { readSortPreference, writeSortPreference } from './sortPreference';
 import { useAddSheet } from '../components/AddSheetContext';
@@ -101,6 +102,11 @@ export function LibraryScreen() {
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('smart');
   const [filters, setFilters] = useState<LibraryFilters>(EMPTY_FILTERS);
+  const {
+    mealsOnly,
+    setMealsOnly,
+    ready: mealsPreferenceReady,
+  } = useMealsOnlyPreference('library');
   const [filterSheetVisible, setFilterSheetVisible] = useState(false);
 
   useEffect(() => {
@@ -116,13 +122,21 @@ export function LibraryScreen() {
     const trimmed = query.trim();
     if (trimmed.length === 0 || !household) return;
 
+    let cancelled = false;
     const timeout = setTimeout(() => {
-      searchRecipes(trimmed, household.id)
-        .then(setSearchResults)
-        .catch(() => setSearchResults([]));
+      searchRecipes(trimmed, household.id, 20, { ...filters, mealsOnly })
+        .then((results) => {
+          if (!cancelled) setSearchResults(results);
+        })
+        .catch(() => {
+          if (!cancelled) setSearchResults([]);
+        });
     }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timeout);
-  }, [query, household]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [query, household, filters, mealsOnly]);
 
   // notifyImportCompleted's version bumps on any completed background
   // import (Share Extension drain, outbox retry — app/_layout.tsx),
@@ -260,10 +274,13 @@ export function LibraryScreen() {
   }
 
   const isSearching = query.trim().length > 0;
-  const filterCount = activeFilterCount(filters);
+  const effectiveFilters = { ...filters, mealsOnly };
+  const filterCount = activeFilterCount(effectiveFilters);
+  const filteredRecipes = filterRecipes(recipes ?? [], effectiveFilters);
+  const allowedRecipeIds = new Set(filteredRecipes.map((recipe) => recipe.id));
   const visibleRecipes = isSearching
-    ? (searchResults ?? [])
-    : sortRecipes(filterRecipes(recipes ?? [], filters), sortMode);
+    ? (searchResults ?? []).filter((recipe) => filterCount === 0 || allowedRecipeIds.has(recipe.id))
+    : sortRecipes(filteredRecipes, sortMode);
 
   const categoriesByGroup = CATEGORY_GROUP_ORDER.map((group) => ({
     group,
@@ -288,8 +305,8 @@ export function LibraryScreen() {
             clearButtonMode="while-editing"
           />
 
-          {!isSearching && (
-            <View style={styles.controlsRow}>
+          <View style={styles.controlsRow}>
+            {!isSearching && (
               <View style={styles.sortRow}>
                 {SORT_MODES.map((mode) => (
                   <Chip
@@ -302,15 +319,15 @@ export function LibraryScreen() {
                   />
                 ))}
               </View>
-              <Chip
-                testID="library-filter-button"
-                icon={FilterIcon}
-                label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
-                selected={filterCount > 0}
-                onPress={() => setFilterSheetVisible(true)}
-              />
-            </View>
-          )}
+            )}
+            <Chip
+              testID="library-filter-button"
+              icon={FilterIcon}
+              label={filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
+              selected={filterCount > 0}
+              onPress={() => setFilterSheetVisible(true)}
+            />
+          </View>
         </>
       )}
 
@@ -321,7 +338,7 @@ export function LibraryScreen() {
             message="Something went wrong. Try again."
             testID="library-load-error"
           />
-        ) : recipes === null ? (
+        ) : recipes === null || !mealsPreferenceReady ? (
           <LoadingState label="Loading recipes…" testID="library-loading" />
         ) : recipes.length === 0 && canOfferStarters ? (
           <EmptyState
@@ -347,6 +364,11 @@ export function LibraryScreen() {
           <EmptyState
             title="No matches"
             message={`Nothing found for "${query.trim()}".`}
+            actionLabel={filterCount > 0 ? 'Clear filters' : undefined}
+            onAction={() => {
+              setFilters(EMPTY_FILTERS);
+              setMealsOnly(false);
+            }}
             testID="library-search-empty"
           />
         ) : !isSearching && filterCount > 0 && visibleRecipes.length === 0 ? (
@@ -354,7 +376,10 @@ export function LibraryScreen() {
             title="No recipes match"
             message="Try clearing a filter."
             actionLabel="Clear filters"
-            onAction={() => setFilters(EMPTY_FILTERS)}
+            onAction={() => {
+              setFilters(EMPTY_FILTERS);
+              setMealsOnly(false);
+            }}
             testID="library-filtered-empty"
           />
         ) : (
@@ -380,6 +405,16 @@ export function LibraryScreen() {
         testID="library-filter-sheet"
       >
         <ScrollView style={styles.filterSheetScroll}>
+          {mealsPreferenceReady && (
+            <View style={styles.filterSection}>
+              <Chip
+                label="Meals only"
+                selected={mealsOnly}
+                onPress={() => setMealsOnly(!mealsOnly)}
+                testID="library-meals-only"
+              />
+            </View>
+          )}
           {categoriesByGroup.map(({ group, options }) => (
             <View key={group} style={styles.filterSection}>
               <Text style={styles.filterSectionTitle}>{CATEGORY_GROUP_LABELS[group]}</Text>
@@ -402,7 +437,10 @@ export function LibraryScreen() {
           <Chip
             testID="library-filter-clear"
             label="Clear filters"
-            onPress={() => setFilters(EMPTY_FILTERS)}
+            onPress={() => {
+              setFilters(EMPTY_FILTERS);
+              setMealsOnly(false);
+            }}
           />
           <Chip
             testID="library-filter-done"

@@ -10,3 +10,6 @@ docs/
 .claude/
 .github/
 *.md
+
+# Generated local Supabase runtime files
+supabase/.temp/

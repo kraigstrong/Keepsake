@@ -31,6 +31,7 @@ describe('readLocalLibraryRecipes', () => {
           id: 'r1',
           title: 'Chili',
           created_at: '2026-08-01T00:00:00.000Z',
+          is_meal: 1,
           category_ids: JSON.stringify(['c1']),
           tags: JSON.stringify(['spicy']),
           planned_count: 2,
@@ -44,13 +45,14 @@ describe('readLocalLibraryRecipes', () => {
         id: 'r1',
         title: 'Chili',
         createdAt: '2026-08-01T00:00:00.000Z',
+        isMeal: true,
         categoryIds: ['c1'],
         tags: ['spicy'],
         plannedCount: 2,
       },
     ]);
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
+      'select id, title, is_meal, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
       HOUSEHOLD_ID,
     );
   });
@@ -74,6 +76,7 @@ describe('readLocalLibraryRecipes', () => {
           id: 'r1',
           title: 'Chili',
           created_at: null,
+          is_meal: 1,
           category_ids: '[]',
           tags: '[]',
           planned_count: 0,
@@ -122,6 +125,7 @@ describe('readLocalRecipe', () => {
         source_url: null,
         source_attribution: null,
         tags: JSON.stringify(['spicy']),
+        is_meal: 1,
         category_ids: JSON.stringify(['c1']),
         ingredient_sections: JSON.stringify([{ title: null, lines: ['1 lb beef'] }]),
         instruction_sections: JSON.stringify([{ title: null, lines: ['Brown the beef.'] }]),
@@ -141,6 +145,7 @@ describe('readLocalRecipe', () => {
       sourceUrl: null,
       sourceAttribution: null,
       tags: ['spicy'],
+      isMeal: true,
       categoryIds: ['c1'],
       ingredientSections: [{ title: null, lines: ['1 lb beef'] }],
       instructionSections: [{ title: null, lines: ['Brown the beef.'] }],

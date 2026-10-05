@@ -29,6 +29,7 @@ const recipe: SyncedRecipe = {
   version: 1,
   title: 'Chili',
   heroImagePath: null,
+  isMeal: true,
   originalPhotoPath: null,
   activeTimeMinutes: null,
   totalTimeMinutes: null,
@@ -151,6 +152,7 @@ describe('upsertRecipes', () => {
       recipe.archivedAt,
       recipe.deletedAt,
       expect.any(String),
+      1,
     );
   });
 
