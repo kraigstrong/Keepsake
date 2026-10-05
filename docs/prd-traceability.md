@@ -98,7 +98,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 | LIB-01 | Default sort: Recently Added (\<2wk) \> Frequently Selected \> remaining | 7 (Frequently Selected: 12) | Done (tested)¤ |
 | LIB-02 | Additional sorts: Smart / Alphabetical / Recently Added / Frequently Selected | 7 (Frequently Selected: 12) | Done (tested)¤ |
 | LIB-03 | Recipe rows show title only, no metadata clutter | 7 | Done (tested) |
-| LIB-04 | Filters with active filter count | 7 | Done (tested) |
+| LIB-04 | Filters with active filter count | 7; #231 | Done (tested): `Meals only`, persisted device preferences, category composition and filtered search; `libraryFilters.test.ts`, `LibraryScreen.test.tsx`, `mealsOnlyPreference.test.ts`, `searchCorrectness.test.ts` |
 
 ¤ Status was stale — left "In Progress" since Phase 7 despite full implementation landing by Phase 12. `src/recipes/librarySort.ts` implements all four modes (`smartSort`'s recently-added/frequently-selected/remaining tiering matches LIB-01's exact ordering; `alphabetical`/`recentlyAdded`/`frequentlySelected` cover LIB-02), wired into `LibraryScreen.tsx`'s sort control, covered by `librarySort.test.ts` (each mode's ordering, tie-breaking, the 2-week boundary, non-mutation) and `sortPreference.test.ts` (persisted selection). Corrected 2026-08-13 during Phase 17's traceability sweep. The 2-week boundary itself was off by one at the time of that correction — a recipe created exactly 14 days ago was treated as still inside the window (`>= cutoff`), one day past what "\<2wk" (strict) requires; fixed 2026-08-16 (Codex review, PR #54) to `> cutoff`, with boundary tests on both sides of the cutoff.
 
