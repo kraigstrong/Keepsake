@@ -76,7 +76,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 
 | ID | Requirement | Owning Phase | Status |
 |---|---|---|---|
-| ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4 | Done (tested) |
+| ORG-01 | Structured categories: Protein / Dish Type / Preparation | 4; #232 | Done (tested): Turkey protein supported through the shared taxonomy; `turkey_protein_category.test.sql`, recipe editor/Library tests, import vocabulary/mapping tests |
 | ORG-02 | Multiple category selections allowed | 4 | Done (tested) |
 | ORG-03 | Free-form tags supported | 4 | Done (tested) |
 | ORG-04 | AI suggests categories and tags | 8 | Done (tested) |

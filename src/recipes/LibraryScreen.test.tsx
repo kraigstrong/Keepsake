@@ -592,3 +592,39 @@ it('Meals only hides non-meals, counts the filter, applies during search, and ca
   await waitFor(() => expect(screen.getByText('Chicken cake')).toBeTruthy());
   expect(await AsyncStorage.getItem('keepsake.library.mealsOnly')).toBe('false');
 });
+
+it('offers Turkey as a protein filter and combines it with Meals only', async () => {
+  mockedReadLocalCategories.mockResolvedValue([
+    { id: 'cat-turkey', groupName: 'protein', value: 'Turkey' },
+    { id: 'cat-chicken', groupName: 'protein', value: 'Chicken' },
+  ]);
+  mockedReadLocalLibraryRecipes.mockResolvedValue([
+    recipe({ id: 'turkey', title: 'Turkey meatballs', categoryIds: ['cat-turkey'] }),
+    recipe({ id: 'chicken', title: 'Chicken soup', categoryIds: ['cat-chicken'] }),
+    recipe({ id: 'other', title: 'Turkey non-meal', categoryIds: ['cat-turkey'], isMeal: false }),
+  ]);
+  await render(<LibraryScreen />);
+  await waitFor(() => expect(screen.getByTestId('library-filter-button')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('library-filter-button'));
+  await waitFor(() =>
+    expect(screen.getByTestId('library-filter-category-cat-turkey')).toBeTruthy(),
+  );
+  await fireEvent.press(screen.getByTestId('library-filter-category-cat-turkey'));
+  expect(
+    screen
+      .getByTestId('library-recipe-list')
+      .props.data.map((r: LibraryRecipe) => r.id)
+      .sort(),
+  ).toEqual(['other', 'turkey']);
+  await fireEvent.press(screen.getByTestId('library-meals-only'));
+  expect(
+    screen.getByTestId('library-recipe-list').props.data.map((r: LibraryRecipe) => r.id),
+  ).toEqual(['turkey']);
+  await fireEvent.press(screen.getByTestId('library-filter-category-cat-chicken'));
+  expect(
+    screen
+      .getByTestId('library-recipe-list')
+      .props.data.map((r: LibraryRecipe) => r.id)
+      .sort(),
+  ).toEqual(['chicken', 'turkey']);
+});

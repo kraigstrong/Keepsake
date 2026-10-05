@@ -15,7 +15,7 @@ import { MESSY_RECIPE_PAGE_TEXT } from './fixtures/messyRecipePage';
 // values closely enough for these tests — the real list is fetched from
 // the DB by the caller (the Edge Function), this file only exercises how
 // extractRecipe/extractRecipeFromImage thread it through.
-const TEST_CATEGORY_VALUES = ['Chicken', 'Beef', 'Vegetarian', 'Soup', 'Dessert'];
+const TEST_CATEGORY_VALUES = ['Chicken', 'Turkey', 'Beef', 'Vegetarian', 'Soup', 'Dessert'];
 
 describe('RecipeExtractionSchema', () => {
   const validExtraction = {
@@ -408,4 +408,9 @@ it('requires a boolean meal classification rather than silently defaulting AI ou
   expect(RecipeExtractionSchema.safeParse({ isMeal: 'false' }).success).toBe(false);
   expect(buildExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('isMeal');
   expect(buildImageExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('isMeal');
+});
+
+it('includes Turkey in both URL and photo extraction vocabularies', () => {
+  expect(buildExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('"Turkey"');
+  expect(buildImageExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('"Turkey"');
 });
