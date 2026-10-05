@@ -56,6 +56,7 @@ function testRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
     targetCount: 2,
     closesAt: null,
     candidateStrategyVersion: 'heuristic-v1',
+    mealsOnly: false,
     revealedAt: null,
     createdAt: '2026-08-26T00:00:00.000Z',
     updatedAt: '2026-08-26T00:00:00.000Z',

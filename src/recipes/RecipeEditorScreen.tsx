@@ -92,6 +92,7 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [title, setTitle] = useState('');
+  const [isMeal, setIsMeal] = useState(true);
   const [heroImagePath, setHeroImagePath] = useState<string | null>(null);
   const [heroPreviewUri, setHeroPreviewUri] = useState<string | null>(null);
   const [activeTimeMinutes, setActiveTimeMinutes] = useState('');
@@ -108,6 +109,8 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
 
   function applyFormFields(fields: RecipeDraftPayload | Recipe) {
     setTitle(fields.title);
+    // Old edit drafts have no classification: retain the fetched recipe value.
+    if (fields.isMeal !== undefined) setIsMeal(fields.isMeal);
     setHeroImagePath(fields.heroImagePath ?? null);
     setActiveTimeMinutes(fields.activeTimeMinutes?.toString() ?? '');
     setTotalTimeMinutes(fields.totalTimeMinutes?.toString() ?? '');
@@ -199,6 +202,7 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
 
     const draftPayload: RecipeDraftPayload = {
       title,
+      isMeal,
       heroImagePath,
       activeTimeMinutes: parseMinutes(activeTimeMinutes),
       totalTimeMinutes: parseMinutes(totalTimeMinutes),
@@ -224,6 +228,7 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
     isLoading,
     recipeId,
     title,
+    isMeal,
     heroImagePath,
     activeTimeMinutes,
     totalTimeMinutes,
@@ -294,6 +299,7 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
         id: recipeId,
         baseVersion: baseVersion ?? undefined,
         title: title.trim(),
+        isMeal,
         heroImagePath,
         activeTimeMinutes: parseMinutes(activeTimeMinutes),
         totalTimeMinutes: parseMinutes(totalTimeMinutes),
@@ -456,6 +462,22 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
         value={yieldText}
         onChangeText={setYieldText}
       />
+
+      <Text style={styles.sectionLabel}>Recipe type</Text>
+      <View style={styles.chipRow}>
+        <Chip
+          label="Meal"
+          selected={isMeal}
+          onPress={() => setIsMeal(true)}
+          testID="recipe-type-meal"
+        />
+        <Chip
+          label="Non-meal"
+          selected={!isMeal}
+          onPress={() => setIsMeal(false)}
+          testID="recipe-type-non-meal"
+        />
+      </View>
 
       <Text style={styles.sectionLabel}>Ingredients</Text>
       <SectionsEditor

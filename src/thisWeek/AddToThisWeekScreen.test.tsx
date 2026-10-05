@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
@@ -33,12 +34,13 @@ const mockedUseRouter = useRouter as jest.Mock;
 
 const back = jest.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ back });
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
-    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: null },
-    { id: 'r2', title: 'Tacos', servingsCount: null },
+    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: null, isMeal: true },
+    { id: 'r2', title: 'Tacos', servingsCount: null, isMeal: true },
   ]);
   mockedThisWeekApi.addRecipesToThisWeek.mockResolvedValue(undefined);
 });
@@ -86,8 +88,8 @@ it('disables Next until at least one recipe is selected, then advances to the se
 // on this screen.
 it('shows preset chips for every recipe, regardless of parsed servings count', async () => {
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
-    { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6 },
-    { id: 'r2', title: 'Tacos', servingsCount: null },
+    { id: 'r1', title: 'Nacho Cheese Sauce', servingsCount: 6, isMeal: true },
+    { id: 'r2', title: 'Tacos', servingsCount: null, isMeal: true },
   ]);
 
   await renderScreen();
@@ -129,8 +131,8 @@ it('submits the whole selection as multipliers in one batch call, then navigates
   // plain chip-selected multipliers now — servingsCount no longer
   // changes how a recipe's multiplier is derived on this screen.
   mockedRecipesApi.fetchRecipes.mockResolvedValue([
-    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: 4 },
-    { id: 'r2', title: 'Tacos', servingsCount: null },
+    { id: 'r1', title: 'Herb Roast Chicken', servingsCount: 4, isMeal: true },
+    { id: 'r2', title: 'Tacos', servingsCount: null, isMeal: true },
   ]);
 
   await renderScreen();
@@ -175,4 +177,26 @@ it('Cancel on the select step navigates back without adding anything', async () 
 
   expect(back).toHaveBeenCalled();
   expect(mockedThisWeekApi.addRecipesToThisWeek).not.toHaveBeenCalled();
+});
+
+it('Meals only composes with search and removes hidden non-meal selections', async () => {
+  mockedRecipesApi.fetchRecipes.mockResolvedValue([
+    { id: 'meal', title: 'Chicken meal', servingsCount: null, isMeal: true },
+    { id: 'cake', title: 'Chicken cake', servingsCount: null, isMeal: false },
+  ]);
+  await renderScreen();
+  await waitFor(() => expect(screen.getByTestId('add-to-this-week-meals-only')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-cake'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-meals-only'));
+  expect(screen.queryByTestId('add-to-this-week-recipe-cake')).toBeNull();
+  expect(screen.getByTestId('add-to-this-week-next')).toBeDisabled();
+  await fireEvent.changeText(screen.getByTestId('add-to-this-week-search'), 'Chicken');
+  expect(screen.getByTestId('add-to-this-week-recipe-meal')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('add-to-this-week-meals-only'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-cake'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
+  await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));
+  expect(mockedThisWeekApi.addRecipesToThisWeek).toHaveBeenCalledWith('plan-1', [
+    { recipeId: 'cake', multiplier: 1 },
+  ]);
 });

@@ -41,8 +41,8 @@ describe('fetchRecipes', () => {
             order: () =>
               Promise.resolve({
                 data: [
-                  { id: 'r1', title: 'Chili', servings_count: 6 },
-                  { id: 'r2', title: 'Tacos', servings_count: null },
+                  { id: 'r1', title: 'Chili', servings_count: 6, is_meal: true },
+                  { id: 'r2', title: 'Tacos', servings_count: null, is_meal: true },
                 ],
                 error: null,
               }),
@@ -52,8 +52,8 @@ describe('fetchRecipes', () => {
     });
 
     await expect(fetchRecipes()).resolves.toEqual([
-      { id: 'r1', title: 'Chili', servingsCount: 6 },
-      { id: 'r2', title: 'Tacos', servingsCount: null },
+      { id: 'r1', title: 'Chili', servingsCount: 6, isMeal: true },
+      { id: 'r2', title: 'Tacos', servingsCount: null, isMeal: true },
     ]);
     expect(mockedFrom).toHaveBeenCalledWith('recipes');
   });
@@ -159,6 +159,7 @@ describe('fetchRecipe', () => {
                 total_time_minutes: 70,
                 yield_text: 'Serves 4',
                 servings_count: 4,
+                is_meal: true,
                 permanent_notes: null,
                 source_url: null,
                 source_attribution: null,
@@ -211,6 +212,7 @@ describe('fetchRecipe', () => {
       activeTimeMinutes: 20,
       totalTimeMinutes: 70,
       yieldText: 'Serves 4',
+      isMeal: true,
       servingsCount: 4,
       permanentNotes: null,
       sourceUrl: null,

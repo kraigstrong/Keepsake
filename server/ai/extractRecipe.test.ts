@@ -20,6 +20,7 @@ const TEST_CATEGORY_VALUES = ['Chicken', 'Beef', 'Vegetarian', 'Soup', 'Dessert'
 describe('RecipeExtractionSchema', () => {
   const validExtraction = {
     title: "Grandma's Sunday Sauce",
+    isMeal: true,
     activeTimeMinutes: 30,
     totalTimeMinutes: 90,
     yield: '6 servings',
@@ -56,6 +57,7 @@ describe('RecipeExtractionSchema', () => {
   it('allows null time/yield fields (for genuinely unstated values)', () => {
     const result = RecipeExtractionSchema.safeParse({
       ...validExtraction,
+      isMeal: true,
       activeTimeMinutes: null,
       totalTimeMinutes: null,
       yield: null,
@@ -68,6 +70,7 @@ describe('RecipeExtractionSchema', () => {
 describe('extractRecipe — model selection', () => {
   const confidentExtraction = {
     title: 'Roast Chicken',
+    isMeal: true,
     activeTimeMinutes: 20,
     totalTimeMinutes: 70,
     yield: '4 servings',
@@ -272,6 +275,7 @@ describe('extractRecipe — model selection', () => {
 describe('hasRecipeContent (#219)', () => {
   const base: RecipeExtraction = {
     title: '22 Chicken Thigh Recipes',
+    isMeal: true,
     activeTimeMinutes: null,
     totalTimeMinutes: null,
     yield: null,
@@ -339,6 +343,7 @@ describe('category prompt building (ORG-04/AI-06)', () => {
   it('extractRecipe sends a system prompt carrying the given categories', async () => {
     const confidentExtraction = {
       title: 'Roast Chicken',
+      isMeal: true,
       activeTimeMinutes: 20,
       totalTimeMinutes: 70,
       yield: '4 servings',
@@ -397,4 +402,10 @@ describeIfApiKey('extractRecipe (live API)', () => {
     expect(result.instructionSections.length).toBeGreaterThan(0);
     expect(result.instructionSections[0]?.steps.length).toBeGreaterThan(0);
   }, 30_000);
+});
+
+it('requires a boolean meal classification rather than silently defaulting AI output', () => {
+  expect(RecipeExtractionSchema.safeParse({ isMeal: 'false' }).success).toBe(false);
+  expect(buildExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('isMeal');
+  expect(buildImageExtractionSystemPrompt(TEST_CATEGORY_VALUES)).toContain('isMeal');
 });

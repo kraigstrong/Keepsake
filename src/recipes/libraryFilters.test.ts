@@ -15,6 +15,7 @@ function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
     categoryIds: [],
     tags: [],
     plannedCount: 0,
+    isMeal: true,
     ...overrides,
   };
 }
@@ -65,4 +66,17 @@ describe('toggleCategoryFilter', () => {
     toggleCategoryFilter(filters, 'c2');
     expect(filters.categoryIds).toEqual(['c1']);
   });
+});
+
+it('Meals only excludes non-meals even when another category matches', () => {
+  const meal = recipe({ id: 'meal', categoryIds: ['protein'] });
+  const nonMeal = recipe({ id: 'dessert', isMeal: false, categoryIds: ['protein', 'dessert'] });
+  expect(filterRecipes([meal, nonMeal], { mealsOnly: true, categoryIds: ['protein'] })).toEqual([
+    meal,
+  ]);
+  expect(filterRecipes([meal, nonMeal], { mealsOnly: false, categoryIds: [] })).toEqual([
+    meal,
+    nonMeal,
+  ]);
+  expect(activeFilterCount({ mealsOnly: true, categoryIds: ['protein'] })).toBe(2);
 });

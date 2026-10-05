@@ -60,6 +60,7 @@ const recipe: Recipe = {
   version: 1,
   title: 'Herb Roast Chicken',
   heroImagePath: null,
+  isMeal: true,
   originalPhotoPath: null,
   activeTimeMinutes: 20,
   totalTimeMinutes: 70,

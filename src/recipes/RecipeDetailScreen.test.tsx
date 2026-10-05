@@ -107,6 +107,7 @@ const recipe: api.Recipe = {
   version: 1,
   title: 'Herb Roast Chicken',
   heroImagePath: 'household-1/existing.jpg',
+  isMeal: true,
   originalPhotoPath: null,
   activeTimeMinutes: 20,
   totalTimeMinutes: 70,
@@ -244,6 +245,7 @@ it('leaves Original Photo out of the More menu when the recipe has no original_p
 it('navigates to the original photo screen, url-encoding the path, when one exists', async () => {
   mockedApi.fetchRecipe.mockResolvedValue({
     ...recipe,
+    isMeal: true,
     originalPhotoPath: 'household-1/originals/photo one.jpg',
   });
 
@@ -704,6 +706,7 @@ describe('More menu (#226)', () => {
     mockedApi.fetchRecipe.mockResolvedValue({
       ...recipe,
       version: 3,
+      isMeal: true,
       originalPhotoPath: 'household-1/originals/photo.jpg',
     });
 

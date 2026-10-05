@@ -161,3 +161,30 @@ describe('search correctness against the real schema and tokenizer', () => {
     ]);
   });
 });
+
+it('Meals only filters before LIMIT so non-meals cannot crowd out a matching meal', () => {
+  const db = createSearchDatabase();
+  for (const statement of MIGRATIONS[12]!) db.exec(statement);
+  try {
+    for (let i = 0; i < 25; i++) {
+      insertRecipe(db, { recipeId: `cake-${i}`, title: 'Chicken cake' });
+      db.prepare('update recipes set is_meal = 0 where id = ?').run(`cake-${i}`);
+    }
+    insertRecipe(db, { recipeId: 'meal', title: 'Chicken pasta', categories: 'Chicken' });
+    db.prepare('update recipes set category_ids = ? where id = ?').run('["protein"]', 'meal');
+    for (const build of [buildTitleMatchQuery, buildEverythingMatchQuery]) {
+      const query = build('Chicken', HOUSEHOLD_ID, 1, {
+        mealsOnly: true,
+        categoryIds: ['protein'],
+      });
+      expect(
+        db
+          .prepare(query.sql)
+          .all(...query.params)
+          .map((row) => row.recipe_id),
+      ).toEqual(['meal']);
+    }
+  } finally {
+    db.close();
+  }
+});

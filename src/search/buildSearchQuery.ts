@@ -12,6 +12,20 @@
  * each internally ranked by bm25.
  */
 
+export interface SearchFilters {
+  mealsOnly?: boolean;
+  categoryIds?: string[];
+}
+
+// Applied before LIMIT in every tier and fuzzy fallback: filtering only
+// the final 20 hits could hide a matching meal behind 20 non-meals.
+function searchFilterClause(filters: SearchFilters): { sql: string; params: string[] } {
+  return {
+    sql: `${filters.mealsOnly ? ' and r.is_meal = 1' : ''}${filters.categoryIds?.length ? ' and exists (select 1 from json_each(r.category_ids) where value in (select value from json_each(?)))' : ''}`,
+    params: filters.categoryIds?.length ? [JSON.stringify(filters.categoryIds)] : [],
+  };
+}
+
 export interface SearchRow {
   recipe_id: string;
   title: string;
@@ -20,7 +34,7 @@ export interface SearchRow {
 
 export interface TierMatchQuery {
   sql: string;
-  params: [string, string];
+  params: string[];
 }
 
 /**
@@ -43,7 +57,9 @@ function buildColumnMatchQuery(
   query: string,
   householdId: string,
   limit: number,
+  filters: SearchFilters,
 ): TierMatchQuery {
+  const filter = searchFilterClause(filters);
   return {
     sql: `
       select t.recipe_id, t.title, t.rank
@@ -53,11 +69,11 @@ function buildColumnMatchQuery(
            where recipe_fts match ?
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null${filter.sql}
        order by t.rank
        limit ${limit}
     `,
-    params: [`${column}:(${toFts5MatchLiteral(query)})`, householdId],
+    params: [`${column}:(${toFts5MatchLiteral(query)})`, householdId, ...filter.params],
   };
 }
 
@@ -65,16 +81,18 @@ export function buildTitleMatchQuery(
   query: string,
   householdId: string,
   limit = 20,
+  filters: SearchFilters = {},
 ): TierMatchQuery {
-  return buildColumnMatchQuery('title', query, householdId, limit);
+  return buildColumnMatchQuery('title', query, householdId, limit, filters);
 }
 
 export function buildIngredientsMatchQuery(
   query: string,
   householdId: string,
   limit = 20,
+  filters: SearchFilters = {},
 ): TierMatchQuery {
-  return buildColumnMatchQuery('ingredients', query, householdId, limit);
+  return buildColumnMatchQuery('ingredients', query, householdId, limit, filters);
 }
 
 /** Tier 3: any column at all (notes, source, categories, tags, plus title/ingredients again — duplicates are dropped by mergeTiers). */
@@ -82,7 +100,9 @@ export function buildEverythingMatchQuery(
   query: string,
   householdId: string,
   limit = 20,
+  filters: SearchFilters = {},
 ): TierMatchQuery {
+  const filter = searchFilterClause(filters);
   return {
     sql: `
       select t.recipe_id, t.title, t.rank
@@ -92,11 +112,11 @@ export function buildEverythingMatchQuery(
            where recipe_fts match ?
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null${filter.sql}
        order by t.rank
        limit ${limit}
     `,
-    params: [toFts5MatchLiteral(query), householdId],
+    params: [toFts5MatchLiteral(query), householdId, ...filter.params],
   };
 }
 
@@ -149,7 +169,9 @@ export function buildFuzzyMatchQuery(
   query: string,
   householdId: string,
   limit = 20,
+  filters: SearchFilters = {},
 ): FuzzyMatchQuery {
+  const filter = searchFilterClause(filters);
   const grams = [...new Set(trigramsOf(query.toLowerCase()))];
   // Guard: FTS5 has no useful trigram signal below 3 characters — the
   // caller should treat this as "no fuzzy fallback available" rather than
@@ -171,11 +193,11 @@ export function buildFuzzyMatchQuery(
            group by recipe_id
         ) t
         join recipes r on r.id = t.recipe_id
-       where r.household_id = ? and r.archived_at is null and r.deleted_at is null
+       where r.household_id = ? and r.archived_at is null and r.deleted_at is null${filter.sql}
        order by t.shared desc
        limit ${limit}
     `,
-    params: [orExpr, householdId],
+    params: [orExpr, householdId, ...filter.params],
   };
 }
 

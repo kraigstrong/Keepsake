@@ -2,7 +2,7 @@
 // add a new numbered entry here rather than editing an existing one once
 // it's shipped, same discipline as the Supabase migrations directory.
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const MIGRATIONS: Record<number, readonly string[]> = {
   1: [
@@ -219,5 +219,15 @@ export const MIGRATIONS: Record<number, readonly string[]> = {
   11: [
     `alter table recipes add column archived_at text`,
     `alter table recipes add column deleted_at text`,
+  ],
+  // #231: backfill the local starting classification immediately, then
+  // refetch to pick up explicit server values (including manual overrides).
+  12: [
+    `alter table recipes add column is_meal integer not null default 1`,
+    `update recipes set is_meal = 0 where exists (
+      select 1 from json_each(recipes.category_ids) rc join categories c on c.id = rc.value
+      where c.group_name = 'dish_type' and c.value = 'Dessert'
+    )`,
+    `update sync_state set recipes_cursor_updated_at = null, recipes_cursor_id = null`,
   ],
 };

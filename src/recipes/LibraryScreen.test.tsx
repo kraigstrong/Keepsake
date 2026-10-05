@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -51,6 +52,7 @@ function recipe(overrides: Partial<LibraryRecipe> = {}): LibraryRecipe {
     categoryIds: [],
     tags: [],
     plannedCount: 0,
+    isMeal: true,
     ...overrides,
   };
 }
@@ -70,7 +72,8 @@ const mockedTrackEvent = trackEvent as jest.Mock;
 const push = jest.fn();
 const openAddSheet = jest.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
   mockedUseFocusEffect.mockImplementation((effect: () => void) => effect());
@@ -236,9 +239,16 @@ describe('search', () => {
 
     fireEvent.changeText(screen.getByTestId('library-search-input'), 'chick');
 
-    await waitFor(() => expect(mockedSearchRecipes).toHaveBeenCalledWith('chick', 'h1'), {
-      timeout: 2000,
-    });
+    await waitFor(
+      () =>
+        expect(mockedSearchRecipes).toHaveBeenCalledWith('chick', 'h1', 20, {
+          categoryIds: [],
+          mealsOnly: false,
+        }),
+      {
+        timeout: 2000,
+      },
+    );
     await waitFor(() => expect(screen.getByText('Chicken Tikka')).toBeTruthy(), { timeout: 2000 });
     expect(screen.queryByText('Chili')).toBeNull();
   }, 10000);
@@ -554,4 +564,31 @@ describe('starter recipe offer — regressions found by review', () => {
       mockedTrackEvent.mock.calls.filter(([n]) => n === 'starter_recipes_offered'),
     ).toHaveLength(2);
   });
+});
+
+it('Meals only hides non-meals, counts the filter, applies during search, and can be cleared', async () => {
+  mockedReadLocalLibraryRecipes.mockResolvedValue([
+    recipe({ id: 'meal', title: 'Chicken meal', isMeal: true }),
+    recipe({ id: 'cake', title: 'Chicken cake', isMeal: false }),
+  ]);
+  mockedSearchRecipes.mockResolvedValue([{ id: 'meal', title: 'Chicken meal' }]);
+  await AsyncStorage.setItem('keepsake.library.mealsOnly', 'true');
+  await render(<LibraryScreen />);
+  await waitFor(() => expect(screen.getByText('Chicken meal')).toBeTruthy());
+  expect(screen.queryByText('Chicken cake')).toBeNull();
+  await fireEvent.changeText(screen.getByTestId('library-search-input'), 'Chicken');
+  await waitFor(() =>
+    expect(mockedSearchRecipes).toHaveBeenCalledWith('Chicken', 'h1', 20, {
+      categoryIds: [],
+      mealsOnly: true,
+    }),
+  );
+  await fireEvent.press(screen.getByTestId('library-filter-button'));
+  expect(screen.getByTestId('library-meals-only')).toHaveProp('accessibilityState', {
+    selected: true,
+  });
+  await fireEvent.press(screen.getByTestId('library-filter-clear'));
+  await fireEvent.changeText(screen.getByTestId('library-search-input'), '');
+  await waitFor(() => expect(screen.getByText('Chicken cake')).toBeTruthy());
+  expect(await AsyncStorage.getItem('keepsake.library.mealsOnly')).toBe('false');
 });

@@ -585,6 +585,7 @@ Deno.serve(async (req: Request) => {
           sourceAttribution,
           tags: extraction.suggestedTags,
           categoryIds,
+          isMeal: extraction.isMeal,
           // Quantity parsing (ADR-0018) runs here too, not just on
           // manual entry — an AI-extracted ingredient line is still
           // just text ("2 lb baby potatoes") until this same parser

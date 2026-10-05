@@ -34,6 +34,7 @@ import { z } from 'zod';
 export const RecipeExtractionSchema = z
   .object({
     title: z.string(),
+    isMeal: z.boolean(),
     activeTimeMinutes: z.number().int().nullable(),
     totalTimeMinutes: z.number().int().nullable(),
     yield: z.string().nullable(),
@@ -96,6 +97,7 @@ Rules:
 - Preserve the page's own section structure for ingredients and instructions (e.g. "For the sauce" / "For the crust") when present; use a single unheaded section when the page has no sections.
 - Infer active time, total time, and yield when the page implies them even if not stated in exact numbers, but do NOT invent a specific number you cannot support from the text.
 - For any field you are not confident about, still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
+- isMeal: true for a recipe intended as a meal or a component of a meal; false for desserts, sweets, or other non-meal recipes. If uncertain, add "isMeal" to uncertainFields so the user can correct it.
 - suggestedCategories: infer from the recipe's content which of the following categories genuinely apply — choose zero or more, but ONLY from this exact list; never invent a category outside it: ${formatCategoryList(categoryValues)}.
 - suggestedTags: your own free-form inference from the recipe's content, not necessarily anything stated explicitly on the page. At most 3, short (one or two words), lowercase. Only tag a genuinely distinguishing, reusable attribute a cook would filter or search for later — diet (e.g. "vegetarian"), cuisine (e.g. "italian"), technique (e.g. "one-pot"), or occasion (e.g. "holiday"). Do not restate the title, an ingredient, or anything already captured in suggestedCategories, and do not invent a one-off descriptor so specific it wouldn't ever apply to another recipe. When in doubt, tag less.
 - notes: null unless the page has its own explicit, clearly labeled aside — a section actually headed "Tip," "Note," "Cook's Note," "Chef's Note," "Variation," or "Storage" (or an equivalent unmistakable label) — giving practical guidance about making, storing, or serving this dish. If present, copy its substance concisely; do not pad it or add anything not in that section. This is NOT a place to summarize the page, restate an instruction, or rescue any of the blog narrative/SEO filler you were told to remove above — if you are inferring or synthesizing rather than copying an explicit labeled aside, the answer is null. When in doubt, null.`;
@@ -252,6 +254,7 @@ Rules:
 - If the photo shows only part of a recipe (e.g. ingredients but no instructions, or the image is cut off), extract what is genuinely legible and leave the rest empty — do not invent missing sections.
 - Infer active time, total time, and yield only when legibly stated or clearly implied; do NOT invent a specific number you cannot support from the image.
 - For any field you are not confident about — including anything illegible, ambiguous handwriting, or a guess at a partially-obscured word — still provide your best value (or null for numeric/yield fields), but add that field's name to uncertainFields. Never silently guess — flag it instead.
+- isMeal: true for a recipe intended as a meal or a component of a meal; false for desserts, sweets, or other non-meal recipes. If uncertain, add "isMeal" to uncertainFields so the user can correct it.
 - suggestedCategories: infer from the recipe's content which of the following categories genuinely apply — choose zero or more, but ONLY from this exact list; never invent a category outside it: ${formatCategoryList(categoryValues)}.
 - suggestedTags: your own free-form inference from the recipe's content, not necessarily anything stated explicitly in the photo. At most 3, short (one or two words), lowercase. Only tag a genuinely distinguishing, reusable attribute a cook would filter or search for later — diet, cuisine, technique, or occasion. Do not restate the title, an ingredient, or anything already captured in suggestedCategories, and do not invent a one-off descriptor so specific it wouldn't ever apply to another recipe. When in doubt, tag less.
 - notes: null unless the photo shows its own explicit, clearly labeled aside — text actually headed "Tip," "Note," "Cook's Note," "Chef's Note," "Variation," or "Storage" (or an equivalent unmistakable label) — giving practical guidance about making, storing, or serving this dish. If present and legible, copy its substance concisely; do not pad it or guess at illegible portions. This is NOT a place to summarize the recipe or restate an instruction — if you are inferring or synthesizing rather than reading an explicit labeled aside, the answer is null. When in doubt, null.`;

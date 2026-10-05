@@ -3,6 +3,7 @@ import { trackEvent } from '../observability';
 import { supabase } from '../supabase/instance';
 
 export interface RecipeSummary {
+  isMeal: boolean;
   id: string;
   title: string;
   servingsCount: number | null;
@@ -34,6 +35,7 @@ export interface Category {
 }
 
 export interface Recipe {
+  isMeal: boolean;
   id: string;
   version: number;
   title: string;
@@ -68,6 +70,7 @@ export interface Recipe {
 }
 
 export interface RecipeSavePayload {
+  isMeal?: boolean;
   id?: string;
   baseVersion?: number;
   title: string;
@@ -91,6 +94,7 @@ export interface RecipeSavePayload {
 // once, at the actual save_recipe call (ADR-0018) — and servingsCount
 // is derived from yieldText at that same point, not stored mid-edit.
 export interface RecipeDraftPayload {
+  isMeal?: boolean;
   title: string;
   heroImagePath?: string | null;
   activeTimeMinutes?: number | null;
@@ -128,15 +132,18 @@ export function isRecipeConflictError(error: unknown): boolean {
 export async function fetchRecipes(): Promise<RecipeSummary[]> {
   const { data, error } = await supabase
     .from('recipes')
-    .select('id, title, servings_count')
+    .select('id, title, servings_count, is_meal')
     .is('archived_at', null)
     .is('deleted_at', null)
     .order('title');
   if (error) throw error;
-  return (data as { id: string; title: string; servings_count: number | null }[]).map((row) => ({
+  return (
+    data as { id: string; title: string; servings_count: number | null; is_meal: boolean }[]
+  ).map((row) => ({
     id: row.id,
     title: row.title,
     servingsCount: row.servings_count,
+    isMeal: row.is_meal,
   }));
 }
 
@@ -191,6 +198,7 @@ interface FetchedIngredientLine extends FetchedLine {
   ingredient_text: string | null;
 }
 interface FetchedRecipeRow {
+  is_meal: boolean;
   id: string;
   version: number;
   title: string;
@@ -220,7 +228,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     .from('recipes')
     .select(
       `id, version, title, hero_image_path, original_photo_path, active_time_minutes, total_time_minutes, yield_text,
-       servings_count, permanent_notes, source_url, source_attribution, tags, archived_at, deleted_at,
+       servings_count, is_meal, permanent_notes, source_url, source_attribution, tags, archived_at, deleted_at,
        recipe_ingredient_sections (
          title, sort_order,
          recipe_ingredients ( line_text, quantity_min, quantity_max, unit, ingredient_text, sort_order )
@@ -244,6 +252,7 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
     totalTimeMinutes: row.total_time_minutes,
     yieldText: row.yield_text,
     servingsCount: row.servings_count,
+    isMeal: row.is_meal,
     permanentNotes: row.permanent_notes,
     sourceUrl: row.source_url,
     sourceAttribution: row.source_attribution,
@@ -275,6 +284,7 @@ export async function saveRecipe(payload: RecipeSavePayload): Promise<{ id: stri
         id: payload.id ?? null,
         baseVersion: payload.baseVersion ?? null,
         title: payload.title,
+        ...(payload.isMeal === undefined ? {} : { isMeal: payload.isMeal }),
         heroImagePath: payload.heroImagePath ?? null,
         activeTimeMinutes: payload.activeTimeMinutes ?? null,
         totalTimeMinutes: payload.totalTimeMinutes ?? null,

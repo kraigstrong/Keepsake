@@ -8,6 +8,7 @@ import { defaultImageStore, ensureImageCached, type ImageStore } from './imageCa
 // filters, plannedCount for the Frequently Selected tier (FREQ-01,
 // Phase 12).
 export interface LibraryRecipe {
+  isMeal: boolean;
   id: string;
   title: string;
   createdAt: string;
@@ -17,6 +18,7 @@ export interface LibraryRecipe {
 }
 
 interface LibraryRecipeRow {
+  is_meal: number;
   id: string;
   title: string;
   created_at: string | null;
@@ -26,6 +28,7 @@ interface LibraryRecipeRow {
 }
 
 interface LocalRecipeRow {
+  is_meal: number;
   id: string;
   version: number;
   title: string;
@@ -51,6 +54,7 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
     id: row.id,
     version: row.version,
     title: row.title,
+    isMeal: row.is_meal === 1,
     heroImagePath: row.hero_image_path,
     originalPhotoPath: row.original_photo_path,
     activeTimeMinutes: row.active_time_minutes,
@@ -93,12 +97,13 @@ function parseLocalRecipeRow(row: LocalRecipeRow): Recipe {
 export async function readLocalLibraryRecipes(householdId: string): Promise<LibraryRecipe[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<LibraryRecipeRow>(
-    'select id, title, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
+    'select id, title, is_meal, created_at, category_ids, tags, planned_count from recipes where household_id = ? and archived_at is null and deleted_at is null order by title',
     householdId,
   );
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
+    isMeal: row.is_meal === 1,
     // Only null for a local row that hasn't gone through the schema v3
     // resync yet (see db/schema.ts's migration 3) — falls back to "epoch"
     // rather than "now" so an unmigrated row sorts as old, not

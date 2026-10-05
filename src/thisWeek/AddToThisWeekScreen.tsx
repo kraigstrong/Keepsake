@@ -4,6 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
+import { Chip } from '../components/Chip';
+import { useMealsOnlyPreference } from '../recipes/useMealsOnlyPreference';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { ErrorState } from '../components/ErrorState';
@@ -28,6 +30,11 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
+  const {
+    mealsOnly,
+    setMealsOnly,
+    ready: mealsPreferenceReady,
+  } = useMealsOnlyPreference('planning');
   const [step, setStep] = useState<Step>('select');
   const [query, setQuery] = useState('');
   const [recipes, setRecipes] = useState<RecipeSummary[] | null>(null);
@@ -98,8 +105,10 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
     }
   }
 
-  const visibleRecipes = (recipes ?? []).filter((recipe) =>
-    recipe.title.toLowerCase().includes(query.trim().toLowerCase()),
+  const visibleRecipes = (recipes ?? []).filter(
+    (recipe) =>
+      (!mealsOnly || recipe.isMeal) &&
+      recipe.title.toLowerCase().includes(query.trim().toLowerCase()),
   );
   const selectedRecipes = (recipes ?? []).filter((recipe) => selectedIds.includes(recipe.id));
 
@@ -129,7 +138,7 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               message="Check your connection and try again."
               testID="add-to-this-week-load-error"
             />
-          ) : recipes === null ? (
+          ) : recipes === null || !mealsPreferenceReady ? (
             <LoadingState label="Loading recipes…" testID="add-to-this-week-loading" />
           ) : (
             <>
@@ -144,7 +153,29 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
                 clearButtonMode="while-editing"
                 testID="add-to-this-week-search"
               />
-              <ScrollView style={styles.list}>
+              <View style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }}>
+                {mealsPreferenceReady && (
+                  <Chip
+                    label="Meals only"
+                    selected={mealsOnly}
+                    onPress={() => {
+                      setMealsOnly(!mealsOnly);
+                      // A hidden selection must not be submitted accidentally.
+                      if (!mealsOnly)
+                        setSelectedIds((ids) =>
+                          ids.filter((id) => recipes.some((r) => r.id === id && r.isMeal)),
+                        );
+                    }}
+                    testID="add-to-this-week-meals-only"
+                  />
+                )}
+              </View>
+              <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+                {visibleRecipes.length === 0 && (
+                  <Text style={styles.rowTitle}>
+                    No recipes match. Try changing your search or turning off Meals only.
+                  </Text>
+                )}
                 {visibleRecipes.map((recipe) => {
                   const selected = selectedIds.includes(recipe.id);
                   return (

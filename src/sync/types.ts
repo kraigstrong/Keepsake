@@ -4,6 +4,7 @@ import type { IngredientSection, RecipeSection } from '../recipes/api';
 // only sync itself needs (household_id for local scoping, updated_at as
 // half of the sync cursor) — ADR-0013.
 export interface SyncedRecipe {
+  isMeal: boolean;
   id: string;
   householdId: string;
   version: number;
