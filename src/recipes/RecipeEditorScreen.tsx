@@ -499,6 +499,7 @@ export function RecipeEditorScreen({ recipeId, fromImport = false }: RecipeEdito
         removeLineLabel="Remove step"
         addSectionLabel="Add section"
         testIDPrefix="recipe-instructions"
+        reorderable
       />
 
       {groupedCategories.map(([group, values]) => (
@@ -616,6 +617,7 @@ function SectionsEditor({
   removeLineLabel,
   addSectionLabel,
   testIDPrefix,
+  reorderable = false,
 }: {
   sections: RecipeSection[];
   onChange: (sections: RecipeSection[]) => void;
@@ -624,7 +626,29 @@ function SectionsEditor({
   removeLineLabel: string;
   addSectionLabel: string;
   testIDPrefix: string;
+  // Within-section moves only (#233): cross-section movement was ruled
+  // out so a move can never empty or merge a section.
+  reorderable?: boolean;
 }) {
+  // Stable per-line React keys, kept parallel to `sections` rather than
+  // stored in the saved/drafted shape. With index keys a move would
+  // leave the focused TextInput in place while its text moved away, so
+  // further typing would land in the wrong step.
+  const [storedLineKeys, setLineKeys] = useState(() =>
+    sections.map((section) => section.lines.map(freshLineKey)),
+  );
+  // Re-syncs after a wholesale replacement from the parent (load, draft
+  // restore, "reload latest") — React's adjust-state-during-render pattern.
+  const reconciledLineKeys = reconcileLineKeys(sections, storedLineKeys);
+  if (reconciledLineKeys) setLineKeys(reconciledLineKeys);
+  const lineKeys = reconciledLineKeys ?? storedLineKeys;
+
+  function updateLineKeys(sectionIndex: number, update: (keys: string[]) => string[]) {
+    setLineKeys((current) =>
+      current.map((keys, index) => (index === sectionIndex ? update(keys) : keys)),
+    );
+  }
+
   function updateSectionTitle(sectionIndex: number, value: string) {
     onChange(
       sections.map((section, index) =>
@@ -646,6 +670,7 @@ function SectionsEditor({
   }
 
   function addLine(sectionIndex: number) {
+    updateLineKeys(sectionIndex, (keys) => [...keys, freshLineKey()]);
     onChange(
       sections.map((section, index) =>
         index === sectionIndex ? { ...section, lines: [...section.lines, ''] } : section,
@@ -654,6 +679,7 @@ function SectionsEditor({
   }
 
   function removeLine(sectionIndex: number, lineIndex: number) {
+    updateLineKeys(sectionIndex, (keys) => keys.filter((_, index) => index !== lineIndex));
     onChange(
       sections.map((section, index) => {
         if (index !== sectionIndex) return section;
@@ -662,7 +688,22 @@ function SectionsEditor({
     );
   }
 
+  function moveLine(sectionIndex: number, lineIndex: number, direction: -1 | 1) {
+    const targetIndex = lineIndex + direction;
+    const lines = sections[sectionIndex]?.lines;
+    if (!lines || targetIndex < 0 || targetIndex >= lines.length) return;
+    updateLineKeys(sectionIndex, (keys) => swap(keys, lineIndex, targetIndex));
+    onChange(
+      sections.map((section, index) =>
+        index === sectionIndex
+          ? { ...section, lines: swap(section.lines, lineIndex, targetIndex) }
+          : section,
+      ),
+    );
+  }
+
   function addSection() {
+    setLineKeys((current) => [...current, [freshLineKey()]]);
     onChange([...sections, { title: '', lines: [''] }]);
   }
 
@@ -681,7 +722,7 @@ function SectionsEditor({
             />
           )}
           {section.lines.map((line, lineIndex) => (
-            <View key={lineIndex} style={styles.lineRow}>
+            <View key={lineKeys[sectionIndex]?.[lineIndex] ?? lineIndex} style={styles.lineRow}>
               <TextInput
                 testID={`${testIDPrefix}-line-${sectionIndex}-${lineIndex}`}
                 style={[styles.input, styles.lineInput]}
@@ -690,6 +731,24 @@ function SectionsEditor({
                 value={line}
                 onChangeText={(value) => updateLine(sectionIndex, lineIndex, value)}
               />
+              {reorderable && section.lines.length > 1 && (
+                <>
+                  <MoveLineButton
+                    direction="up"
+                    disabled={lineIndex === 0}
+                    accessibilityLabel={`Move step ${lineIndex + 1} up`}
+                    onPress={() => moveLine(sectionIndex, lineIndex, -1)}
+                    testID={`${testIDPrefix}-move-up-${sectionIndex}-${lineIndex}`}
+                  />
+                  <MoveLineButton
+                    direction="down"
+                    disabled={lineIndex === section.lines.length - 1}
+                    accessibilityLabel={`Move step ${lineIndex + 1} down`}
+                    onPress={() => moveLine(sectionIndex, lineIndex, 1)}
+                    testID={`${testIDPrefix}-move-down-${sectionIndex}-${lineIndex}`}
+                  />
+                </>
+              )}
               {section.lines.length > 1 && (
                 <Pressable
                   onPress={() => removeLine(sectionIndex, lineIndex)}
@@ -726,6 +785,61 @@ function SectionsEditor({
         testID={`${testIDPrefix}-add-section`}
       />
     </View>
+  );
+}
+
+let nextLineKey = 0;
+function freshLineKey(): string {
+  return `line-${nextLineKey++}`;
+}
+
+// Null when the keys already match the sections' shape.
+function reconcileLineKeys(sections: RecipeSection[], keys: string[][]): string[][] | null {
+  const matches =
+    keys.length === sections.length &&
+    sections.every((section, index) => keys[index]?.length === section.lines.length);
+  if (matches) return null;
+  return sections.map((section, sectionIndex) =>
+    section.lines.map((_, lineIndex) => keys[sectionIndex]?.[lineIndex] ?? freshLineKey()),
+  );
+}
+
+function swap<T>(items: T[], a: number, b: number): T[] {
+  const swapped = [...items];
+  [swapped[a], swapped[b]] = [swapped[b]!, swapped[a]!];
+  return swapped;
+}
+
+// Same ▲/▼ glyphs as This Week's tap reorder. Sized as a full-height
+// target with no hitSlop, so neither button's touch area reaches into
+// the TextInput or the neighbouring button.
+function MoveLineButton({
+  direction,
+  disabled,
+  accessibilityLabel,
+  onPress,
+  testID,
+}: {
+  direction: 'up' | 'down';
+  disabled: boolean;
+  accessibilityLabel: string;
+  onPress: () => void;
+  testID: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      style={styles.moveLineButton}
+      testID={testID}
+    >
+      <Text style={[styles.moveLineGlyph, disabled && styles.moveLineGlyphDisabled]}>
+        {direction === 'up' ? '▲' : '▼'}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -826,6 +940,20 @@ const styles = StyleSheet.create({
   removeLineButton: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moveLineButton: {
+    alignSelf: 'stretch',
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moveLineGlyph: {
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  moveLineGlyphDisabled: {
+    color: colors.textTertiary,
+    opacity: 0.4,
   },
   lineRow: {
     flexDirection: 'row',
