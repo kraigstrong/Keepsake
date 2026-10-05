@@ -18,7 +18,7 @@ This file is the evidence index referenced by execution-plan.md §2.3 and the ex
 |---|---|---|---|
 | REC-01 | Title, hero image, active/total time, yield | 4 | Done (tested) |
 | REC-02 | Ingredient sections | 4 | Done (tested) |
-| REC-03 | Instruction sections | 4 | Done (tested) |
+| REC-03 | Instruction sections | 4; #233 | Done (tested): steps reorder within their section in the editor; `RecipeEditorScreen.test.tsx` "Instruction step reordering" |
 | REC-04 | Permanent notes | 4 | Done (tested) |
 | REC-05 | Cooking history, separate from permanent notes | 15 | Done (tested) |
 | REC-06 | Source URL and attribution | 4 / 8 | Done (tested) |

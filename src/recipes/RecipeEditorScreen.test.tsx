@@ -430,3 +430,117 @@ it('offers Turkey when creating a recipe and saves its category assignment', asy
     expect.objectContaining({ categoryIds: ['cat-turkey'] }),
   );
 });
+
+describe('Instruction step reordering', () => {
+  async function typeSteps(steps: string[]) {
+    for (const [i, step] of steps.entries()) {
+      if (i > 0) await fireEvent.press(screen.getByTestId('recipe-instructions-add-line-0'));
+      await fireEvent.changeText(screen.getByTestId(`recipe-instructions-line-0-${i}`), step);
+    }
+  }
+
+  function stepValues(sectionIndex: number, count: number) {
+    return Array.from(
+      { length: count },
+      (_, i) => screen.getByTestId(`recipe-instructions-line-${sectionIndex}-${i}`).props.value,
+    );
+  }
+
+  it('moves steps up and down when creating a recipe, and saves the new order', async () => {
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+    await render(<RecipeEditorScreen />);
+    await fireEvent.changeText(screen.getByTestId('recipe-title-input'), 'Soup');
+    await typeSteps(['Chop', 'Simmer', 'Serve']);
+
+    await fireEvent.press(screen.getByTestId('recipe-instructions-move-up-0-2'));
+    expect(stepValues(0, 3)).toEqual(['Chop', 'Serve', 'Simmer']);
+    await fireEvent.press(screen.getByTestId('recipe-instructions-move-down-0-0'));
+    expect(stepValues(0, 3)).toEqual(['Serve', 'Chop', 'Simmer']);
+
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instructionSections: [{ title: null, lines: ['Serve', 'Chop', 'Simmer'] }],
+      }),
+    );
+  }, 15000);
+
+  it('keeps each row attached to its own step across a move', async () => {
+    await render(<RecipeEditorScreen />);
+    await typeSteps(['Chop', 'Simmer']);
+    const chopRow = screen.getByTestId('recipe-instructions-line-0-0');
+
+    await fireEvent.press(screen.getByTestId('recipe-instructions-move-down-0-0'));
+
+    // Same host input, now in second position: a focused input (and the
+    // keyboard on it) travels with its step instead of staying in slot 0.
+    expect(screen.getByTestId('recipe-instructions-line-0-1')).toBe(chopRow);
+  }, 15000);
+
+  it('disables moves past a section boundary and hides them for a single step', async () => {
+    await render(<RecipeEditorScreen />);
+
+    expect(screen.queryByTestId('recipe-instructions-move-up-0-0')).toBeNull();
+    expect(screen.queryByTestId('recipe-instructions-move-down-0-0')).toBeNull();
+
+    await typeSteps(['Chop', 'Simmer']);
+    expect(screen.getByTestId('recipe-instructions-move-up-0-0')).toBeDisabled();
+    expect(screen.getByTestId('recipe-instructions-move-down-0-1')).toBeDisabled();
+    expect(screen.getByLabelText('Move step 1 down')).toBeEnabled();
+    expect(screen.getByLabelText('Move step 2 up')).toBeEnabled();
+  }, 15000);
+
+  it('does not offer reordering for ingredients', async () => {
+    await render(<RecipeEditorScreen />);
+    await fireEvent.press(screen.getByTestId('recipe-ingredients-add-line-0'));
+
+    expect(screen.queryByTestId('recipe-ingredients-move-up-0-1')).toBeNull();
+  }, 15000);
+
+  it('reorders within one section of an existing recipe without touching the others', async () => {
+    mockedApi.fetchRecipe.mockResolvedValue({
+      id: 'recipe-1',
+      version: 3,
+      title: 'Pie',
+      heroImagePath: null,
+      isMeal: false,
+      originalPhotoPath: null,
+      activeTimeMinutes: null,
+      totalTimeMinutes: null,
+      yieldText: null,
+      servingsCount: null,
+      permanentNotes: null,
+      sourceUrl: null,
+      sourceAttribution: null,
+      tags: [],
+      categoryIds: [],
+      ingredientSections: [],
+      instructionSections: [
+        { title: 'Crust', lines: ['Mix', 'Chill'] },
+        { title: 'Filling', lines: ['Slice', 'Toss', 'Fill'] },
+      ],
+      archivedAt: null,
+      deletedAt: null,
+    });
+    mockedApi.saveRecipe.mockResolvedValue({ id: 'recipe-1' });
+    await render(<RecipeEditorScreen recipeId="recipe-1" />);
+
+    // Last step of a section can't move into the next one.
+    expect(screen.getByTestId('recipe-instructions-move-down-0-1')).toBeDisabled();
+    expect(screen.getByTestId('recipe-instructions-move-up-1-0')).toBeDisabled();
+
+    await fireEvent.press(screen.getByTestId('recipe-instructions-move-up-1-2'));
+    await fireEvent.press(screen.getByTestId('recipe-save-button'));
+
+    expect(mockedApi.saveRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'recipe-1',
+        baseVersion: 3,
+        instructionSections: [
+          { title: 'Crust', lines: ['Mix', 'Chill'] },
+          { title: 'Filling', lines: ['Slice', 'Fill', 'Toss'] },
+        ],
+      }),
+    );
+  }, 15000);
+});
