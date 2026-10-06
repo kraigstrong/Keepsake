@@ -180,7 +180,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const finishingRef = useRef(false);
   const finishAndWait = useCallback(async () => {
     if (finishingRef.current) return;
+    // Lock the deck before draining: a vote cast while the snapshot below
+    // settles would land after the ballot is marked finished (Codex,
+    // PR #249). decide() checks the ref; the controls read the state.
     finishingRef.current = true;
+    setFinishState('finishing');
     const saved = await Promise.all([...pendingWritesRef.current.values()]);
     if (saved.includes(false)) {
       finishingRef.current = false;
@@ -188,7 +192,6 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       showToast("Couldn't save that decision — you'll need to redo it");
       return;
     }
-    setFinishState('finishing');
     try {
       await finishSelectionParticipation(roundId);
       replaceIfFocused(`/smart-selection/${roundId}/waiting`);
@@ -418,7 +421,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // No recentring needed on this path: currentCandidate is undefined
     // only when the deck is terminal, and a null round unmounts the card
     // entirely — the layout effect's deps cover both.
-    if (!round || !currentCandidate) return;
+    if (!round || !currentCandidate || finishingRef.current) return;
     const recipeId = currentCandidate.recipeId;
     const title = cardDetails.get(recipeId)?.title ?? 'that recipe';
     const decidedAtPosition = position;
@@ -586,7 +589,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // React-owned, which then rejects these ordinary UI-thread writes.
   /* eslint-disable react-hooks/refs, react-hooks/immutability */
   const panGesture = Gesture.Pan()
-    .enabled(!terminal)
+    .enabled(!terminal && finishState !== 'finishing')
     .onUpdate((event) => {
       translateX.value = event.translationX;
     })
@@ -847,11 +850,17 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                     title="Not this week"
                     variant="secondary"
                     onPress={() => decide('no')}
+                    disabled={finishState === 'finishing'}
                     testID="swipe-deck-no"
                   />
                 </View>
                 <View style={styles.decisionButton}>
-                  <Button title="Yes" onPress={() => decide('yes')} testID="swipe-deck-yes" />
+                  <Button
+                    title="Yes"
+                    onPress={() => decide('yes')}
+                    disabled={finishState === 'finishing'}
+                    testID="swipe-deck-yes"
+                  />
                 </View>
               </View>
             </View>

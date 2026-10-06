@@ -860,6 +860,23 @@ describe('group mode (#241)', () => {
     expect(mockedApi.recordSelectionDecision).toHaveBeenCalledTimes(2);
   });
 
+  it("locks the deck as soon as I'm done is tapped, before in-flight votes land", async () => {
+    let resolveSecond: () => void = () => {};
+    mockedApi.recordSelectionDecision
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(new Promise<void>((resolve) => (resolveSecond = resolve)));
+    renderDeck();
+    await decideAll(['swipe-deck-yes', 'swipe-deck-yes']);
+
+    await fireEvent.press(screen.getByTestId('swipe-deck-finish-action'));
+    expect(screen.getByTestId('swipe-deck-yes')).toBeDisabled();
+    await fireEvent.press(screen.getByTestId('swipe-deck-no'));
+    expect(mockedApi.recordSelectionDecision).toHaveBeenCalledTimes(2);
+
+    await act(async () => resolveSecond());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+  });
+
   it('offers a retry when finishing fails', async () => {
     mockedApi.finishSelectionParticipation
       .mockRejectedValueOnce(new Error('network down'))
