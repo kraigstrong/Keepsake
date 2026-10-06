@@ -8,8 +8,21 @@
 
 set -euo pipefail
 
-dest="${1:?usage: sync-sim-root.sh <destination>}"
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
+# Canonical, so a relative path, `..` or a symlink can't slip a
+# destination inside the repo past the check below (Codex, PR #247). The
+# destination may not exist yet, so resolve its deepest existing ancestor.
+dest="$(node -e '
+  const fs = require("fs");
+  const path = require("path");
+  let existing = path.resolve(process.argv[1]);
+  const rest = [];
+  while (!fs.existsSync(existing)) {
+    rest.unshift(path.basename(existing));
+    existing = path.dirname(existing);
+  }
+  console.log(path.join(fs.realpathSync(existing), ...rest));
+' "${1:?usage: sync-sim-root.sh <destination>}")"
 
 case "$dest" in
   "$root" | "$root"/*)

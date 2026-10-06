@@ -68,7 +68,9 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
         setSelectedIds(new Set(others.map((member) => member.userId)));
       },
       () => {
-        if (!cancelled) setMembers({ status: 'error' });
+        if (cancelled) return;
+        setMembers({ status: 'error' });
+        setSelectedIds(new Set());
       },
     );
     return () => {
@@ -97,10 +99,13 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
     });
   }
 
-  // Every internal close goes through here so the next open starts on
-  // the first step; the parent only ever flips `visible`.
+  // Every close goes through here, so the next open starts on the first
+  // step with no roster: a stale one would enable "Pick together" with
+  // last time's people until the refetch lands (Codex, PR #247).
   function dismiss() {
     setStep('start');
+    setMembers({ status: 'loading' });
+    setSelectedIds(new Set());
     onDismiss();
   }
 

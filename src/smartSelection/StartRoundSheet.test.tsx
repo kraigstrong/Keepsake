@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import * as api from './api';
@@ -242,6 +242,40 @@ describe('Pick together', () => {
     expect(within(scroll).queryByTestId('start-round-together-start')).toBeNull();
     expect(screen.getByTestId('start-round-together-start')).toBeTruthy();
     expect(screen.getByText('Start round with 13')).toBeTruthy();
+  });
+
+  it('forgets the roster on close, so a reopened sheet waits for a fresh one', async () => {
+    const onDismiss = jest.fn();
+    const view = await render(
+      <ToastProvider>
+        <StartRoundSheet visible onDismiss={onDismiss} />
+      </ToastProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('start-round-together')).not.toBeDisabled());
+    await fireEvent.press(screen.getByTestId('start-round-together'));
+    await fireEvent.press(screen.getByTestId('start-round-invite'));
+    expect(onDismiss).toHaveBeenCalled();
+
+    let resolveRefetch: (members: typeof household) => void = () => {};
+    mockedHouseholdApi.fetchHouseholdMembers.mockReturnValue(
+      new Promise((resolve) => (resolveRefetch = resolve)),
+    );
+    await view.rerender(
+      <ToastProvider>
+        <StartRoundSheet visible={false} onDismiss={onDismiss} />
+      </ToastProvider>,
+    );
+    await view.rerender(
+      <ToastProvider>
+        <StartRoundSheet visible onDismiss={onDismiss} />
+      </ToastProvider>,
+    );
+
+    expect(screen.getByTestId('start-round-together')).toBeDisabled();
+    await act(async () => resolveRefetch([household[0]!, household[1]!]));
+    await waitFor(() => expect(screen.getByTestId('start-round-together')).not.toBeDisabled());
+    await fireEvent.press(screen.getByTestId('start-round-together'));
+    expect(screen.getByText('Start round with 2')).toBeTruthy();
   });
 
   it('offers a retry when the household cannot be loaded', async () => {
