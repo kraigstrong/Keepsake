@@ -5,11 +5,12 @@
 --
 -- Household A: alice (creator), bob and frank (participants; frank has
 -- no profile row yet), erin (member, not a participant). Household B:
--- carol, isolated from A.
+-- carol, isolated from A. Alice's votes in an earlier, cancelled round
+-- must not count toward the current one.
 
 begin;
 
-select plan(13);
+select plan(15);
 
 insert into auth.users (id, email)
 values
@@ -56,6 +57,24 @@ select set_config(
   json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text,
   true
 );
+
+-- An earlier round with alice's votes in it, cancelled so the next one
+-- can start: its decisions must not leak into round_g's counts.
+create temporary table round_earlier as
+select * from public.create_selection_round(
+  'group', array['22222222-2222-2222-2222-222222222222']::uuid[], 4, now() + interval '1 day'
+);
+select public.finalize_selection_round_candidates(
+  (select round_id from round_earlier),
+  (select claim_token from round_earlier),
+  '[{"recipe_id":"20000000-0000-0000-0000-000000000001","score":0.9,"reason_codes":[]},
+    {"recipe_id":"20000000-0000-0000-0000-000000000004","score":0.6,"reason_codes":[]}]'::jsonb,
+  'v1'
+);
+select public.record_selection_decision((select round_id from round_earlier), '20000000-0000-0000-0000-000000000001', 'yes');
+select public.record_selection_decision((select round_id from round_earlier), '20000000-0000-0000-0000-000000000004', 'yes');
+select public.cancel_selection_round((select round_id from round_earlier));
+
 create temporary table round_g as
 select * from public.create_selection_round(
   'group',
@@ -176,6 +195,26 @@ select is(
   jsonb_array_length(public.get_selection_round((select round_id from round_g)) -> 'candidates'),
   3,
   'and the archived recipe is gone from the deck, so progress stays within it'
+);
+
+-- Same for a soft-deleted recipe: bob's only yes was Fish Tacos.
+reset role;
+update public.recipes set deleted_at = now() where id = '20000000-0000-0000-0000-000000000004';
+set local role authenticated;
+
+select is(
+  (select row((p->>'decided_count')::int, (p->>'yes_count')::int)::text
+   from jsonb_array_elements(
+     public.get_selection_round((select round_id from round_g)) -> 'participants'
+   ) as p
+   where p->>'user_id' = '22222222-2222-2222-2222-222222222222'),
+  row(1, 0)::text,
+  'bob''s yes on a deleted recipe no longer counts either'
+);
+select is(
+  jsonb_array_length(public.get_selection_round((select round_id from round_g)) -> 'candidates'),
+  2,
+  'and the deleted recipe is gone from the deck too'
 );
 
 -- ===== isolation =====

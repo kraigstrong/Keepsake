@@ -41,7 +41,7 @@ begin
     'display_name', pr.display_name,
     'decided_count', coalesce(progress.decided_count, 0),
     'yes_count', coalesce(progress.yes_count, 0)
-  ) order by p.created_at, pr.display_name), '[]'::jsonb)
+  ) order by p.created_at, pr.display_name, p.user_id), '[]'::jsonb)
   into participants_json
   from public.selection_round_participants p
   left join public.profiles pr on pr.id = p.user_id
