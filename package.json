@@ -75,6 +75,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "test:e2e": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"supabase/tests/e2e/*.test.mjs\"",
     "check:client-secrets": "node scripts/check-no-server-secrets-in-client.mjs",
     "check:drift": "node scripts/check-supabase-drift.mjs",
     "archive:prep": "node scripts/prepare-archive.mjs",

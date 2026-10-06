@@ -74,6 +74,10 @@ jobs:
 
       - run: npx supabase test db --local supabase/tests/database
 
+      # Multi-user flows through PostgREST, Auth and the Edge runtime,
+      # all of which `supabase start` already serves.
+      - run: npm run test:e2e
+
       - if: always()
         run: npx supabase stop
 
