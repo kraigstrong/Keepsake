@@ -5,10 +5,19 @@ import { useRouter } from 'expo-router';
 import * as api from './api';
 import { StartRoundSheet } from './StartRoundSheet';
 import { ToastProvider } from '../components/Toast';
+import { FLAGS } from '../featureFlags/flags';
+import * as householdApi from '../household/api';
 
 jest.mock('./api');
+jest.mock('../household/api');
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 jest.mock('../supabase/instance', () => ({ supabase: {} }));
+jest.mock('../session/SessionProvider', () => ({
+  useSession: () => ({ session: { user: { id: 'me' } } }),
+}));
+jest.mock('../household/HouseholdProvider', () => ({
+  useHousehold: () => ({ household: { id: 'household-1' } }),
+}));
 
 function renderSheet(onDismiss = jest.fn()) {
   return render(
@@ -19,6 +28,7 @@ function renderSheet(onDismiss = jest.fn()) {
 }
 
 const mockedApi = api as jest.Mocked<typeof api>;
+const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseRouter = useRouter as jest.Mock;
 const push = jest.fn();
 
@@ -97,5 +107,137 @@ it('uses the remembered planning preference when starting a round', async () => 
     mode: 'solo',
     targetCount: 4,
     mealsOnly: true,
+  });
+});
+
+describe('Pick together', () => {
+  const household = [
+    { userId: 'me', displayName: 'Kraig' },
+    { userId: 'user-blair', displayName: 'Blair' },
+    { userId: 'user-alex', displayName: 'Alex' },
+  ];
+
+  beforeEach(() => {
+    FLAGS.groupMealSelection = true;
+    mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue(household);
+  });
+
+  afterEach(() => {
+    FLAGS.groupMealSelection = false;
+  });
+
+  async function openTogether() {
+    await renderSheet();
+    await waitFor(() => expect(screen.getByTestId('start-round-together')).not.toBeDisabled());
+    await fireEvent.press(screen.getByTestId('start-round-together'));
+  }
+
+  it('is hidden while the flag is off', async () => {
+    FLAGS.groupMealSelection = false;
+    await renderSheet();
+    expect(screen.queryByTestId('start-round-together')).toBeNull();
+    expect(mockedHouseholdApi.fetchHouseholdMembers).not.toHaveBeenCalled();
+  });
+
+  it('is disabled in a one-person household and points at the invite flow', async () => {
+    mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue([household[0]!]);
+    const onDismiss = jest.fn();
+    await renderSheet(onDismiss);
+
+    await waitFor(() => expect(screen.getByText(/Invite someone to your household/)).toBeTruthy());
+    expect(screen.getByTestId('start-round-together')).toBeDisabled();
+
+    await fireEvent.press(screen.getByText(/Invite someone to your household/));
+    expect(onDismiss).toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith('/settings');
+  });
+
+  it('lists you, locked in, then everyone else alphabetically, all ticked', async () => {
+    await openTogether();
+
+    const self = screen.getByTestId('start-round-member-self');
+    expect(self).toHaveProp('accessibilityState', { checked: true, disabled: true });
+    expect(screen.getByTestId('start-round-member-user-alex')).toHaveProp('accessibilityState', {
+      checked: true,
+      disabled: false,
+    });
+    const names = screen
+      .getAllByRole('checkbox')
+      .map((row) => (row.props as { accessibilityLabel: string }).accessibilityLabel);
+    expect(names).toEqual(['You', 'Alex', 'Blair']);
+    expect(screen.getByText('Start round with 3')).toBeTruthy();
+  });
+
+  it('counts only who is ticked, and needs at least one other person', async () => {
+    await openTogether();
+
+    await fireEvent.press(screen.getByTestId('start-round-member-user-blair'));
+    expect(screen.getByText('Start round with 2')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('start-round-member-user-alex'));
+    expect(screen.getByText('Start round with 1')).toBeTruthy();
+    expect(screen.getByText('Pick at least one other person.')).toBeTruthy();
+    expect(screen.getByTestId('start-round-together-start')).toBeDisabled();
+
+    await fireEvent.press(screen.getByTestId('start-round-member-self'));
+    expect(screen.getByText('Start round with 1')).toBeTruthy();
+  });
+
+  it('starts a group round with the ticked members and the chosen deadline', async () => {
+    mockedApi.startSelectionRound.mockResolvedValue({ roundId: 'round-9', candidateCount: 12 });
+    await openTogether();
+
+    await fireEvent.press(screen.getByTestId('start-round-member-user-blair'));
+    await fireEvent.press(screen.getByTestId('start-round-deadline-in-2-days'));
+    await fireEvent.press(screen.getByTestId('start-round-together-start'));
+
+    const now = new Date();
+    const expectedClose = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 20);
+    await waitFor(() =>
+      expect(mockedApi.startSelectionRound).toHaveBeenCalledWith({
+        mode: 'group',
+        participantUserIds: ['user-alex'],
+        targetCount: 4,
+        mealsOnly: false,
+        closesAt: expectedClose.toISOString(),
+      }),
+    );
+    expect(push).toHaveBeenCalledWith('/smart-selection/round-9');
+  });
+
+  it('defaults the deadline to tomorrow at 8 PM', async () => {
+    await openTogether();
+    expect(screen.getByTestId('start-round-deadline-tomorrow')).toHaveProp('accessibilityState', {
+      selected: true,
+    });
+  });
+
+  it('goes back to the first step, and reopens there after closing', async () => {
+    const view = await renderSheet();
+    await waitFor(() => expect(screen.getByTestId('start-round-together')).not.toBeDisabled());
+    await fireEvent.press(screen.getByTestId('start-round-together'));
+    await fireEvent.press(screen.getByTestId('start-round-together-back'));
+    expect(screen.getByTestId('start-round-solo')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('start-round-together'));
+    await fireEvent.press(screen.getByTestId('start-round-invite'));
+    view.rerender(
+      <ToastProvider>
+        <StartRoundSheet visible onDismiss={jest.fn()} />
+      </ToastProvider>,
+    );
+    expect(screen.getByTestId('start-round-solo')).toBeTruthy();
+  });
+
+  it('offers a retry when the household cannot be loaded', async () => {
+    mockedHouseholdApi.fetchHouseholdMembers.mockRejectedValueOnce(new Error('offline'));
+    await renderSheet();
+
+    await waitFor(() => expect(screen.getByTestId('start-round-members-retry')).toBeTruthy());
+    expect(screen.getByTestId('start-round-together')).toBeDisabled();
+
+    await fireEvent.press(screen.getByTestId('start-round-members-retry'));
+    await waitFor(() => expect(screen.getByTestId('start-round-together')).not.toBeDisabled());
+    expect(mockedHouseholdApi.fetchHouseholdMembers).toHaveBeenCalledTimes(2);
   });
 });
