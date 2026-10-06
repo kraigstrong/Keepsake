@@ -163,7 +163,15 @@ describe('getSelectionRound', () => {
         applied_at: null,
         applied_by: null,
         applied_weekly_plan_id: null,
-        participants: [{ user_id: 'user-1', completed_at: null }],
+        participants: [
+          {
+            user_id: 'user-1',
+            completed_at: null,
+            display_name: 'Alex',
+            decided_count: 7,
+            yes_count: 3,
+          },
+        ],
         candidates: [
           { recipe_id: 'recipe-1', score: 0, reason_codes: [], position: 0 },
           { recipe_id: 'recipe-2', score: 0, reason_codes: [], position: 1 },
@@ -192,12 +200,46 @@ describe('getSelectionRound', () => {
       appliedAt: null,
       appliedBy: null,
       appliedWeeklyPlanId: null,
-      participants: [{ userId: 'user-1', completedAt: null }],
+      participants: [
+        { userId: 'user-1', completedAt: null, displayName: 'Alex', decidedCount: 7, yesCount: 3 },
+      ],
       candidates: [
         { recipeId: 'recipe-1', score: 0, reasonCodes: [], position: 0 },
         { recipeId: 'recipe-2', score: 0, reasonCodes: [], position: 1 },
       ],
     });
+  });
+
+  it('defaults participant progress when the server predates it', async () => {
+    mockedRpc.mockResolvedValue({
+      data: {
+        id: 'round-1',
+        household_id: 'household-1',
+        created_by: 'user-1',
+        mode: 'group',
+        status: 'active',
+        target_count: 4,
+        closes_at: '2026-08-22T20:00:00.000Z',
+        candidate_strategy_version: 'heuristic-v1',
+        meals_only: false,
+        revealed_at: null,
+        created_at: '2026-08-21T10:00:00.000Z',
+        updated_at: '2026-08-21T10:00:00.000Z',
+        closed_at: null,
+        applied_at: null,
+        applied_by: null,
+        applied_weekly_plan_id: null,
+        participants: [{ user_id: 'user-1', completed_at: null }],
+        candidates: [],
+      },
+      error: null,
+    });
+
+    const result = await getSelectionRound('round-1');
+
+    expect(result.participants).toEqual([
+      { userId: 'user-1', completedAt: null, displayName: null, decidedCount: 0, yesCount: 0 },
+    ]);
   });
 
   it('throws on an RPC error (e.g. cross-household round_id)', async () => {

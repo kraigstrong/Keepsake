@@ -1,6 +1,6 @@
 # ADR-0027: Smart Meal Selection round model, lifecycle, and ballot privacy
 
-- **Status:** Accepted
+- **Status:** Accepted (decision 2 amended 2026-10-06, see below)
 - **Date:** 2026-08-20
 - **Phase:** Milestone 4 (Smart Meal Selection)
 
@@ -33,6 +33,8 @@ The full schema — including `mode`, `closes_at`, and `selection_round_particip
 - **A retry resumes rather than strands.** Widening the index would otherwise reintroduce the very problem this decision exists to solve: a permanently-dead creation would block the household forever. So `create_selection_round` adopts an existing `pending_candidates` row rather than failing — resuming it for the same creator, and taking it over (fresh `claim_token`, invalidating the old attempt) once it is older than a short staleness window, since scoring takes seconds. A *fresh* pending round belonging to someone else is reported as "a round is already starting," which is correct product behavior under one-round-at-a-time.
 
 Orphaned `pending_candidates` rows are inert and invisible — the same accepted tradeoff as stale `active` rounds (no scheduled cleanup at this product's scale).
+
+> **Amended 2026-10-06:** ballot privacy is a product behaviour, not a security boundary, and per-participant progress is visible mid-round. See the amendment at the end.
 
 **2. Individual votes become readable only when a round *completes*, and the predicate is an allowlist.** The `selection_decisions` SELECT policy is `user_id = auth.uid()` **OR** the parent round's `status IN ('ready_for_review', 'applied')`. A cancelled round's ballots stay private permanently — nobody who swiped in it ever consented to a reveal, because the reveal is what closing *means* and a cancellation is an abort, not a close.
 
@@ -85,3 +87,12 @@ The centralization is the decision, not an implementation detail. An earlier dra
 **Security and privacy.** No new authorization primitive — every policy uses the existing `is_household_member`. No direct client INSERT/UPDATE/DELETE on any of the four tables; writes go exclusively through RPCs. Specific abuse cases requiring explicit `throws_ok` coverage: a `participant_user_ids` entry naming a user in another household (rejected at creation, never silently dropped); a `recipe_id` that was never a candidate of the round (rejected in both decision-recording and apply); a cross-household `round_id` on any RPC; a replayed `apply_selection_round` (idempotent no-op, never a second insert); and `get_selection_round_results` called during an active round (raises).
 
 **Cost.** None. The ranking heuristic is deterministic and involves no model call, so this feature adds no AI spend and no new paid service.
+
+## Amendment (2026-10-06): ballot privacy is a product behaviour, not a security boundary
+
+Developer decision while planning the group flow (#172, #239): "we aren't voting for president here." Ballots are hidden so people pick without being swayed, not because a vote is sensitive. Going to great lengths to hide them costs more than it protects.
+
+- **Visible mid-round:** each participant's progress and yes-count. `get_selection_round` returns `decided_count` and `yes_count` per participant to any household member, which is what the design's waiting screen (1h) shows. This deliberately gives up decision 2's argument that an aggregate can identify a voter.
+- **Still revealed at close:** *which* recipes each person chose. That reveal is the product moment the results screen is built around. The allowlist (decision 2) and the reveal freeze (2a) stay as they are, because removing them is work too.
+- **Not a security boundary any more.** Loosening those guards is a product change, not a privacy regression, and new work should not add machinery to hide ballots further. The "Harder" consequence about keeping the guard in two places is downgraded to the same level: a regression there is a product bug, not a leak.
+

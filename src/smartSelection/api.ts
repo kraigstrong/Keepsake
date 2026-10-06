@@ -12,6 +12,11 @@ export type SelectionRoundStatus =
 export interface SelectionRoundParticipant {
   userId: string;
   completedAt: string | null;
+  /** Null when the member has no profile row yet. */
+  displayName: string | null;
+  /** Decisions on cards still in the deck. Visible to the household mid-round (ADR-0027, 2026-10-06 amendment). */
+  decidedCount: number;
+  yesCount: number;
 }
 
 export interface SelectionRoundCandidate {
@@ -50,6 +55,10 @@ export interface SelectionRound {
 interface SelectionRoundParticipantRow {
   user_id: string;
   completed_at: string | null;
+  // Absent from a server that predates the progress migration.
+  display_name?: string | null;
+  decided_count?: number;
+  yes_count?: number;
 }
 
 interface SelectionRoundCandidateRow {
@@ -103,6 +112,9 @@ function mapSelectionRound(row: SelectionRoundRow): SelectionRound {
     participants: row.participants.map((p) => ({
       userId: p.user_id,
       completedAt: p.completed_at,
+      displayName: p.display_name ?? null,
+      decidedCount: p.decided_count ?? 0,
+      yesCount: p.yes_count ?? 0,
     })),
     candidates: row.candidates.map((c) => ({
       recipeId: c.recipe_id,
