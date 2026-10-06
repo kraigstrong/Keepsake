@@ -18,9 +18,20 @@ case "$dest" in
     ;;
 esac
 
+# rsync --delete empties whatever it's pointed at, so only ever sync into
+# a new or empty directory, or one this script created before (Codex,
+# PR #247).
+marker=.keepsake-sim-root
+if [[ -d "$dest" && ! -f "$dest/$marker" && -n "$(ls -A "$dest")" ]]; then
+  echo "Refusing: $dest isn't empty and wasn't created by this script." >&2
+  exit 1
+fi
 mkdir -p "$dest"
+touch "$dest/$marker"
+
 # The *.env files at the root are 1Password FIFOs; never read them here.
 rsync -a --delete \
+  --exclude "/$marker" \
   --exclude '/.git' \
   --exclude '/node_modules' \
   --exclude '/ios' \

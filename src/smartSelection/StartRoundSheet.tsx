@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { startSelectionRound, type StartSelectionRoundRequest } from './api';
 import { DEFAULT_DEADLINE_KEY, deadlinePresets, type DeadlinePreset } from './deadlinePresets';
@@ -19,6 +19,8 @@ import { colors, radii, spacing, typography } from '../theme/tokens';
 const DEFAULT_TARGET_COUNT = 4;
 const MIN_TARGET_COUNT = 1;
 const MAX_TARGET_COUNT = 10;
+// Leaves room for the pinned start button, its caption and the grabber.
+const TOGETHER_BODY_MAX_SCREEN_FRACTION = 0.6;
 
 export interface StartRoundSheetProps {
   visible: boolean;
@@ -38,6 +40,7 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
   const { showToast } = useToast();
   const { session } = useSession();
   const { household } = useHousehold();
+  const { height: windowHeight } = useWindowDimensions();
   const userId = session?.user.id ?? null;
   const groupEnabled = FLAGS.groupMealSelection === true;
   const { mealsOnly, setMealsOnly, ready } = useMealsOnlyPreference('planning', visible);
@@ -159,52 +162,61 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
     const participantCount = selectedIds.size + 1;
     return (
       <Sheet visible={visible} onDismiss={dismiss} testID="start-round-sheet">
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setStep('start')}
-          testID="start-round-together-back"
+        {/* Households have no size cap, and a small phone can't fit even
+            three members plus the deadlines, so everything above the
+            start button scrolls and the button stays reachable (Codex,
+            PR #247). */}
+        <ScrollView
+          style={{ maxHeight: windowHeight * TOGETHER_BODY_MAX_SCREEN_FRACTION }}
+          testID="start-round-together-scroll"
         >
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
-        <Text style={styles.heading}>Pick together</Text>
-        <Text style={styles.framing}>
-          Everyone swipes the same recipes on their own phone. You see the matches when the round
-          closes.
-        </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setStep('start')}
+            testID="start-round-together-back"
+          >
+            <Text style={styles.link}>Back</Text>
+          </Pressable>
+          <Text style={styles.heading}>Pick together</Text>
+          <Text style={styles.framing}>
+            Everyone swipes the same recipes on their own phone. You see the matches when the round
+            closes.
+          </Text>
 
-        <View style={styles.memberList}>
-          <MemberRow name="You" checked locked testID="start-round-member-self" />
-          {others.map((member) => (
-            <MemberRow
-              key={member.userId}
-              name={member.displayName}
-              checked={selectedIds.has(member.userId)}
-              onPress={() => toggleMember(member.userId)}
-              testID={`start-round-member-${member.userId}`}
-            />
-          ))}
-        </View>
-        <Pressable accessibilityRole="button" onPress={openInvite} testID="start-round-invite">
-          <Text style={styles.link}>+ Invite someone to the household</Text>
-        </Pressable>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Wrap up by</Text>
-          <View style={styles.chipRow} testID="start-round-deadlines">
-            {presets.map((preset) => (
-              <Chip
-                key={preset.key}
-                label={preset.label}
-                selected={preset.key === deadlineKey}
-                onPress={() => setDeadlineKey(preset.key)}
-                testID={`start-round-deadline-${preset.key}`}
+          <View style={styles.memberList}>
+            <MemberRow name="You" checked locked testID="start-round-member-self" />
+            {others.map((member) => (
+              <MemberRow
+                key={member.userId}
+                name={member.displayName}
+                checked={selectedIds.has(member.userId)}
+                onPress={() => toggleMember(member.userId)}
+                testID={`start-round-member-${member.userId}`}
               />
             ))}
           </View>
-          <Text style={styles.caption}>
-            The round closes then if you haven&apos;t closed it sooner.
-          </Text>
-        </View>
+          <Pressable accessibilityRole="button" onPress={openInvite} testID="start-round-invite">
+            <Text style={styles.link}>+ Invite someone to the household</Text>
+          </Pressable>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Wrap up by</Text>
+            <View style={styles.chipRow} testID="start-round-deadlines">
+              {presets.map((preset) => (
+                <Chip
+                  key={preset.key}
+                  label={preset.label}
+                  selected={preset.key === deadlineKey}
+                  onPress={() => setDeadlineKey(preset.key)}
+                  testID={`start-round-deadline-${preset.key}`}
+                />
+              ))}
+            </View>
+            <Text style={styles.caption}>
+              The round closes then if you haven&apos;t closed it sooner.
+            </Text>
+          </View>
+        </ScrollView>
 
         <Button
           title={`Start round with ${participantCount}`}

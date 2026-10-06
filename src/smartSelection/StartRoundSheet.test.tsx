@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import * as api from './api';
@@ -227,6 +227,21 @@ describe('Pick together', () => {
       </ToastProvider>,
     );
     expect(screen.getByTestId('start-round-solo')).toBeTruthy();
+  });
+
+  it('scrolls a large household while keeping the start button reachable', async () => {
+    const big = Array.from({ length: 12 }, (_, i) => ({
+      userId: `user-${i}`,
+      displayName: `Member ${String(i).padStart(2, '0')}`,
+    }));
+    mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue([household[0]!, ...big]);
+    await openTogether();
+
+    const scroll = screen.getByTestId('start-round-together-scroll');
+    expect(within(scroll).getByTestId('start-round-member-user-11')).toBeTruthy();
+    expect(within(scroll).queryByTestId('start-round-together-start')).toBeNull();
+    expect(screen.getByTestId('start-round-together-start')).toBeTruthy();
+    expect(screen.getByText('Start round with 13')).toBeTruthy();
   });
 
   it('offers a retry when the household cannot be loaded', async () => {
