@@ -544,7 +544,7 @@ describe('group Help Me Choose (#241)', () => {
     await waitFor(() => expect(screen.getByTestId('group-round-card')).toBeTruthy());
     expect(screen.queryByTestId('this-week-help-me-choose')).toBeNull();
     expect(screen.getByTestId('group-round-card-detail')).toHaveTextContent(
-      /^Blair started a round\. You're on 3 of 12\. Closes tomorrow at /,
+      /^Blair started a round\. You've swiped 3 of 12\. Closes tomorrow at /,
     );
 
     await fireEvent.press(screen.getByTestId('group-round-card-primary'));

@@ -136,7 +136,7 @@ export function groupRoundCardCopy(
           starter === 'You'
             ? `You started a round with ${joinNames(others)}.`
             : `${starter} started a round.`,
-          started ? `You're on ${me.decidedCount} of ${deckSize}.` : '',
+          started ? `You've swiped ${me.decidedCount} of ${deckSize}.` : '',
           deadline,
         ]
           .filter(Boolean)

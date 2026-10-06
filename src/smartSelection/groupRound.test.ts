@@ -168,7 +168,9 @@ describe('groupRoundCardCopy', () => {
     });
 
     const midway = groupRoundCardCopy(round(), 'blair', now)!;
-    expect(midway.detail).toBe("Alex started a round. You're on 7 of 12. Closes tomorrow at 8 PM.");
+    expect(midway.detail).toBe(
+      "Alex started a round. You've swiped 7 of 12. Closes tomorrow at 8 PM.",
+    );
     expect(midway.primary.label).toBe('Keep going');
   });
 
