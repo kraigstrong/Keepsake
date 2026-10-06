@@ -304,6 +304,18 @@ it('shows an applied round read-only, saying who added it', async () => {
   expect(screen.getByTestId('results-row-tacos')).toBeDisabled();
 });
 
+it('shows single picks on an added round, where there is no button to reveal them', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(round({ status: 'applied', appliedBy: 'alex' }));
+  mockedApi.getSelectionRoundResults.mockResolvedValue(
+    results({ status: 'applied', candidates: [results().candidates[1]!] }),
+  );
+  await renderAs('blair');
+
+  await waitFor(() => expect(screen.getByText('Added to This Week')).toBeTruthy());
+  expect(screen.getByText('Lentil Soup')).toBeTruthy();
+  expect(screen.queryByTestId('results-show-mixed')).toBeNull();
+});
+
 it('sends a round that is still open back to the waiting screen', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(round({ status: 'active' }));
   await renderAs('alex');

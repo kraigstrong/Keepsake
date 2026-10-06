@@ -166,8 +166,9 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
   const applied = round.status === 'applied';
   const strong = sections.unanimous.length + sections.majority.length;
   const anything = strong + sections.mixed.length > 0;
-  // With one clear match or none, single picks wait behind a button (1l).
-  const mixedVisible = strong > 1 || showMixed;
+  // With one clear match or none, single picks wait behind a button (1l) —
+  // except once added, when there's no button and the list is read-only.
+  const mixedVisible = strong > 1 || showMixed || applied;
   // Keep deck order across sections so review lists them as people saw them.
   const orderedChecked = round.candidates
     .map((candidate) => candidate.recipeId)

@@ -284,10 +284,32 @@ describe('group round (#242)', () => {
     expect(screen.getByText('Add 2 to This Week')).toBeTruthy();
   });
 
-  it('drops anything nobody chose, even if the route asks for it', async () => {
+  it('drops anything nobody chose, saying so, even if the route asks for it', async () => {
     renderScreen(['r1', 'r3', 'not-a-candidate']);
 
     await waitFor(() => expect(screen.getByText('Add 1 to This Week')).toBeTruthy());
+    expect(screen.getByTestId('review-unavailable')).toHaveTextContent(
+      "2 picks are no longer available, so they're left out.",
+    );
+  });
+
+  it('says why when every pick has become unavailable', async () => {
+    renderScreen(['r3']);
+    await waitFor(() => expect(screen.getByTestId('review-empty')).toBeTruthy());
+    expect(
+      screen.getByText('Those picks are no longer available. Go back and choose others.'),
+    ).toBeTruthy();
+  });
+
+  it('leaves at once if the round was set aside before review opened', async () => {
+    mockedApi.getSelectionRound.mockResolvedValue(
+      testRound({ mode: 'group', status: 'cancelled' }),
+    );
+    renderScreen(['r1']);
+
+    await waitFor(() => expect(dismissTo).toHaveBeenCalledWith('/'));
+    expect(screen.getByText('That round was set aside')).toBeTruthy();
+    expect(mockedApi.getSelectionRoundResults).not.toHaveBeenCalled();
   });
 
   it('applies without trying to close the round, even one that reads active', async () => {
