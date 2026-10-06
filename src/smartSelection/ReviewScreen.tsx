@@ -8,6 +8,7 @@ import {
   closeSelectionRound,
   getMyDecisionsForRound,
   getSelectionRound,
+  getSelectionRoundResults,
 } from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
@@ -32,6 +33,7 @@ export interface ReviewScreenProps {
 interface ReviewItem {
   id: string;
   title: string;
+  subtitle?: string;
 }
 
 /**
@@ -72,16 +74,45 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      const [plan, decisions] = await Promise.all([
+      const [plan, round, decisions] = await Promise.all([
         fetchCurrentWeeklyPlan(),
+        getSelectionRound(roundId),
         userId ? getMyDecisionsForRound(roundId, userId) : Promise.resolve(new Map()),
       ]);
-      const validIds = recipeIds.filter((id) => decisions.get(id)?.decision === 'yes');
+      let validIds: string[];
+      const subtitles = new Map<string, string>();
+      if (round.mode === 'group') {
+        // Anyone in the household may add a group round's matches, so the
+        // check is the round's own results (something somebody finished
+        // chose), not the caller's ballot.
+        const results = await getSelectionRoundResults(roundId);
+        const matches = new Map(
+          results.candidates.filter((c) => c.yesCount > 0).map((c) => [c.recipeId, c]),
+        );
+        validIds = recipeIds.filter((id) => matches.has(id));
+        for (const id of validIds) {
+          const match = matches.get(id)!;
+          subtitles.set(
+            id,
+            match.category === 'unanimous'
+              ? 'Everyone wants this'
+              : `${match.yesCount} of ${match.completedParticipantCount} chose this`,
+          );
+        }
+      } else {
+        validIds = recipeIds.filter((id) => decisions.get(id)?.decision === 'yes');
+      }
       const details = await fetchDeckCardDetails(validIds);
 
       setWeeklyPlanId(plan.id);
       setValidRecipeIds(validIds);
-      setItems(validIds.map((id) => ({ id, title: details.get(id)?.title ?? '' })));
+      setItems(
+        validIds.map((id) => ({
+          id,
+          title: details.get(id)?.title ?? '',
+          subtitle: subtitles.get(id),
+        })),
+      );
       setMultiplierById(Object.fromEntries(validIds.map((id) => [id, DEFAULT_MULTIPLIER])));
       setLoadError(false);
     } catch {
@@ -107,7 +138,16 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     setIsSubmitting(true);
     try {
       const round = await getSelectionRound(roundId);
-      if (round.status === 'active') {
+      if (round.mode === 'group') {
+        // A group round is closed before anyone gets here, and only its
+        // creator could close it anyway. Two members can review at once;
+        // the second is told rather than shown a misleading "Added".
+        if (round.status === 'applied') {
+          showToast('Already added to This Week');
+          router.dismissTo('/');
+          return;
+        }
+      } else if (round.status === 'active') {
         await closeSelectionRound(roundId);
       }
       await applySelectionRound(

@@ -232,3 +232,89 @@ it('uses singular phrasing for exactly one recipe', async () => {
 
   await waitFor(() => expect(screen.getByText('Added 1 to This Week')).toBeTruthy());
 });
+
+describe('group round (#242)', () => {
+  const groupResults = {
+    roundId: 'round-1',
+    status: 'ready_for_review' as const,
+    completedParticipantCount: 2,
+    candidates: [
+      {
+        recipeId: 'r1',
+        yesCount: 2,
+        completedParticipantCount: 2,
+        category: 'unanimous' as const,
+        chosenBy: [],
+        passedBy: [],
+      },
+      {
+        recipeId: 'r2',
+        yesCount: 1,
+        completedParticipantCount: 2,
+        category: 'mixed' as const,
+        chosenBy: [],
+        passedBy: [],
+      },
+      {
+        recipeId: 'r3',
+        yesCount: 0,
+        completedParticipantCount: 2,
+        category: 'mixed' as const,
+        chosenBy: [],
+        passedBy: [],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockedApi.getSelectionRound.mockResolvedValue(
+      testRound({ mode: 'group', status: 'ready_for_review' }),
+    );
+    mockedApi.getSelectionRoundResults.mockResolvedValue(groupResults);
+    // The reviewer chose none of these themselves.
+    mockedApi.getMyDecisionsForRound.mockResolvedValue(new Map());
+  });
+
+  it("accepts the group's matches whoever is reviewing, with why each was picked", async () => {
+    renderScreen(['r1', 'r2']);
+
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+    expect(screen.getByText('Everyone wants this')).toBeTruthy();
+    expect(screen.getByText('1 of 2 chose this')).toBeTruthy();
+    expect(screen.getByText('Add 2 to This Week')).toBeTruthy();
+  });
+
+  it('drops anything nobody chose, even if the route asks for it', async () => {
+    renderScreen(['r1', 'r3', 'not-a-candidate']);
+
+    await waitFor(() => expect(screen.getByText('Add 1 to This Week')).toBeTruthy());
+  });
+
+  it('applies without trying to close the round', async () => {
+    renderScreen(['r1', 'r2']);
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('review-submit'));
+
+    await waitFor(() =>
+      expect(mockedApi.applySelectionRound).toHaveBeenCalledWith('round-1', 'plan-1', [
+        { recipeId: 'r1', multiplier: 1 },
+        { recipeId: 'r2', multiplier: 1 },
+      ]),
+    );
+    expect(mockedApi.closeSelectionRound).not.toHaveBeenCalled();
+    expect(dismissTo).toHaveBeenCalledWith('/');
+  });
+
+  it('tells the second person to arrive that it was already added', async () => {
+    renderScreen(['r1']);
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+
+    mockedApi.getSelectionRound.mockResolvedValue(testRound({ mode: 'group', status: 'applied' }));
+    await fireEvent.press(screen.getByTestId('review-submit'));
+
+    await waitFor(() => expect(screen.getByText('Already added to This Week')).toBeTruthy());
+    expect(mockedApi.applySelectionRound).not.toHaveBeenCalled();
+    expect(dismissTo).toHaveBeenCalledWith('/');
+  });
+});

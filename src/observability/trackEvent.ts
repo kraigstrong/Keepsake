@@ -40,6 +40,8 @@ export type AnalyticsEvent =
   | 'selection_round_started'
   | 'selection_participant_completed'
   | 'selection_round_closed'
+  | 'selection_results_viewed'
+  | 'selection_no_match'
   | 'selection_round_applied'
   | 'selection_round_cancelled'
   | 'selection_deck_exhausted'

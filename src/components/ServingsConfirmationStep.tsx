@@ -9,6 +9,8 @@ const DEFAULT_MULTIPLIER = 1;
 export interface ServingsConfirmationItem {
   id: string;
   title: string;
+  /** Optional context under the title, e.g. why a group picked it. */
+  subtitle?: string;
 }
 
 export interface ServingsConfirmationStepProps {
@@ -41,6 +43,11 @@ export function ServingsConfirmationStep({
           <Text style={styles.rowTitle} numberOfLines={1}>
             {item.title}
           </Text>
+          {item.subtitle ? (
+            <Text style={styles.rowSubtitle} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          ) : null}
           <View style={styles.chipGroup}>
             {SCALE_PRESETS.map((preset) => (
               <Chip
@@ -81,5 +88,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.16,
     color: colors.textPrimary,
     flex: 1,
+  },
+  rowSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: -spacing.xs,
   },
 });
