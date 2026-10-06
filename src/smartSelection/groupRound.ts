@@ -77,12 +77,16 @@ export function nudgeMessage(round: SelectionRound, now: Date = new Date()): str
   const deadline = round.closesAt
     ? ` — the round closes ${describeDeadline(new Date(round.closesAt), now)}`
     : '';
-  return `Still time to pick this week's meals in Keepsake${deadline}. Open This Week and tap Keep going.`;
+  return `Still time to pick this week's meals in Keepsake${deadline}.`;
 }
+
+const OPEN_ROUND_NOTE = 'Nothing lands in This Week until it’s reviewed.';
 
 export interface GroupRoundCardCopy {
   title: string;
   detail: string;
+  /** 1g's guarantee, while the round is still open. */
+  note?: string;
   primary: { label: string; path: string };
   secondary?: { label: string; path: string };
 }
@@ -137,6 +141,7 @@ export function groupRoundCardCopy(
         ]
           .filter(Boolean)
           .join(' '),
+        note: OPEN_ROUND_NOTE,
         primary: { label: started ? 'Keep going' : 'Start swiping', path: deckPath },
         secondary: { label: "See who's in", path: waitingPath },
       };
@@ -151,6 +156,7 @@ export function groupRoundCardCopy(
         ]
           .filter(Boolean)
           .join(' '),
+        note: OPEN_ROUND_NOTE,
         primary: { label: 'See progress', path: waitingPath },
       };
     }
@@ -158,6 +164,7 @@ export function groupRoundCardCopy(
       return {
         title: 'Round in progress',
         detail: [`${joinNames(others)} are picking meals.`, deadline].filter(Boolean).join(' '),
+        note: OPEN_ROUND_NOTE,
         primary: { label: 'See progress', path: waitingPath },
       };
   }

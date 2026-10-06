@@ -153,13 +153,17 @@ export function ThisWeekScreen() {
   );
 
   // Focus doesn't fire when the app returns from the background, which is
-  // exactly when an invited member is most likely to arrive.
+  // exactly when an invited member arrives, or comes back to find a
+  // co-member has added the round's picks to the plan.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && isOnline) loadActiveGroupRound();
+      if (state === 'active' && isOnline) {
+        load();
+        loadActiveGroupRound();
+      }
     });
     return () => subscription.remove();
-  }, [isOnline, loadActiveGroupRound]);
+  }, [isOnline, load, loadActiveGroupRound]);
 
   useEffect(() => {
     return () => {

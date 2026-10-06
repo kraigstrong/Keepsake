@@ -143,7 +143,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [isRetrying, setIsRetrying] = useState(false);
   // Group mode only: finishing hands the participant to the waiting
   // screen. 'failed' leaves the terminal state with a retry.
-  const [finishState, setFinishState] = useState<'idle' | 'finishing' | 'failed'>('idle');
+  const [finishState, setFinishState] = useState<'idle' | 'finishing' | 'failed' | 'unsaved'>(
+    'idle',
+  );
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -153,35 +155,55 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // race-condition review priority: this repo's recurring defect class
   // is exactly a partial failure between two async calls that should be
   // ordered).
-  const pendingWritesRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Resolves true once the vote is saved, false if it failed and was
+  // rolled back — group finishing checks the outcome, not just settlement.
+  const pendingWritesRef = useRef<Map<string, Promise<boolean>>>(new Map());
+  // Async work below can land after the user has left this screen;
+  // `replace` would then act on whatever screen is on top instead.
+  const focusedRef = useRef(false);
 
   const translateX = useSharedValue(0);
 
+  const replaceIfFocused = useCallback(
+    (path: string) => {
+      if (focusedRef.current) router.replace(path);
+    },
+    [router],
+  );
+
   // Group mode: marks the ballot finished and hands over to the waiting
-  // screen. Every in-flight vote has to land first, or results could be
-  // read without it. Started from the last decision, or from a resume
-  // that loads an already-complete deck — never from an effect.
+  // screen. Every in-flight vote has to have saved first: a vote that
+  // failed (and was rolled back, with a toast) must be redone, not
+  // silently dropped from a ballot marked finished. Started from the last
+  // decision, "I'm done", or a resume that loads an already-complete
+  // deck — never from an effect.
   const finishingRef = useRef(false);
   const finishAndWait = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
-    await Promise.allSettled([...pendingWritesRef.current.values()]);
+    const saved = await Promise.all([...pendingWritesRef.current.values()]);
+    if (saved.includes(false)) {
+      finishingRef.current = false;
+      setFinishState('unsaved');
+      showToast("Couldn't save that decision — you'll need to redo it");
+      return;
+    }
     setFinishState('finishing');
     try {
       await finishSelectionParticipation(roundId);
-      router.replace(`/smart-selection/${roundId}/waiting`);
+      replaceIfFocused(`/smart-selection/${roundId}/waiting`);
     } catch (error) {
       // The deadline or the creator closed the round first: the results
       // are what's left to see.
       if (error instanceof Error && error.message.includes('not active')) {
-        router.replace(`/smart-selection/${roundId}/results`);
+        replaceIfFocused(`/smart-selection/${roundId}/results`);
         return;
       }
       finishingRef.current = false;
       setFinishState('failed');
       showToast("Couldn't finish — try again");
     }
-  }, [roundId, router, showToast]);
+  }, [roundId, replaceIfFocused, showToast]);
 
   const load = useCallback(async () => {
     try {
@@ -279,11 +301,16 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       // swiping (the waiting screen offers it), so only a closed round or
       // a non-participant is redirected here.
       if (roundData.mode === 'group') {
+        if (roundData.status === 'cancelled') {
+          showToast('That round was cancelled');
+          if (focusedRef.current) router.dismissTo('/');
+          return;
+        }
         const role = groupRole(roundData, userId);
         if (roundData.status !== 'active' || role === 'watching') {
           const path = groupRoundPath(roundData, userId);
           if (path && path !== `/smart-selection/${roundId}`) {
-            router.replace(path);
+            replaceIfFocused(path);
             return;
           }
         }
@@ -296,13 +323,14 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       setYesCount(seededYesCount);
       setUndoStack(seededUndoStack);
       setLoadError(false);
-      if (roundData.mode === 'group' && sortedCandidates.length > 0) {
-        if (startIndex >= sortedCandidates.length) void finishAndWait();
+      setFinishState('idle');
+      if (roundData.mode === 'group' && startIndex >= sortedCandidates.length) {
+        void finishAndWait();
       }
     } catch {
       setLoadError(true);
     }
-  }, [roundId, userId, router, finishAndWait]);
+  }, [roundId, userId, router, finishAndWait, replaceIfFocused, showToast]);
 
   // Holds the loading state for the whole retry, so a stalled retry doesn't
   // look like a dead button. Clearing loadError alone isn't enough: a reload
@@ -322,8 +350,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // clears any pending "Passed on…" banner timeout on blur/unmount.
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       load();
       return () => {
+        focusedRef.current = false;
         if (passedTimeoutRef.current) clearTimeout(passedTimeoutRef.current);
       };
     }, [load]),
@@ -425,6 +455,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // just a contiguous prefix).
     setPendingWriteCount((c) => c + 1);
     const writePromise = recordSelectionDecision(round.id, recipeId, decision)
+      .then(() => true)
       .catch((error: unknown) => {
         if (
           round.mode === 'group' &&
@@ -432,14 +463,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
           error.message.includes('not active')
         ) {
           showToast('The round has closed');
-          router.replace(`/smart-selection/${round.id}/results`);
-          return;
+          replaceIfFocused(`/smart-selection/${round.id}/results`);
+          return false;
         }
         setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
         if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
         setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
         setPassed((current) => (current?.recipeId === recipeId ? null : current));
         showToast("Couldn't save that decision — you'll need to redo it");
+        return false;
       })
       .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
@@ -647,7 +679,16 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
 
       <View style={styles.content}>
         {terminal && isGroup ? (
-          finishState === 'failed' ? (
+          finishState === 'unsaved' ? (
+            <View style={styles.terminal} testID="swipe-deck-unsaved">
+              <Text style={styles.terminalTitle}>A pick didn&apos;t save</Text>
+              <Button
+                title="Go back to it"
+                onPress={() => void retryLoad()}
+                testID="swipe-deck-unsaved-retry"
+              />
+            </View>
+          ) : finishState === 'failed' ? (
             <View style={styles.terminal} testID="swipe-deck-finish-failed">
               <Text style={styles.terminalTitle}>Couldn&apos;t finish</Text>
               <Button
@@ -818,7 +859,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         )}
       </View>
 
-      {passed && (
+      {/* Hidden while a group ballot finishes: undoing then would bring a
+          card back on a ballot that's already being marked finished. */}
+      {passed && !(isGroup && terminal) && (
         <View style={styles.passedBanner} testID="swipe-deck-passed-banner" role="alert" accessible>
           <Text style={styles.passedText} numberOfLines={1}>
             Passed on {passed.title}

@@ -22,6 +22,7 @@ export function GroupRoundCard({ round, userId, onOpen }: GroupRoundCardProps) {
       <Text style={styles.detail} testID="group-round-card-detail">
         {copy.detail}
       </Text>
+      {copy.note ? <Text style={styles.note}>{copy.note}</Text> : null}
       <View style={styles.actions}>
         <View style={styles.action}>
           <Button
@@ -61,6 +62,10 @@ const styles = StyleSheet.create({
   detail: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  note: {
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   actions: {
     flexDirection: 'row',

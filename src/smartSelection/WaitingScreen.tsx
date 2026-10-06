@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
   Pressable,
@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { closeSelectionRound, getSelectionRound, type SelectionRound } from './api';
+import {
+  closeSelectionRound,
+  finishSelectionParticipation,
+  getSelectionRound,
+  type SelectionRound,
+} from './api';
 import { describeDeadline } from './deadlinePresets';
 import {
   closeEarlyNote,
@@ -55,10 +60,14 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
   const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  // A load or close can land after the user has left; `replace` would
+  // then act on whatever screen is on top instead of this one.
+  const focusedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const fetched = await getSelectionRound(roundId);
+      if (!focusedRef.current) return;
       if (fetched.status === 'ready_for_review' || fetched.status === 'applied') {
         router.replace(`/smart-selection/${roundId}/results`);
         return;
@@ -77,9 +86,13 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
 
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       void load();
       const interval = setInterval(() => void load(), REFRESH_INTERVAL_MS);
-      return () => clearInterval(interval);
+      return () => {
+        focusedRef.current = false;
+        clearInterval(interval);
+      };
     }, [load]),
   );
 
@@ -99,8 +112,13 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
   async function handleClose() {
     setIsClosing(true);
     try {
+      // Closing means the creator is done too. Only finished ballots
+      // count, so without this an unfinished creator would silently drop
+      // their own picks.
+      const me = round?.participants.find((participant) => participant.userId === userId);
+      if (me && !me.completedAt) await finishSelectionParticipation(roundId);
       await closeSelectionRound(roundId);
-      router.replace(`/smart-selection/${roundId}/results`);
+      if (focusedRef.current) router.replace(`/smart-selection/${roundId}/results`);
     } catch {
       // Most often the deadline closed it a moment earlier; reloading
       // takes everyone to the results in that case.
@@ -140,9 +158,12 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
   const deckSize = round.candidates.length;
   const me = round.participants.find((participant) => participant.userId === userId);
   const unfinished = unfinishedOthers(round, userId);
-  const creatorName =
-    round.participants.find((participant) => participant.userId === round.createdBy)?.displayName ??
-    'Whoever started it';
+  // Null once the creator's account is gone (ADR-0028): then nobody can
+  // close early, and only the deadline will.
+  const creatorName = round.createdBy
+    ? (round.participants.find((participant) => participant.userId === round.createdBy)
+        ?.displayName ?? 'Whoever started it')
+    : null;
   const deadline = round.closesAt ? describeDeadline(new Date(round.closesAt)) : null;
   const note = isCreator ? closeEarlyNote(round, userId) : null;
   const canKeepSwiping = me !== undefined && me.decidedCount < deckSize;
@@ -164,7 +185,9 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
           <Text style={styles.subtitle} testID="waiting-deadline">
             {isCreator
               ? `Closes ${deadline}, or when you close it.`
-              : `${creatorName} can close it early. Otherwise it closes ${deadline}.`}
+              : creatorName
+                ? `${creatorName} can close it early. Otherwise it closes ${deadline}.`
+                : `Closes ${deadline}.`}
           </Text>
         )}
       </View>
@@ -196,7 +219,8 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
                   onPress={() => share(nudgeMessage(round))}
                   accessibilityRole="button"
                   accessibilityLabel={`Remind ${name}`}
-                  hitSlop={8}
+                  hitSlop={12}
+                  style={styles.remindTarget}
                   testID={`waiting-remind-${participant.userId}`}
                 >
                   <Text style={styles.remind}>Remind</Text>
@@ -302,6 +326,10 @@ const styles = StyleSheet.create({
   rowProgress: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  remindTarget: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   remind: {
     ...typography.caption,

@@ -143,13 +143,13 @@ describe('joinNames', () => {
 describe('nudgeMessage', () => {
   it('names the deadline relative to now', () => {
     expect(nudgeMessage(round(), new Date(2026, 9, 6, 9))).toBe(
-      "Still time to pick this week's meals in Keepsake — the round closes tomorrow at 8 PM. Open This Week and tap Keep going.",
+      "Still time to pick this week's meals in Keepsake — the round closes tomorrow at 8 PM.",
     );
   });
 
   it('omits the deadline when there is none', () => {
     expect(nudgeMessage(round({ closesAt: null }))).toBe(
-      "Still time to pick this week's meals in Keepsake. Open This Week and tap Keep going.",
+      "Still time to pick this week's meals in Keepsake.",
     );
   });
 });
@@ -196,6 +196,14 @@ describe('groupRoundCardCopy', () => {
     const copy = groupRoundCardCopy(round(), 'dev', now)!;
     expect(copy.detail).toBe('Alex, Blair and Casey are picking meals. Closes tomorrow at 8 PM.');
     expect(copy.primary.path).toBe('/smart-selection/round-1/waiting');
+  });
+
+  it('states the guarantee while the round is open, for every role', () => {
+    for (const userId of ['alex', 'blair', 'dev']) {
+      expect(groupRoundCardCopy(round(), userId, now)!.note).toBe(
+        'Nothing lands in This Week until it’s reviewed.',
+      );
+    }
   });
 
   it('points everyone at the matches once the round has closed', () => {

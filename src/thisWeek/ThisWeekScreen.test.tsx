@@ -18,6 +18,15 @@ import { useSession } from '../session/SessionProvider';
 import * as smartSelectionApi from '../smartSelection/api';
 import type { SelectionRound } from '../smartSelection/api';
 
+// AppState.addEventListener is already a jest mock in this environment;
+// read the registered listeners off its calls rather than replacing it,
+// which would strip its implementation for every later test.
+function appStateListeners(): ((state: string) => void)[] {
+  return (AppState.addEventListener as jest.Mock).mock.calls
+    .filter(([event]) => event === 'change')
+    .map(([, listener]) => listener as (state: string) => void);
+}
+
 jest.mock('./api');
 jest.mock('../recipes/heroImage');
 jest.mock('../connectivity/ConnectivityProvider', () => ({ useConnectivity: jest.fn() }));
@@ -544,10 +553,14 @@ describe('group Help Me Choose (#241)', () => {
     expect(push).toHaveBeenCalledWith('/smart-selection/round-g/waiting');
   });
 
-  it('keeps Help me choose for a solo round or no round at all', async () => {
+  it('keeps Help me choose for a solo round', async () => {
     mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(selectionRound());
     renderThisWeekScreen();
-    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await waitFor(() => expect(mockedSmartSelectionApi.getActiveSelectionRound).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy();
     expect(screen.queryByTestId('group-round-card')).toBeNull();
   });
 
@@ -575,20 +588,17 @@ describe('group Help Me Choose (#241)', () => {
     expect(push).not.toHaveBeenCalledWith('/smart-selection/round-g');
   });
 
-  it('picks up a round started while the app was in the background', async () => {
-    const listeners: ((state: string) => void)[] = [];
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_, listener) => {
-      listeners.push(listener as (state: string) => void);
-      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
-    });
+  it('picks up a round, and its applied picks, after the app was in the background', async () => {
     mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(null);
     renderThisWeekScreen();
     await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
 
     mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(groupRound());
-    await act(async () => listeners.forEach((listener) => listener('active')));
+    const plansBefore = mockedApi.fetchCurrentWeeklyPlan.mock.calls.length;
+    await act(async () => appStateListeners().forEach((listener) => listener('active')));
 
     await waitFor(() => expect(screen.getByTestId('group-round-card')).toBeTruthy());
+    expect(mockedApi.fetchCurrentWeeklyPlan.mock.calls.length).toBeGreaterThan(plansBefore);
   });
 
   it('points everyone at the matches once the round has closed', async () => {

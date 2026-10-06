@@ -1,12 +1,21 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
-import { Share } from 'react-native';
+import { AppState, Share } from 'react-native';
 
 import * as api from './api';
 import type { SelectionRound } from './api';
 import { WaitingScreen } from './WaitingScreen';
 import { ToastProvider } from '../components/Toast';
 import { useSession } from '../session/SessionProvider';
+
+// AppState.addEventListener is already a jest mock in this environment;
+// read the registered listeners off its calls rather than replacing it,
+// which would strip its implementation for every later test.
+function appStateListeners(): ((state: string) => void)[] {
+  return (AppState.addEventListener as jest.Mock).mock.calls
+    .filter(([event]) => event === 'change')
+    .map(([, listener]) => listener as (state: string) => void);
+}
 
 jest.mock('./api');
 let mockFocusCleanup: (() => void) | void = undefined;
@@ -219,4 +228,62 @@ it('refreshes every 20 seconds while on screen', async () => {
     jest.advanceTimersByTime(20_000);
   });
   expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/results');
+});
+
+it("finishes an unfinished creator's own ballot before closing, so their picks count", async () => {
+  const creatorMidway = groupRound();
+  creatorMidway.participants[0] = { ...creatorMidway.participants[0]!, completedAt: null };
+  mockedApi.getSelectionRound.mockResolvedValue(creatorMidway);
+  mockedApi.finishSelectionParticipation.mockResolvedValue(undefined);
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByTestId('waiting-close')).toBeTruthy());
+
+  await fireEvent.press(screen.getByTestId('waiting-close'));
+
+  await waitFor(() => expect(mockedApi.closeSelectionRound).toHaveBeenCalled());
+  expect(mockedApi.finishSelectionParticipation).toHaveBeenCalledWith('round-1');
+  expect(mockedApi.finishSelectionParticipation.mock.invocationCallOrder[0]!).toBeLessThan(
+    mockedApi.closeSelectionRound.mock.invocationCallOrder[0]!,
+  );
+});
+
+it("doesn't re-finish a creator who already finished", async () => {
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByTestId('waiting-close')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('waiting-close'));
+  await waitFor(() => expect(mockedApi.closeSelectionRound).toHaveBeenCalled());
+  expect(mockedApi.finishSelectionParticipation).not.toHaveBeenCalled();
+});
+
+it('only names the deadline once the creator has left the household', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(groupRound({ createdBy: null }));
+  await renderAs('blair');
+  await waitFor(() => expect(screen.getByTestId('waiting-deadline')).toBeTruthy());
+  expect(screen.getByTestId('waiting-deadline')).toHaveTextContent(/^Closes tomorrow at .*\.$/);
+  expect(screen.queryByTestId('waiting-close')).toBeNull();
+});
+
+it('stops refreshing once the screen goes away', async () => {
+  jest.useFakeTimers();
+  const view = await renderAs('alex');
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await view.unmount();
+  mockFocusCleanup = undefined;
+
+  await act(async () => {
+    jest.advanceTimersByTime(60_000);
+  });
+  expect(mockedApi.getSelectionRound).toHaveBeenCalledTimes(1);
+});
+
+it('refreshes when the app comes back to the foreground', async () => {
+  await renderAs('alex');
+  await waitFor(() => expect(mockedApi.getSelectionRound).toHaveBeenCalledTimes(1));
+
+  mockedApi.getSelectionRound.mockResolvedValue(groupRound({ status: 'ready_for_review' }));
+  await act(async () => appStateListeners().forEach((listener) => listener('active')));
+
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/results'));
 });
