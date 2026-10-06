@@ -915,6 +915,28 @@ describe('group mode (#241)', () => {
     expect(mockedApi.finishSelectionParticipation).not.toHaveBeenCalled();
   });
 
+  it("queues a re-vote behind the undo it follows, so the undo can't erase it", async () => {
+    let resolveClear: () => void = () => {};
+    mockedApi.clearSelectionDecision.mockReturnValueOnce(
+      new Promise<void>((resolve) => (resolveClear = resolve)),
+    );
+    renderDeck();
+    await decideAll(['swipe-deck-no']);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+    });
+    await fireEvent.press(screen.getByTestId('swipe-deck-yes'));
+
+    // The re-vote waits for the clear, then lands after it.
+    expect(mockedApi.recordSelectionDecision).toHaveBeenCalledTimes(1);
+    await act(async () => resolveClear());
+    await waitFor(() => expect(mockedApi.recordSelectionDecision).toHaveBeenCalledTimes(2));
+    expect(mockedApi.recordSelectionDecision).toHaveBeenLastCalledWith('round-1', 'r1', 'yes');
+    expect(mockedApi.clearSelectionDecision.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockedApi.recordSelectionDecision.mock.invocationCallOrder[1]!,
+    );
+  });
+
   it('offers a retry when finishing fails', async () => {
     mockedApi.finishSelectionParticipation
       .mockRejectedValueOnce(new Error('network down'))

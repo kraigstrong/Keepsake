@@ -462,7 +462,12 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // with no decision" already handles a gap anywhere in the deck, not
     // just a contiguous prefix).
     setPendingWriteCount((c) => c + 1);
-    const writePromise = recordSelectionDecision(round.id, recipeId, decision)
+    // Queued behind this card's previous write (e.g. an undo's clear) so a
+    // quick re-vote can't land first and then be deleted by it (Codex,
+    // PR #249). Earlier writes never reject.
+    const previousWrite = pendingWritesRef.current.get(recipeId) ?? Promise.resolve();
+    const writePromise = previousWrite
+      .then(() => recordSelectionDecision(round.id, recipeId, decision))
       .then(() => {
         failedWritesRef.current.delete(recipeId);
       })
