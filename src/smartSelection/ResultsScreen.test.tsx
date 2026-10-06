@@ -316,6 +316,17 @@ it('shows single picks on an added round, where there is no button to reveal the
   expect(screen.queryByTestId('results-show-mixed')).toBeNull();
 });
 
+it('shows the added state when the round was added between its two reads', async () => {
+  mockedApi.getSelectionRound
+    .mockResolvedValueOnce(round())
+    .mockResolvedValue(round({ status: 'applied', appliedBy: 'blair' }));
+  mockedApi.getSelectionRoundResults.mockResolvedValue(results({ status: 'applied' }));
+  await renderAs('alex');
+
+  await waitFor(() => expect(screen.getByText('Added to This Week')).toBeTruthy());
+  expect(screen.queryByTestId('results-continue')).toBeNull();
+});
+
 it('sends a round that is still open back to the waiting screen', async () => {
   mockedApi.getSelectionRound.mockResolvedValue(round({ status: 'active' }));
   await renderAs('alex');

@@ -194,21 +194,26 @@ test('two members run a group round from start to This Week', async () => {
   const unanimous = deck.slice(0, 3);
   const { planId } = await planRecipeIds(blair.client);
   const selections = unanimous.map((recipeId) => ({ recipe_id: recipeId, multiplier: 1 }));
-  await rpc(blair.client, 'apply_selection_round', {
+  const applied = await rpc(blair.client, 'apply_selection_round', {
     ...round,
     weekly_plan_id: planId,
     selections,
   });
+  // The client tells a lost add-at-once race apart by applied_by on this
+  // returned row, so pin its shape: one object, not a one-row array.
+  assert.equal(Array.isArray(applied), false);
+  assert.equal(applied.applied_by, blair.userId);
 
   const afterApply = await planRecipeIds(alex.client);
   assert.equal(afterApply.planId, planId, 'both members share one weekly plan');
   assert.deepEqual(afterApply.recipeIds, unanimous, "the picks land in Alex's This Week");
 
-  await rpc(alex.client, 'apply_selection_round', {
+  const replay = await rpc(alex.client, 'apply_selection_round', {
     ...round,
     weekly_plan_id: planId,
     selections,
   });
+  assert.equal(replay.applied_by, blair.userId, 'a replay reports the first apply');
   assert.deepEqual(
     (await planRecipeIds(alex.client)).recipeIds,
     unanimous,

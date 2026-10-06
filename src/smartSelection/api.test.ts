@@ -329,6 +329,13 @@ describe('applySelectionRound', () => {
     });
   });
 
+  it('reads applied_by from a one-row array as well', async () => {
+    mockedRpc.mockResolvedValue({ data: [{ id: 'round-1', applied_by: 'user-2' }], error: null });
+    await expect(applySelectionRound('round-1', 'plan-1', [])).resolves.toEqual({
+      appliedBy: 'user-2',
+    });
+  });
+
   it('maps selections to the recipe_id/multiplier jsonb shape', async () => {
     mockedRpc.mockResolvedValue({ data: { id: 'round-1', status: 'applied' }, error: null });
 

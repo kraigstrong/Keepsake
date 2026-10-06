@@ -352,7 +352,9 @@ export async function applySelectionRound(
   // Reporting the real number needs the RPC to return it — see
   // docs/roadmap.md's Not-yet-triaged (Codex, PR #115).
   trackEvent('selection_round_applied', { requestedCount: selections.length });
-  const row = data as { applied_by: string | null } | null;
+  // PostgREST returns this composite as a single object today (the e2e
+  // suite pins it); accept a one-row array too rather than misread it.
+  const row = (Array.isArray(data) ? data[0] : data) as { applied_by: string | null } | undefined;
   return row ? { appliedBy: row.applied_by } : null;
 }
 

@@ -68,7 +68,7 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      const round = await getSelectionRound(roundId);
+      let round = await getSelectionRound(roundId);
       if (!focusedRef.current) return;
       if (round.status === 'active') {
         router.replace(`/smart-selection/${roundId}/waiting`);
@@ -79,7 +79,13 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
         router.dismissTo('/');
         return;
       }
-      const results = await getSelectionRoundResults(roundId);
+      let results = await getSelectionRoundResults(roundId);
+      // Added by someone between the two reads: refetch the round so the
+      // screen shows the read-only added state, not stale controls.
+      if (results.status !== round.status) {
+        round = await getSelectionRound(roundId);
+        results = await getSelectionRoundResults(roundId);
+      }
       const chosenIds = results.candidates.filter((c) => c.yesCount > 0).map((c) => c.recipeId);
       const details = await fetchDeckCardDetails(chosenIds);
       const titles = new Map([...details].map(([id, detail]) => [id, detail.title]));
