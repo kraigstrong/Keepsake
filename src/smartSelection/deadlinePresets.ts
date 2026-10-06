@@ -36,3 +36,28 @@ export function deadlinePresets(now: Date = new Date()): DeadlinePreset[] {
   }
   return presets;
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function timeOfDay(date: Date): string {
+  const hour = date.getHours() % 12 === 0 ? 12 : date.getHours() % 12;
+  const minutes = date.getMinutes();
+  const suffix = date.getHours() < 12 ? 'AM' : 'PM';
+  return minutes === 0
+    ? `${hour} ${suffix}`
+    : `${hour}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** "tonight at 8 PM", "tomorrow at 8 PM", "Thu at 8 PM", or "Oct 14 at 8 PM" beyond a week. */
+export function describeDeadline(closesAt: Date, now: Date = new Date()): string {
+  const days = Math.round((startOfDay(closesAt) - startOfDay(now)) / (24 * 60 * 60 * 1000));
+  const time = timeOfDay(closesAt);
+  if (days === 0) return closesAt.getHours() >= 17 ? `tonight at ${time}` : `today at ${time}`;
+  if (days === 1) return `tomorrow at ${time}`;
+  if (days > 1 && days < 7) return `${WEEKDAYS[closesAt.getDay()]} at ${time}`;
+  return `${MONTHS[closesAt.getMonth()]} ${closesAt.getDate()} at ${time}`;
+}

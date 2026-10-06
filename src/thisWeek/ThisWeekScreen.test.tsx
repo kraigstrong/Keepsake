@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 // Jest's module-factory hoisting only allows referencing out-of-scope
 // identifiers prefixed "mock" (case-insensitive) — see the Link stand-in
 // inside jest.mock('expo-router', ...) below.
-import { Text as MockText } from 'react-native';
+import { AppState, Text as MockText } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as api from './api';
@@ -17,6 +17,15 @@ import * as heroImage from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
 import * as smartSelectionApi from '../smartSelection/api';
 import type { SelectionRound } from '../smartSelection/api';
+
+// AppState.addEventListener is already a jest mock in this environment;
+// read the registered listeners off its calls rather than replacing it,
+// which would strip its implementation for every later test.
+function appStateListeners(): ((state: string) => void)[] {
+  return (AppState.addEventListener as jest.Mock).mock.calls
+    .filter(([event]) => event === 'change')
+    .map(([, listener]) => listener as (state: string) => void);
+}
 
 jest.mock('./api');
 jest.mock('../recipes/heroImage');
@@ -493,5 +502,113 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
     );
     expect(screen.queryByTestId('mock-start-round-sheet')).toBeNull();
     expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/smart-selection/'));
+  });
+});
+
+describe('group Help Me Choose (#241)', () => {
+  const participants = [
+    { userId: 'user-2', completedAt: null, displayName: 'Blair', decidedCount: 0, yesCount: 0 },
+    { userId: 'user-1', completedAt: null, displayName: 'Alex', decidedCount: 3, yesCount: 1 },
+  ];
+  const groupRound = (overrides: Partial<SelectionRound> = {}) =>
+    selectionRound({
+      id: 'round-g',
+      mode: 'group',
+      createdBy: 'user-2',
+      closesAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
+      participants,
+      candidates: Array.from({ length: 12 }, (_, position) => ({
+        recipeId: `r${position}`,
+        score: 1,
+        reasonCodes: [],
+        position,
+      })),
+      ...overrides,
+    });
+
+  beforeEach(() => {
+    FLAGS.smartMealSelection = true;
+    FLAGS.groupMealSelection = true;
+    mockedApi.fetchCurrentWeeklyPlan.mockResolvedValue(plan());
+  });
+
+  afterEach(() => {
+    FLAGS.groupMealSelection = false;
+  });
+
+  it('shows the round card in place of Help me choose, and opens the deck from it', async () => {
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(groupRound());
+
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('group-round-card')).toBeTruthy());
+    expect(screen.queryByTestId('this-week-help-me-choose')).toBeNull();
+    expect(screen.getByTestId('group-round-card-detail')).toHaveTextContent(
+      /^Blair started a round\. You've swiped 3 of 12\. Closes tomorrow at /,
+    );
+
+    await fireEvent.press(screen.getByTestId('group-round-card-primary'));
+    expect(push).toHaveBeenCalledWith('/smart-selection/round-g');
+    await fireEvent.press(screen.getByTestId('group-round-card-secondary'));
+    expect(push).toHaveBeenCalledWith('/smart-selection/round-g/waiting');
+  });
+
+  it('keeps Help me choose for a solo round', async () => {
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(selectionRound());
+    renderThisWeekScreen();
+    await waitFor(() => expect(mockedSmartSelectionApi.getActiveSelectionRound).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy();
+    expect(screen.queryByTestId('group-round-card')).toBeNull();
+  });
+
+  it('hides the card while the group flag is off', async () => {
+    FLAGS.groupMealSelection = false;
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(groupRound());
+    renderThisWeekScreen();
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    expect(screen.queryByTestId('group-round-card')).toBeNull();
+  });
+
+  it('routes Help me choose by role when a group round appeared since the screen loaded', async () => {
+    FLAGS.groupMealSelection = false;
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
+      groupRound({ participants: [participants[0]!] }),
+    );
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('this-week-help-me-choose'));
+
+    // user-1 isn't in this round, so they watch rather than land in a deck
+    // that would reject their votes.
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/smart-selection/round-g/waiting'));
+    expect(push).not.toHaveBeenCalledWith('/smart-selection/round-g');
+  });
+
+  it('picks up a round, and its applied picks, after the app was in the background', async () => {
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(null);
+    renderThisWeekScreen();
+    await waitFor(() => expect(screen.getByTestId('this-week-help-me-choose')).toBeTruthy());
+
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(groupRound());
+    const plansBefore = mockedApi.fetchCurrentWeeklyPlan.mock.calls.length;
+    await act(async () => appStateListeners().forEach((listener) => listener('active')));
+
+    await waitFor(() => expect(screen.getByTestId('group-round-card')).toBeTruthy());
+    expect(mockedApi.fetchCurrentWeeklyPlan.mock.calls.length).toBeGreaterThan(plansBefore);
+  });
+
+  it('points everyone at the matches once the round has closed', async () => {
+    mockedSmartSelectionApi.getActiveSelectionRound.mockResolvedValue(
+      groupRound({ status: 'ready_for_review' }),
+    );
+    renderThisWeekScreen();
+
+    await waitFor(() => expect(screen.getByText("The round's closed")).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('group-round-card-primary'));
+    expect(push).toHaveBeenCalledWith('/smart-selection/round-g/results');
   });
 });

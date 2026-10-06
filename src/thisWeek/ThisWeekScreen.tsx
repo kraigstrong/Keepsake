@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import {
@@ -26,7 +26,9 @@ import { useConnectivity } from '../connectivity/ConnectivityProvider';
 import { FLAGS } from '../featureFlags/flags';
 import { getCachedHeroImageUrl, getHeroImageUrls } from '../recipes/heroImage';
 import { useSession } from '../session/SessionProvider';
-import { getActiveSelectionRound } from '../smartSelection/api';
+import { getActiveSelectionRound, type SelectionRound } from '../smartSelection/api';
+import { GroupRoundCard } from '../smartSelection/GroupRoundCard';
+import { groupRoundCardCopy, groupRoundPath } from '../smartSelection/groupRound';
 import { StartRoundSheet } from '../smartSelection/StartRoundSheet';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
@@ -95,6 +97,7 @@ export function ThisWeekScreen() {
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [startRoundSheetVisible, setStartRoundSheetVisible] = useState(false);
   const [isCheckingActiveRound, setIsCheckingActiveRound] = useState(false);
+  const [activeGroupRound, setActiveGroupRound] = useState<SelectionRound | null>(null);
   // Closes a swiped-open row once its Remove action has been tapped —
   // Swipeable doesn't do this itself, and the row disappearing from
   // `plan.entries` right after (the optimistic update below) isn't
@@ -128,11 +131,39 @@ export function ThisWeekScreen() {
   // (react-navigation's own behavior, not just on a focus event), so
   // including it here is what makes the offline -> online transition
   // reload the plan without a separate effect.
+  // The group round card is how invited members find a round (no push
+  // yet, #244), so it refetches with the plan on every focus.
+  const loadActiveGroupRound = useCallback(async () => {
+    if (!FLAGS.groupMealSelection) return;
+    try {
+      const round = await getActiveSelectionRound();
+      setActiveGroupRound(round?.mode === 'group' ? round : null);
+    } catch {
+      // Keep the last answer; "Help me choose" re-checks when pressed.
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      if (isOnline) load();
-    }, [isOnline, load]),
+      if (isOnline) {
+        load();
+        loadActiveGroupRound();
+      }
+    }, [isOnline, load, loadActiveGroupRound]),
   );
+
+  // Focus doesn't fire when the app returns from the background, which is
+  // exactly when an invited member arrives, or comes back to find a
+  // co-member has added the round's picks to the plan.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && isOnline) {
+        load();
+        loadActiveGroupRound();
+      }
+    });
+    return () => subscription.remove();
+  }, [isOnline, load, loadActiveGroupRound]);
 
   useEffect(() => {
     return () => {
@@ -178,6 +209,16 @@ export function ThisWeekScreen() {
     setIsCheckingActiveRound(true);
     try {
       const activeRound = await getActiveSelectionRound();
+      // A group round sends each member somewhere different: the deck if
+      // they're still swiping, otherwise the waiting screen or results.
+      if (activeRound?.mode === 'group') {
+        setActiveGroupRound(activeRound);
+        const path = groupRoundPath(activeRound, userId);
+        if (path) {
+          router.push(path);
+          return;
+        }
+      }
       if (activeRound?.status === 'active') {
         router.push(`/smart-selection/${activeRound.id}`);
         return;
@@ -426,20 +467,34 @@ export function ThisWeekScreen() {
   }
 
   const isConfirmed = plan.status === 'confirmed';
-  const helpMeChoose = FLAGS.smartMealSelection && (
-    <View style={styles.helpMeChooseSection}>
-      <Button
-        title="Help me choose"
-        variant="outlineAccent"
-        onPress={handleHelpMeChoose}
-        disabled={isCheckingActiveRound}
-        testID="this-week-help-me-choose"
-      />
-      <Text style={styles.helpMeChooseCaption}>
-        {"A quick swipe-through to help pick this week's meals."}
-      </Text>
-    </View>
-  );
+  const groupCard =
+    FLAGS.groupMealSelection &&
+    activeGroupRound &&
+    groupRoundCardCopy(activeGroupRound, userId) !== null ? (
+      <View style={styles.helpMeChooseSection}>
+        <GroupRoundCard
+          round={activeGroupRound}
+          userId={userId}
+          onOpen={(path) => router.push(path)}
+        />
+      </View>
+    ) : null;
+  const helpMeChoose =
+    FLAGS.smartMealSelection &&
+    (groupCard ?? (
+      <View style={styles.helpMeChooseSection}>
+        <Button
+          title="Help me choose"
+          variant="outlineAccent"
+          onPress={handleHelpMeChoose}
+          disabled={isCheckingActiveRound}
+          testID="this-week-help-me-choose"
+        />
+        <Text style={styles.helpMeChooseCaption}>
+          {"A quick swipe-through to help pick this week's meals."}
+        </Text>
+      </View>
+    ));
 
   return (
     <View style={styles.screen} testID="this-week-screen">

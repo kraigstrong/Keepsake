@@ -34,13 +34,12 @@ export type AnalyticsEvent =
   | 'grocery_list_generated'
   | 'grocery_list_exported'
   // Smart Meal Selection. Names and props are fixed by the proposal's
-  // §11, not chosen here. Its group-flow events
-  // (selection_participant_completed, selection_round_closed,
-  // selection_results_viewed, selection_no_match) are deliberately
-  // absent: the group flow isn't built, so they could never fire, and
-  // an allowlist entry that can't fire is indistinguishable from one
-  // that's broken. Add them with the feature.
+  // §11, not chosen here. Group-flow events join as the screens that
+  // fire them land (#172): an allowlist entry that can't fire is
+  // indistinguishable from one that's broken.
   | 'selection_round_started'
+  | 'selection_participant_completed'
+  | 'selection_round_closed'
   | 'selection_round_applied'
   | 'selection_round_cancelled'
   | 'selection_deck_exhausted'

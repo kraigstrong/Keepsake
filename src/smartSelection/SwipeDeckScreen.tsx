@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cancelSelectionRound,
   clearSelectionDecision,
+  finishSelectionParticipation,
   getMyDecisionsForRound,
   getSelectionRound,
   recordSelectionDecision,
@@ -23,6 +24,7 @@ import {
   type SelectionRound,
 } from './api';
 import { fetchDeckCardDetails, type DeckCardDetail } from './deckCards';
+import { groupRole, groupRoundPath } from './groupRound';
 import { useReducedMotion } from '../accessibility/useReducedMotion';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
@@ -139,6 +141,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isSelectingMore, setIsSelectingMore] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  // Group mode only: finishing hands the participant to the waiting
+  // screen. 'failed' leaves the terminal state with a retry.
+  const [finishState, setFinishState] = useState<'idle' | 'finishing' | 'failed' | 'unsaved'>(
+    'idle',
+  );
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -148,9 +155,62 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // race-condition review priority: this repo's recurring defect class
   // is exactly a partial failure between two async calls that should be
   // ordered).
+  // Every vote and undo write, so finishing can wait for all of them.
+  // The promises never reject; failures land in failedWritesRef instead.
   const pendingWritesRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Cards whose latest write (vote or undo) failed. Group finishing waits
+  // for these to be redone; a reload clears it, since the deck is then
+  // rebuilt from what the server actually holds.
+  const failedWritesRef = useRef<Set<string>>(new Set());
+  // Async work below can land after the user has left this screen;
+  // `replace` would then act on whatever screen is on top instead.
+  const focusedRef = useRef(false);
 
   const translateX = useSharedValue(0);
+
+  const replaceIfFocused = useCallback(
+    (path: string) => {
+      if (focusedRef.current) router.replace(path);
+    },
+    [router],
+  );
+
+  // Group mode: marks the ballot finished and hands over to the waiting
+  // screen. Every in-flight vote has to have saved first: a vote that
+  // failed (and was rolled back, with a toast) must be redone, not
+  // silently dropped from a ballot marked finished. Started from the last
+  // decision, "I'm done", or a resume that loads an already-complete
+  // deck — never from an effect.
+  const finishingRef = useRef(false);
+  const finishAndWait = useCallback(async () => {
+    if (finishingRef.current) return;
+    // Lock the deck before draining: a vote cast while the snapshot below
+    // settles would land after the ballot is marked finished (Codex,
+    // PR #249). decide() checks the ref; the controls read the state.
+    finishingRef.current = true;
+    setFinishState('finishing');
+    await Promise.all([...pendingWritesRef.current.values()]);
+    if (failedWritesRef.current.size > 0) {
+      finishingRef.current = false;
+      setFinishState('unsaved');
+      showToast("Couldn't save that decision — you'll need to redo it");
+      return;
+    }
+    try {
+      await finishSelectionParticipation(roundId);
+      replaceIfFocused(`/smart-selection/${roundId}/waiting`);
+    } catch (error) {
+      // The deadline or the creator closed the round first: the results
+      // are what's left to see.
+      if (error instanceof Error && error.message.includes('not active')) {
+        replaceIfFocused(`/smart-selection/${roundId}/results`);
+        return;
+      }
+      finishingRef.current = false;
+      setFinishState('failed');
+      showToast("Couldn't finish — try again");
+    }
+  }, [roundId, replaceIfFocused, showToast]);
 
   const load = useCallback(async () => {
     try {
@@ -242,6 +302,27 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       }));
       const seededYesCount = seededUndoStack.filter((e) => e.decision === 'yes').length;
 
+      // A group round this member can't swipe — it closed, or they were
+      // never invited, or they already finished it — belongs on another
+      // screen. Finished participants may still come back to keep
+      // swiping (the waiting screen offers it), so only a closed round or
+      // a non-participant is redirected here.
+      if (roundData.mode === 'group') {
+        if (roundData.status === 'cancelled') {
+          showToast('That round was cancelled');
+          if (focusedRef.current) router.dismissTo('/');
+          return;
+        }
+        const role = groupRole(roundData, userId);
+        if (roundData.status !== 'active' || role === 'watching') {
+          const path = groupRoundPath(roundData, userId);
+          if (path && path !== `/smart-selection/${roundId}`) {
+            replaceIfFocused(path);
+            return;
+          }
+        }
+      }
+
       setRound({ ...roundData, candidates: sortedCandidates });
       setCardDetails(details);
       setHeroUrls(urls);
@@ -249,10 +330,15 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       setYesCount(seededYesCount);
       setUndoStack(seededUndoStack);
       setLoadError(false);
+      setFinishState('idle');
+      failedWritesRef.current.clear();
+      if (roundData.mode === 'group' && startIndex >= sortedCandidates.length) {
+        void finishAndWait();
+      }
     } catch {
       setLoadError(true);
     }
-  }, [roundId, userId]);
+  }, [roundId, userId, router, finishAndWait, replaceIfFocused, showToast]);
 
   // Holds the loading state for the whole retry, so a stalled retry doesn't
   // look like a dead button. Clearing loadError alone isn't enough: a reload
@@ -272,8 +358,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // clears any pending "Passed on…" banner timeout on blur/unmount.
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       load();
       return () => {
+        focusedRef.current = false;
         if (passedTimeoutRef.current) clearTimeout(passedTimeoutRef.current);
       };
     }, [load]),
@@ -313,11 +401,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   }, [currentCandidate?.recipeId, terminal]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  const isGroup = round?.mode === 'group';
+
   useEffect(() => {
-    if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
+    if (!isGroup && atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
     }
-  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
+  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router, isGroup]);
 
   // Deck exhaustion is a screen-level fact with no API call behind it,
   // so unlike the other selection events this one can't live in api.ts.
@@ -336,7 +426,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // No recentring needed on this path: currentCandidate is undefined
     // only when the deck is terminal, and a null round unmounts the card
     // entirely — the layout effect's deps cover both.
-    if (!round || !currentCandidate) return;
+    if (!round || !currentCandidate || finishingRef.current) return;
     const recipeId = currentCandidate.recipeId;
     const title = cardDetails.get(recipeId)?.title ?? 'that recipe';
     const decidedAtPosition = position;
@@ -372,8 +462,26 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // with no decision" already handles a gap anywhere in the deck, not
     // just a contiguous prefix).
     setPendingWriteCount((c) => c + 1);
-    const writePromise = recordSelectionDecision(round.id, recipeId, decision)
-      .catch(() => {
+    // Queued behind this card's previous write (e.g. an undo's clear) so a
+    // quick re-vote can't land first and then be deleted by it (Codex,
+    // PR #249). Earlier writes never reject.
+    const previousWrite = pendingWritesRef.current.get(recipeId) ?? Promise.resolve();
+    const writePromise = previousWrite
+      .then(() => recordSelectionDecision(round.id, recipeId, decision))
+      .then(() => {
+        failedWritesRef.current.delete(recipeId);
+      })
+      .catch((error: unknown) => {
+        failedWritesRef.current.add(recipeId);
+        if (
+          round.mode === 'group' &&
+          error instanceof Error &&
+          error.message.includes('not active')
+        ) {
+          showToast('The round has closed');
+          replaceIfFocused(`/smart-selection/${round.id}/results`);
+          return;
+        }
         setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
         if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
         setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
@@ -382,10 +490,14 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       })
       .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
+
+    if (round.mode === 'group' && decidedAtPosition + 1 >= round.candidates.length) {
+      void finishAndWait();
+    }
   }
 
   async function handleUndo() {
-    if (!round || undoStack.length === 0) return;
+    if (!round || undoStack.length === 0 || finishingRef.current) return;
     const last = undoStack[undoStack.length - 1]!;
 
     setUndoStack((stack) => stack.slice(0, -1));
@@ -403,12 +515,23 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // server with a decision the UI just told the user was undone
     // (Codex, PR #104). A seeded (resumed) entry has no pending write
     // to wait for, so this is a no-op in that case.
+    // Registered synchronously, so a finish started right after this
+    // still waits for the clear (Codex, PR #249) — otherwise an undone
+    // vote could be counted if the round closes before the clear lands.
     const pendingWrite = pendingWritesRef.current.get(last.recipeId);
-    if (pendingWrite) await pendingWrite.catch(() => {});
-
-    clearSelectionDecision(round.id, last.recipeId).catch(() => {
-      showToast("Couldn't undo that decision");
-    });
+    const roundId = round.id;
+    const clearPromise = (async () => {
+      if (pendingWrite) await pendingWrite;
+      try {
+        await clearSelectionDecision(roundId, last.recipeId);
+        failedWritesRef.current.delete(last.recipeId);
+      } catch {
+        failedWritesRef.current.add(last.recipeId);
+        showToast("Couldn't undo that decision");
+      }
+    })();
+    pendingWritesRef.current.set(last.recipeId, clearPromise);
+    await clearPromise;
   }
 
   // "Start over" / "pick again" (developer live-walkthrough feedback,
@@ -489,7 +612,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // React-owned, which then rejects these ordinary UI-thread writes.
   /* eslint-disable react-hooks/refs, react-hooks/immutability */
   const panGesture = Gesture.Pan()
-    .enabled(!terminal)
+    .enabled(!terminal && finishState !== 'finishing')
     .onUpdate((event) => {
       translateX.value = event.translationX;
     })
@@ -581,7 +704,36 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       </View>
 
       <View style={styles.content}>
-        {terminal ? (
+        {terminal && isGroup ? (
+          finishState === 'unsaved' ? (
+            <View style={styles.terminal} testID="swipe-deck-unsaved">
+              <Text style={styles.terminalTitle}>A pick didn&apos;t save</Text>
+              <Button
+                title="Go back to it"
+                onPress={() => void retryLoad()}
+                testID="swipe-deck-unsaved-retry"
+              />
+            </View>
+          ) : finishState === 'failed' ? (
+            <View style={styles.terminal} testID="swipe-deck-finish-failed">
+              <Text style={styles.terminalTitle}>Couldn&apos;t finish</Text>
+              <Button
+                title="Try again"
+                onPress={() => void finishAndWait()}
+                testID="swipe-deck-finish-retry"
+              />
+              <Button
+                title="Undo last decision"
+                onPress={handleUndo}
+                disabled={undoStack.length === 0}
+                variant="secondary"
+                testID="swipe-deck-terminal-undo"
+              />
+            </View>
+          ) : (
+            <LoadingState label="Finishing up…" testID="swipe-deck-finishing" />
+          )
+        ) : terminal ? (
           yesCount > 0 ? (
             // Mid-flight to the shortlist (the effect above fires on the
             // same render this becomes true) — a brief loading state
@@ -692,29 +844,49 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                 <Text style={styles.reviewBarText}>
                   {`You've got ${yesCount} — finish now or keep looking.`}
                 </Text>
-                <Pressable
-                  onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
-                  accessibilityRole="button"
-                  testID="swipe-deck-review-action"
-                >
-                  <Text style={styles.reviewBarAction}>Review {yesCount} picks</Text>
-                </Pressable>
+                {isGroup ? (
+                  <Pressable
+                    onPress={() => void finishAndWait()}
+                    disabled={finishState === 'finishing'}
+                    accessibilityRole="button"
+                    testID="swipe-deck-finish-action"
+                  >
+                    <Text style={styles.reviewBarAction}>I&apos;m done</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
+                    accessibilityRole="button"
+                    testID="swipe-deck-review-action"
+                  >
+                    <Text style={styles.reviewBarAction}>Review {yesCount} picks</Text>
+                  </Pressable>
+                )}
               </View>
             )}
 
             <View style={styles.controlsRow}>
-              <UndoControl onPress={handleUndo} disabled={undoStack.length === 0} />
+              <UndoControl
+                onPress={handleUndo}
+                disabled={undoStack.length === 0 || finishState === 'finishing'}
+              />
               <View style={styles.decisionButtons}>
                 <View style={styles.decisionButton}>
                   <Button
                     title="Not this week"
                     variant="secondary"
                     onPress={() => decide('no')}
+                    disabled={finishState === 'finishing'}
                     testID="swipe-deck-no"
                   />
                 </View>
                 <View style={styles.decisionButton}>
-                  <Button title="Yes" onPress={() => decide('yes')} testID="swipe-deck-yes" />
+                  <Button
+                    title="Yes"
+                    onPress={() => decide('yes')}
+                    disabled={finishState === 'finishing'}
+                    testID="swipe-deck-yes"
+                  />
                 </View>
               </View>
             </View>
@@ -722,7 +894,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         )}
       </View>
 
-      {passed && (
+      {/* Hidden while a group ballot finishes: undoing then would bring a
+          card back on a ballot that's already being marked finished. */}
+      {passed && !(isGroup && terminal) && (
         <View style={styles.passedBanner} testID="swipe-deck-passed-banner" role="alert" accessible>
           <Text style={styles.passedText} numberOfLines={1}>
             Passed on {passed.title}
