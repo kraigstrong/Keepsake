@@ -11,6 +11,7 @@ import { after, before, test } from 'node:test';
 
 import { currentWeekKey } from '../../../src/thisWeek/weekKey.ts';
 import {
+  adminClient,
   localSupabaseConfig,
   removeSeeded,
   rpc,
@@ -243,12 +244,18 @@ test('the deadline closes the round on the next read, for anyone', async () => {
   const { roundId } = await startRound(alex.client, {
     mode: 'group',
     participantUserIds: [blair.userId],
-    closesAt: new Date(Date.now() + 2_000).toISOString(),
+    closesAt: new Date(Date.now() + HOUR_MS).toISOString(),
   });
   const round = { round_id: roundId };
   assert.equal((await rpc(blair.client, 'get_selection_round', round)).status, 'active');
 
-  await new Promise((resolve) => setTimeout(resolve, 2_500));
+  // Move the deadline into the past directly, rather than racing a short
+  // one against a cold Edge Function call (Codex, PR #245).
+  const { error } = await adminClient(config)
+    .from('selection_rounds')
+    .update({ closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .eq('id', roundId);
+  assert.equal(error, null);
 
   const closed = await rpc(blair.client, 'get_selection_round', round);
   assert.equal(closed.status, 'ready_for_review');

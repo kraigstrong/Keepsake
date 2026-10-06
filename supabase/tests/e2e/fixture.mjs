@@ -44,6 +44,11 @@ function statelessClient(url, key) {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+/** Service-role client, for arranging state a member can't (e.g. a deadline already passed). */
+export function adminClient(config) {
+  return statelessClient(config.url, config.serviceRoleKey);
+}
+
 /** Throws with the RPC's own message, so a failing step names the rule that fired. */
 export async function rpc(client, name, args) {
   const { data, error } = await client.rpc(name, args);
@@ -86,7 +91,7 @@ const PROTEIN_ROTATION = ['Chicken', 'Beef', 'Seafood', 'Vegetarian', 'Pork', 'T
  * runs never collide and no reset is needed between them.
  */
 export async function seedHousehold(config, { memberNames, recipeCount = 16 }) {
-  const admin = statelessClient(config.url, config.serviceRoleKey);
+  const admin = adminClient(config);
   const runId = randomBytes(4).toString('hex');
 
   const members = [];
@@ -167,7 +172,7 @@ export async function seedHousehold(config, { memberNames, recipeCount = 16 }) {
 
 /** Deletes every household (and so, by cascade, its data) and account seeded in this process. */
 export async function removeSeeded(config) {
-  const admin = statelessClient(config.url, config.serviceRoleKey);
+  const admin = adminClient(config);
   if (seeded.householdIds.length > 0) {
     // Recipes first, as delete_own_account does: cascading into them from
     // the household would tombstone them against a half-deleted household.
