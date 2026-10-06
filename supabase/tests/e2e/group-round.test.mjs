@@ -113,6 +113,20 @@ test('two members run a group round from start to This Week', async () => {
 
   const caseyView = await rpc(casey.client, 'get_selection_round', round);
   assert.equal(caseyView.id, roundId, 'an uninvited member can still see the round');
+  const progress = Object.fromEntries(
+    caseyView.participants.map((p) => [
+      p.display_name,
+      { decided: p.decided_count, yes: p.yes_count, finished: p.completed_at !== null },
+    ]),
+  );
+  assert.deepEqual(
+    progress,
+    {
+      Alex: { decided: 12, yes: 5, finished: false },
+      Blair: { decided: 9, yes: 4, finished: false },
+    },
+    'mid-round progress is visible to the whole household',
+  );
   assert.match(
     await rpcError(casey.client, 'record_selection_decision', {
       ...round,
