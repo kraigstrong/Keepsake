@@ -8,6 +8,7 @@ import {
   closeSelectionRound,
   getMyDecisionsForRound,
   getSelectionRound,
+  getSelectionRoundResults,
 } from './api';
 import { fetchDeckCardDetails } from './deckCards';
 import { Button } from '../components/Button';
@@ -32,6 +33,7 @@ export interface ReviewScreenProps {
 interface ReviewItem {
   id: string;
   title: string;
+  subtitle?: string;
 }
 
 /**
@@ -69,19 +71,63 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
   const [multiplierById, setMultiplierById] = useState<Record<string, number>>({});
   const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Group picks that stopped counting between results and review (archived
+  // or deleted meanwhile), said plainly rather than dropped silently (1k).
+  const [unavailableCount, setUnavailableCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const [plan, decisions] = await Promise.all([
+      const [plan, round, decisions] = await Promise.all([
         fetchCurrentWeeklyPlan(),
+        getSelectionRound(roundId),
         userId ? getMyDecisionsForRound(roundId, userId) : Promise.resolve(new Map()),
       ]);
-      const validIds = recipeIds.filter((id) => decisions.get(id)?.decision === 'yes');
+      let validIds: string[];
+      const subtitles = new Map<string, string>();
+      if (round.mode === 'group') {
+        // Set aside or added by someone else while this screen opened: the
+        // results call would refuse a cancelled round on every retry.
+        if (round.status === 'cancelled' || round.status === 'applied') {
+          showToast(
+            round.status === 'cancelled'
+              ? 'That round was set aside'
+              : 'Already added to This Week',
+          );
+          router.dismissTo('/');
+          return;
+        }
+        // Anyone in the household may add a group round's matches, so the
+        // check is the round's own results (something somebody finished
+        // chose), not the caller's ballot.
+        const results = await getSelectionRoundResults(roundId);
+        const matches = new Map(
+          results.candidates.filter((c) => c.yesCount > 0).map((c) => [c.recipeId, c]),
+        );
+        validIds = recipeIds.filter((id) => matches.has(id));
+        setUnavailableCount(recipeIds.length - validIds.length);
+        for (const id of validIds) {
+          const match = matches.get(id)!;
+          subtitles.set(
+            id,
+            match.category === 'unanimous'
+              ? 'Everyone wants this'
+              : `${match.yesCount} of ${match.completedParticipantCount} chose this`,
+          );
+        }
+      } else {
+        validIds = recipeIds.filter((id) => decisions.get(id)?.decision === 'yes');
+      }
       const details = await fetchDeckCardDetails(validIds);
 
       setWeeklyPlanId(plan.id);
       setValidRecipeIds(validIds);
-      setItems(validIds.map((id) => ({ id, title: details.get(id)?.title ?? '' })));
+      setItems(
+        validIds.map((id) => ({
+          id,
+          title: details.get(id)?.title ?? '',
+          subtitle: subtitles.get(id),
+        })),
+      );
       setMultiplierById(Object.fromEntries(validIds.map((id) => [id, DEFAULT_MULTIPLIER])));
       setLoadError(false);
     } catch {
@@ -90,7 +136,7 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     // recipeIds is a route-param snapshot, stable for this screen's whole
     // lifetime (the review route memoizes it) — not a real reactive dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId, userId]);
+  }, [roundId, userId, router, showToast]);
 
   // useFocusEffect, not a plain useEffect — same idiom as SwipeDeckScreen/
   // ShortlistScreen's own load-on-mount-with-retry screens, and it also
@@ -107,10 +153,24 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
     setIsSubmitting(true);
     try {
       const round = await getSelectionRound(roundId);
-      if (round.status === 'active') {
+      if (round.mode === 'group') {
+        // A group round is closed before anyone gets here, and only its
+        // creator could close it anyway. Another member may have added or
+        // set it aside meanwhile; say so rather than fail on every retry.
+        if (round.status === 'applied') {
+          showToast('Already added to This Week');
+          router.dismissTo('/');
+          return;
+        }
+        if (round.status === 'cancelled') {
+          showToast('That round was set aside');
+          router.dismissTo('/');
+          return;
+        }
+      } else if (round.status === 'active') {
         await closeSelectionRound(roundId);
       }
-      await applySelectionRound(
+      const applied = await applySelectionRound(
         roundId,
         weeklyPlanId,
         validRecipeIds.map((id) => ({
@@ -118,6 +178,13 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
           multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER,
         })),
       );
+      // Apply is idempotent, so two members tapping Add together both
+      // succeed; only the one whose apply landed actually added anything.
+      if (round.mode === 'group' && applied && applied.appliedBy !== userId) {
+        showToast('Already added to This Week');
+        router.dismissTo('/');
+        return;
+      }
       showToast(
         validRecipeIds.length === 1
           ? 'Added 1 to This Week'
@@ -164,7 +231,9 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
         <View style={styles.emptyState} testID="review-empty">
           <Text style={styles.emptyStateTitle}>Nothing to review</Text>
           <Text style={styles.emptyStateMessage}>
-            Go back to the shortlist and pick some recipes first.
+            {unavailableCount > 0
+              ? 'Those picks are no longer available. Go back and choose others.'
+              : 'Go back to the shortlist and pick some recipes first.'}
           </Text>
           <Button title="Back" onPress={() => router.back()} testID="review-empty-back" />
         </View>
@@ -189,6 +258,13 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
         <View style={styles.headerActionSpacer} />
       </View>
 
+      {unavailableCount > 0 && (
+        <Text style={styles.unavailableNote} testID="review-unavailable">
+          {unavailableCount === 1
+            ? "One pick is no longer available, so it's left out."
+            : `${unavailableCount} picks are no longer available, so they're left out.`}
+        </Text>
+      )}
       <ServingsConfirmationStep
         items={items}
         multiplierById={multiplierById}
@@ -248,6 +324,12 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     ...typography.heading,
     color: colors.textPrimary,
+  },
+  unavailableNote: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   emptyStateMessage: {
     ...typography.body,

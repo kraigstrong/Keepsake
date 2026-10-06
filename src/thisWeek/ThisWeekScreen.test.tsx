@@ -506,6 +506,8 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
 });
 
 describe('group Help Me Choose (#241)', () => {
+  const groupFlagDefault = FLAGS.groupMealSelection ?? false;
+
   const participants = [
     { userId: 'user-2', completedAt: null, displayName: 'Blair', decidedCount: 0, yesCount: 0 },
     { userId: 'user-1', completedAt: null, displayName: 'Alex', decidedCount: 3, yesCount: 1 },
@@ -533,7 +535,7 @@ describe('group Help Me Choose (#241)', () => {
   });
 
   afterEach(() => {
-    FLAGS.groupMealSelection = false;
+    FLAGS.groupMealSelection = groupFlagDefault;
   });
 
   it('shows the round card in place of Help me choose, and opens the deck from it', async () => {

@@ -32,10 +32,17 @@ const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseRouter = useRouter as jest.Mock;
 const push = jest.fn();
 
+const groupFlagDefault = FLAGS.groupMealSelection ?? false;
+
+afterEach(() => {
+  FLAGS.groupMealSelection = groupFlagDefault;
+});
+
 beforeEach(async () => {
   await AsyncStorage.clear();
   jest.clearAllMocks();
   mockedUseRouter.mockReturnValue({ push });
+  mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue([]);
 });
 
 it('defaults the target-count stepper to 4', async () => {
@@ -120,10 +127,6 @@ describe('Pick together', () => {
   beforeEach(() => {
     FLAGS.groupMealSelection = true;
     mockedHouseholdApi.fetchHouseholdMembers.mockResolvedValue(household);
-  });
-
-  afterEach(() => {
-    FLAGS.groupMealSelection = false;
   });
 
   async function openTogether() {

@@ -19,8 +19,7 @@ export const FLAGS: Record<string, boolean> = {
   // group is post-beta and does not gate this. Remove the flag entirely once
   // the Friends & Family Preview has run and the feature is staying.
   smartMealSelection: true,
-  // Group Help Me Choose (#172). Off until the whole flow is in (#242),
-  // so each stacked PR is safe to merge on its own. Remove once the
-  // two-phone test has passed and group voting is staying.
-  groupMealSelection: false,
+  // Group Help Me Choose (#172), on now that the flow is complete (#242).
+  // Remove once the two-phone test has passed and group voting is staying.
+  groupMealSelection: true,
 };

@@ -320,12 +320,17 @@ export interface ApplySelectionRoundSelection {
  * plan; archived/deleted/already-in-plan recipes are silently dropped,
  * a recipe_id that was never a candidate of this round is the one error.
  */
+export interface AppliedSelectionRound {
+  /** Whoever's apply actually landed — an idempotent replay returns the first one's. */
+  appliedBy: string | null;
+}
+
 export async function applySelectionRound(
   roundId: string,
   weeklyPlanId: string,
   selections: ApplySelectionRoundSelection[],
-): Promise<void> {
-  const { error } = await supabase.rpc('apply_selection_round', {
+): Promise<AppliedSelectionRound | null> {
+  const { data, error } = await supabase.rpc('apply_selection_round', {
     round_id: roundId,
     weekly_plan_id: weeklyPlanId,
     selections: selections.map((s) => ({ recipe_id: s.recipeId, multiplier: s.multiplier })),
@@ -347,6 +352,10 @@ export async function applySelectionRound(
   // Reporting the real number needs the RPC to return it — see
   // docs/roadmap.md's Not-yet-triaged (Codex, PR #115).
   trackEvent('selection_round_applied', { requestedCount: selections.length });
+  // PostgREST returns this composite as a single object today (the e2e
+  // suite pins it); accept a one-row array too rather than misread it.
+  const row = (Array.isArray(data) ? data[0] : data) as { applied_by: string | null } | undefined;
+  return row ? { appliedBy: row.applied_by } : null;
 }
 
 export interface SelectionDecisionRecord {
@@ -387,4 +396,76 @@ export async function getMyDecisionsForRound(
     decisions.set(row.recipe_id, { decision: row.decision, decidedAt: row.decided_at });
   });
   return decisions;
+}
+
+export type SelectionResultCategory = 'unanimous' | 'majority' | 'mixed';
+
+export interface SelectionResultPerson {
+  userId: string;
+  displayName: string | null;
+}
+
+export interface SelectionRoundResultCandidate {
+  recipeId: string;
+  yesCount: number;
+  completedParticipantCount: number;
+  category: SelectionResultCategory;
+  /** Finished participants who said yes. */
+  chosenBy: SelectionResultPerson[];
+  /** Finished participants who explicitly said no — never someone who didn't reach the card. */
+  passedBy: SelectionResultPerson[];
+}
+
+export interface SelectionRoundResults {
+  roundId: string;
+  status: SelectionRoundStatus;
+  completedParticipantCount: number;
+  candidates: SelectionRoundResultCandidate[];
+}
+
+interface SelectionResultPersonRow {
+  user_id: string;
+  display_name: string | null;
+}
+
+interface SelectionRoundResultsRow {
+  round_id: string;
+  status: SelectionRoundStatus;
+  completed_participant_count: number;
+  candidates: {
+    recipe_id: string;
+    yes_count: number;
+    completed_participant_count: number;
+    category: SelectionResultCategory;
+    chosen_by: SelectionResultPersonRow[];
+    passed_by: SelectionResultPersonRow[];
+  }[];
+}
+
+function mapPerson(row: SelectionResultPersonRow): SelectionResultPerson {
+  return { userId: row.user_id, displayName: row.display_name };
+}
+
+/**
+ * Consensus for a closed round (1j). Raises unless the round is
+ * ready_for_review or applied (ADR-0027 decision 2), and counts only
+ * finished ballots.
+ */
+export async function getSelectionRoundResults(roundId: string): Promise<SelectionRoundResults> {
+  const { data, error } = await supabase.rpc('get_selection_round_results', { round_id: roundId });
+  if (error) throw new Error(error.message);
+  const row = data as SelectionRoundResultsRow;
+  return {
+    roundId: row.round_id,
+    status: row.status,
+    completedParticipantCount: row.completed_participant_count,
+    candidates: row.candidates.map((candidate) => ({
+      recipeId: candidate.recipe_id,
+      yesCount: candidate.yes_count,
+      completedParticipantCount: candidate.completed_participant_count,
+      category: candidate.category,
+      chosenBy: candidate.chosen_by.map(mapPerson),
+      passedBy: candidate.passed_by.map(mapPerson),
+    })),
+  };
 }
