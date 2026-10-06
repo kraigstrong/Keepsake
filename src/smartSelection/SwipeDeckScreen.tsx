@@ -155,9 +155,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   // race-condition review priority: this repo's recurring defect class
   // is exactly a partial failure between two async calls that should be
   // ordered).
-  // Resolves true once the vote is saved, false if it failed and was
-  // rolled back — group finishing checks the outcome, not just settlement.
-  const pendingWritesRef = useRef<Map<string, Promise<boolean>>>(new Map());
+  // Every vote and undo write, so finishing can wait for all of them.
+  // The promises never reject; failures land in failedWritesRef instead.
+  const pendingWritesRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Cards whose latest write (vote or undo) failed. Group finishing waits
+  // for these to be redone; a reload clears it, since the deck is then
+  // rebuilt from what the server actually holds.
+  const failedWritesRef = useRef<Set<string>>(new Set());
   // Async work below can land after the user has left this screen;
   // `replace` would then act on whatever screen is on top instead.
   const focusedRef = useRef(false);
@@ -185,8 +189,8 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // PR #249). decide() checks the ref; the controls read the state.
     finishingRef.current = true;
     setFinishState('finishing');
-    const saved = await Promise.all([...pendingWritesRef.current.values()]);
-    if (saved.includes(false)) {
+    await Promise.all([...pendingWritesRef.current.values()]);
+    if (failedWritesRef.current.size > 0) {
       finishingRef.current = false;
       setFinishState('unsaved');
       showToast("Couldn't save that decision — you'll need to redo it");
@@ -327,6 +331,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       setUndoStack(seededUndoStack);
       setLoadError(false);
       setFinishState('idle');
+      failedWritesRef.current.clear();
       if (roundData.mode === 'group' && startIndex >= sortedCandidates.length) {
         void finishAndWait();
       }
@@ -458,8 +463,11 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // just a contiguous prefix).
     setPendingWriteCount((c) => c + 1);
     const writePromise = recordSelectionDecision(round.id, recipeId, decision)
-      .then(() => true)
+      .then(() => {
+        failedWritesRef.current.delete(recipeId);
+      })
       .catch((error: unknown) => {
+        failedWritesRef.current.add(recipeId);
         if (
           round.mode === 'group' &&
           error instanceof Error &&
@@ -467,14 +475,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
         ) {
           showToast('The round has closed');
           replaceIfFocused(`/smart-selection/${round.id}/results`);
-          return false;
+          return;
         }
         setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
         if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
         setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
         setPassed((current) => (current?.recipeId === recipeId ? null : current));
         showToast("Couldn't save that decision — you'll need to redo it");
-        return false;
       })
       .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
@@ -485,7 +492,7 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   }
 
   async function handleUndo() {
-    if (!round || undoStack.length === 0) return;
+    if (!round || undoStack.length === 0 || finishingRef.current) return;
     const last = undoStack[undoStack.length - 1]!;
 
     setUndoStack((stack) => stack.slice(0, -1));
@@ -503,12 +510,23 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // server with a decision the UI just told the user was undone
     // (Codex, PR #104). A seeded (resumed) entry has no pending write
     // to wait for, so this is a no-op in that case.
+    // Registered synchronously, so a finish started right after this
+    // still waits for the clear (Codex, PR #249) — otherwise an undone
+    // vote could be counted if the round closes before the clear lands.
     const pendingWrite = pendingWritesRef.current.get(last.recipeId);
-    if (pendingWrite) await pendingWrite.catch(() => {});
-
-    clearSelectionDecision(round.id, last.recipeId).catch(() => {
-      showToast("Couldn't undo that decision");
-    });
+    const roundId = round.id;
+    const clearPromise = (async () => {
+      if (pendingWrite) await pendingWrite;
+      try {
+        await clearSelectionDecision(roundId, last.recipeId);
+        failedWritesRef.current.delete(last.recipeId);
+      } catch {
+        failedWritesRef.current.add(last.recipeId);
+        showToast("Couldn't undo that decision");
+      }
+    })();
+    pendingWritesRef.current.set(last.recipeId, clearPromise);
+    await clearPromise;
   }
 
   // "Start over" / "pick again" (developer live-walkthrough feedback,
@@ -843,7 +861,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
             )}
 
             <View style={styles.controlsRow}>
-              <UndoControl onPress={handleUndo} disabled={undoStack.length === 0} />
+              <UndoControl
+                onPress={handleUndo}
+                disabled={undoStack.length === 0 || finishState === 'finishing'}
+              />
               <View style={styles.decisionButtons}>
                 <View style={styles.decisionButton}>
                   <Button

@@ -877,6 +877,44 @@ describe('group mode (#241)', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
   });
 
+  it('waits for an undo to land before finishing, and disables undo while finishing', async () => {
+    let resolveClear: () => void = () => {};
+    mockedApi.clearSelectionDecision.mockReturnValueOnce(
+      new Promise<void>((resolve) => (resolveClear = resolve)),
+    );
+    mockedApi.getSelectionRound.mockResolvedValue(groupRound({ targetCount: 1 }));
+    renderDeck();
+    await decideAll(['swipe-deck-yes', 'swipe-deck-no']);
+
+    // Undo the no, then finish (target 1 is met) while the clear is in flight.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+    });
+    await fireEvent.press(screen.getByTestId('swipe-deck-finish-action'));
+    expect(screen.getByTestId('swipe-deck-undo')).toBeDisabled();
+    expect(mockedApi.finishSelectionParticipation).not.toHaveBeenCalled();
+
+    await act(async () => resolveClear());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+  });
+
+  it('does not finish over an undo that failed to save', async () => {
+    mockedApi.clearSelectionDecision.mockRejectedValueOnce(new Error('network down'));
+    mockedApi.getSelectionRound.mockResolvedValue(groupRound({ targetCount: 1 }));
+    renderDeck();
+    await decideAll(['swipe-deck-yes', 'swipe-deck-no']);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('swipe-deck-undo'));
+    });
+    await waitFor(() => expect(screen.getByText("Couldn't undo that decision")).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('swipe-deck-finish-action'));
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't save that decision — you'll need to redo it")).toBeTruthy(),
+    );
+    expect(mockedApi.finishSelectionParticipation).not.toHaveBeenCalled();
+  });
+
   it('offers a retry when finishing fails', async () => {
     mockedApi.finishSelectionParticipation
       .mockRejectedValueOnce(new Error('network down'))
