@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cancelSelectionRound,
   clearSelectionDecision,
+  finishSelectionParticipation,
   getMyDecisionsForRound,
   getSelectionRound,
   recordSelectionDecision,
@@ -23,6 +24,7 @@ import {
   type SelectionRound,
 } from './api';
 import { fetchDeckCardDetails, type DeckCardDetail } from './deckCards';
+import { groupRole, groupRoundPath } from './groupRound';
 import { useReducedMotion } from '../accessibility/useReducedMotion';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
@@ -139,6 +141,9 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isSelectingMore, setIsSelectingMore] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  // Group mode only: finishing hands the participant to the waiting
+  // screen. 'failed' leaves the terminal state with a retry.
+  const [finishState, setFinishState] = useState<'idle' | 'finishing' | 'failed'>('idle');
   const passedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-recipe in-flight recordSelectionDecision promise — handleUndo
   // awaits the entry for the card it's reversing before issuing
@@ -151,6 +156,32 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   const pendingWritesRef = useRef<Map<string, Promise<void>>>(new Map());
 
   const translateX = useSharedValue(0);
+
+  // Group mode: marks the ballot finished and hands over to the waiting
+  // screen. Every in-flight vote has to land first, or results could be
+  // read without it. Started from the last decision, or from a resume
+  // that loads an already-complete deck — never from an effect.
+  const finishingRef = useRef(false);
+  const finishAndWait = useCallback(async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    await Promise.allSettled([...pendingWritesRef.current.values()]);
+    setFinishState('finishing');
+    try {
+      await finishSelectionParticipation(roundId);
+      router.replace(`/smart-selection/${roundId}/waiting`);
+    } catch (error) {
+      // The deadline or the creator closed the round first: the results
+      // are what's left to see.
+      if (error instanceof Error && error.message.includes('not active')) {
+        router.replace(`/smart-selection/${roundId}/results`);
+        return;
+      }
+      finishingRef.current = false;
+      setFinishState('failed');
+      showToast("Couldn't finish — try again");
+    }
+  }, [roundId, router, showToast]);
 
   const load = useCallback(async () => {
     try {
@@ -242,6 +273,22 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       }));
       const seededYesCount = seededUndoStack.filter((e) => e.decision === 'yes').length;
 
+      // A group round this member can't swipe — it closed, or they were
+      // never invited, or they already finished it — belongs on another
+      // screen. Finished participants may still come back to keep
+      // swiping (the waiting screen offers it), so only a closed round or
+      // a non-participant is redirected here.
+      if (roundData.mode === 'group') {
+        const role = groupRole(roundData, userId);
+        if (roundData.status !== 'active' || role === 'watching') {
+          const path = groupRoundPath(roundData, userId);
+          if (path && path !== `/smart-selection/${roundId}`) {
+            router.replace(path);
+            return;
+          }
+        }
+      }
+
       setRound({ ...roundData, candidates: sortedCandidates });
       setCardDetails(details);
       setHeroUrls(urls);
@@ -249,10 +296,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       setYesCount(seededYesCount);
       setUndoStack(seededUndoStack);
       setLoadError(false);
+      if (roundData.mode === 'group' && sortedCandidates.length > 0) {
+        if (startIndex >= sortedCandidates.length) void finishAndWait();
+      }
     } catch {
       setLoadError(true);
     }
-  }, [roundId, userId]);
+  }, [roundId, userId, router, finishAndWait]);
 
   // Holds the loading state for the whole retry, so a stalled retry doesn't
   // look like a dead button. Clearing loadError alone isn't enough: a reload
@@ -313,11 +363,13 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
   }, [currentCandidate?.recipeId, terminal]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  const isGroup = round?.mode === 'group';
+
   useEffect(() => {
-    if (atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
+    if (!isGroup && atEndOfDeck && yesCount > 0 && pendingWriteCount === 0) {
       router.replace(`/smart-selection/${roundId}/shortlist`);
     }
-  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router]);
+  }, [atEndOfDeck, yesCount, pendingWriteCount, roundId, router, isGroup]);
 
   // Deck exhaustion is a screen-level fact with no API call behind it,
   // so unlike the other selection events this one can't live in api.ts.
@@ -373,7 +425,16 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
     // just a contiguous prefix).
     setPendingWriteCount((c) => c + 1);
     const writePromise = recordSelectionDecision(round.id, recipeId, decision)
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (
+          round.mode === 'group' &&
+          error instanceof Error &&
+          error.message.includes('not active')
+        ) {
+          showToast('The round has closed');
+          router.replace(`/smart-selection/${round.id}/results`);
+          return;
+        }
         setUndoStack((stack) => stack.filter((entry) => entry.recipeId !== recipeId));
         if (decision === 'yes') setYesCount((y) => Math.max(0, y - 1));
         setPosition((p) => (p === decidedAtPosition + 1 ? decidedAtPosition : p));
@@ -382,6 +443,10 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       })
       .finally(() => setPendingWriteCount((c) => c - 1));
     pendingWritesRef.current.set(recipeId, writePromise);
+
+    if (round.mode === 'group' && decidedAtPosition + 1 >= round.candidates.length) {
+      void finishAndWait();
+    }
   }
 
   async function handleUndo() {
@@ -581,7 +646,27 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
       </View>
 
       <View style={styles.content}>
-        {terminal ? (
+        {terminal && isGroup ? (
+          finishState === 'failed' ? (
+            <View style={styles.terminal} testID="swipe-deck-finish-failed">
+              <Text style={styles.terminalTitle}>Couldn&apos;t finish</Text>
+              <Button
+                title="Try again"
+                onPress={() => void finishAndWait()}
+                testID="swipe-deck-finish-retry"
+              />
+              <Button
+                title="Undo last decision"
+                onPress={handleUndo}
+                disabled={undoStack.length === 0}
+                variant="secondary"
+                testID="swipe-deck-terminal-undo"
+              />
+            </View>
+          ) : (
+            <LoadingState label="Finishing up…" testID="swipe-deck-finishing" />
+          )
+        ) : terminal ? (
           yesCount > 0 ? (
             // Mid-flight to the shortlist (the effect above fires on the
             // same render this becomes true) — a brief loading state
@@ -692,13 +777,24 @@ export function SwipeDeckScreen({ roundId }: SwipeDeckScreenProps) {
                 <Text style={styles.reviewBarText}>
                   {`You've got ${yesCount} — finish now or keep looking.`}
                 </Text>
-                <Pressable
-                  onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
-                  accessibilityRole="button"
-                  testID="swipe-deck-review-action"
-                >
-                  <Text style={styles.reviewBarAction}>Review {yesCount} picks</Text>
-                </Pressable>
+                {isGroup ? (
+                  <Pressable
+                    onPress={() => void finishAndWait()}
+                    disabled={finishState === 'finishing'}
+                    accessibilityRole="button"
+                    testID="swipe-deck-finish-action"
+                  >
+                    <Text style={styles.reviewBarAction}>I&apos;m done</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push(`/smart-selection/${roundId}/shortlist`)}
+                    accessibilityRole="button"
+                    testID="swipe-deck-review-action"
+                  >
+                    <Text style={styles.reviewBarAction}>Review {yesCount} picks</Text>
+                  </Pressable>
+                )}
               </View>
             )}
 

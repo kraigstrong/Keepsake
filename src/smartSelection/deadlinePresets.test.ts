@@ -1,4 +1,4 @@
-import { DEFAULT_DEADLINE_KEY, deadlinePresets } from './deadlinePresets';
+import { DEFAULT_DEADLINE_KEY, deadlinePresets, describeDeadline } from './deadlinePresets';
 
 // Months are zero-based: 9 is October. 2026-10-06 is a Tuesday.
 function local(day: number, hour: number, minute = 0) {
@@ -43,4 +43,26 @@ it('always includes the default, and every preset is in the future', () => {
       expect(preset.closesAt.getTime()).toBeGreaterThan(now.getTime());
     }
   }
+});
+
+describe('describeDeadline', () => {
+  const now = local(6, 9);
+
+  it('names today, tonight, tomorrow and the rest of the week', () => {
+    expect(describeDeadline(local(6, 15), now)).toBe('today at 3 PM');
+    expect(describeDeadline(local(6, 20), now)).toBe('tonight at 8 PM');
+    expect(describeDeadline(local(7, 20), now)).toBe('tomorrow at 8 PM');
+    expect(describeDeadline(local(8, 20, 30), now)).toBe('Thu at 8:30 PM');
+    expect(describeDeadline(local(12, 9), now)).toBe('Mon at 9 AM');
+  });
+
+  it('falls back to a date a week or more out, or in the past', () => {
+    expect(describeDeadline(local(13, 20), now)).toBe('Oct 13 at 8 PM');
+    expect(describeDeadline(local(5, 20), now)).toBe('Oct 5 at 8 PM');
+  });
+
+  it('handles midnight and noon', () => {
+    expect(describeDeadline(local(7, 0), now)).toBe('tomorrow at 12 AM');
+    expect(describeDeadline(local(7, 12), now)).toBe('tomorrow at 12 PM');
+  });
 });

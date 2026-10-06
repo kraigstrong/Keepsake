@@ -793,3 +793,134 @@ it('waits for the in-flight decision write to settle before clearing it on Undo'
     expect(mockedApi.clearSelectionDecision).toHaveBeenCalledWith('round-1', 'r1'),
   );
 });
+
+describe('group mode (#241)', () => {
+  const participants = [
+    { userId: 'user-1', completedAt: null, displayName: 'Alex', decidedCount: 0, yesCount: 0 },
+    { userId: 'user-2', completedAt: null, displayName: 'Blair', decidedCount: 0, yesCount: 0 },
+  ];
+
+  function groupRound(overrides: Partial<SelectionRound> = {}) {
+    return testRound({
+      mode: 'group',
+      closesAt: '2026-10-07T03:00:00.000Z',
+      participants,
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    mockedApi.getSelectionRound.mockResolvedValue(groupRound());
+    mockedApi.finishSelectionParticipation.mockResolvedValue(undefined);
+  });
+
+  async function decideAll(decisions: ('swipe-deck-yes' | 'swipe-deck-no')[]) {
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+    for (const testID of decisions) {
+      await fireEvent.press(screen.getByTestId(testID));
+    }
+  }
+
+  it('finishes the ballot after the last vote lands, then waits for everyone', async () => {
+    let resolveLast: () => void = () => {};
+    mockedApi.recordSelectionDecision
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(new Promise<void>((resolve) => (resolveLast = resolve)));
+
+    renderDeck();
+    await decideAll(['swipe-deck-yes', 'swipe-deck-no', 'swipe-deck-no']);
+
+    expect(mockedApi.finishSelectionParticipation).not.toHaveBeenCalled();
+    await act(async () => resolveLast());
+
+    await waitFor(() =>
+      expect(mockedApi.finishSelectionParticipation).toHaveBeenCalledWith('round-1'),
+    );
+    expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting');
+    expect(replace).not.toHaveBeenCalledWith('/smart-selection/round-1/shortlist');
+  });
+
+  it('finishes even with no yeses — passing on everything is a ballot too', async () => {
+    renderDeck();
+    await decideAll(['swipe-deck-no', 'swipe-deck-no', 'swipe-deck-no']);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+    expect(screen.queryByTestId('swipe-deck-start-over')).toBeNull();
+  });
+
+  it("offers I'm done once the target is met, without going through the rest", async () => {
+    renderDeck();
+    await decideAll(['swipe-deck-yes', 'swipe-deck-yes']);
+
+    expect(screen.queryByTestId('swipe-deck-review-action')).toBeNull();
+    await fireEvent.press(screen.getByTestId('swipe-deck-finish-action'));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+    expect(mockedApi.recordSelectionDecision).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers a retry when finishing fails', async () => {
+    mockedApi.finishSelectionParticipation
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(undefined);
+    renderDeck();
+    await decideAll(['swipe-deck-no', 'swipe-deck-no', 'swipe-deck-no']);
+
+    await waitFor(() => expect(screen.getByTestId('swipe-deck-finish-failed')).toBeTruthy());
+    expect(replace).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId('swipe-deck-finish-retry'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+  });
+
+  it('goes to the results if the round closed before the ballot could finish', async () => {
+    mockedApi.finishSelectionParticipation.mockRejectedValue(
+      new Error('selection round is not active'),
+    );
+    renderDeck();
+    await decideAll(['swipe-deck-no', 'swipe-deck-no', 'swipe-deck-no']);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/results'));
+  });
+
+  it('goes to the results when a vote lands on a round that has closed', async () => {
+    mockedApi.recordSelectionDecision.mockRejectedValueOnce(
+      new Error('selection round is not active'),
+    );
+    renderDeck();
+    await decideAll(['swipe-deck-yes']);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/results'));
+    expect(screen.getByText('The round has closed')).toBeTruthy();
+  });
+
+  it('finishes straight away when resuming a deck that is already complete', async () => {
+    mockedApi.getMyDecisionsForRound.mockResolvedValue(
+      new Map(
+        ['r1', 'r2', 'r3'].map((id, i) => [
+          id,
+          { decision: 'no' as const, decidedAt: `2026-10-06T10:0${i}:00.000Z` },
+        ]),
+      ),
+    );
+    renderDeck();
+
+    await waitFor(() => expect(mockedApi.finishSelectionParticipation).toHaveBeenCalled());
+    expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting');
+  });
+
+  it('sends a closed round to its results, and a member outside it to the waiting screen', async () => {
+    mockedApi.getSelectionRound.mockResolvedValue(groupRound({ status: 'ready_for_review' }));
+    renderDeck();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/results'));
+
+    replace.mockClear();
+    mockLastFocusEffect = null;
+    mockedApi.getSelectionRound.mockResolvedValue(groupRound());
+    mockedUseSession.mockReturnValue({ session: { user: { id: 'user-9' } } });
+    renderDeck();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/smart-selection/round-1/waiting'));
+    expect(mockedApi.recordSelectionDecision).not.toHaveBeenCalled();
+  });
+});

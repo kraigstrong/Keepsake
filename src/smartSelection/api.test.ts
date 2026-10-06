@@ -8,6 +8,7 @@ import {
   applySelectionRound,
   cancelSelectionRound,
   closeSelectionRound,
+  finishSelectionParticipation,
   getActiveSelectionRound,
   getSelectionRound,
   startSelectionRound,
@@ -293,6 +294,29 @@ describe('closeSelectionRound', () => {
 
     await expect(closeSelectionRound('round-1')).rejects.toThrow(
       'only the round creator can close it',
+    );
+  });
+});
+
+describe('finishSelectionParticipation', () => {
+  it('calls finish_selection_participation with the round id', async () => {
+    mockedRpc.mockResolvedValue({ data: { round_id: 'round-1' }, error: null });
+
+    await finishSelectionParticipation('round-1');
+
+    expect(mockedRpc).toHaveBeenCalledWith('finish_selection_participation', {
+      round_id: 'round-1',
+    });
+  });
+
+  it('throws on an RPC error (e.g. not a participant, or round already closed)', async () => {
+    mockedRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'selection round is not active' },
+    });
+
+    await expect(finishSelectionParticipation('round-1')).rejects.toThrow(
+      'selection round is not active',
     );
   });
 });

@@ -291,10 +291,22 @@ export async function clearSelectionDecision(roundId: string, recipeId: string):
   if (error) throw new Error(error.message);
 }
 
-/** Creator-only; requires 'active' (ADR-0027 decision 3). Backs 1k's Add-to-This-Week CTA. */
+/** Creator-only; requires 'active' (ADR-0027 decision 3). Backs 1k's Add-to-This-Week CTA and 1h's close. */
 export async function closeSelectionRound(roundId: string): Promise<void> {
   const { error } = await supabase.rpc('close_selection_round', { round_id: roundId });
   if (error) throw new Error(error.message);
+  trackEvent('selection_round_closed');
+}
+
+/**
+ * Marks the caller's ballot finished — the only ballots a group round's
+ * results count. Idempotent server-side, and it doesn't lock the ballot:
+ * the participant can still keep swiping while the round is active.
+ */
+export async function finishSelectionParticipation(roundId: string): Promise<void> {
+  const { error } = await supabase.rpc('finish_selection_participation', { round_id: roundId });
+  if (error) throw new Error(error.message);
+  trackEvent('selection_participant_completed');
 }
 
 export interface ApplySelectionRoundSelection {
