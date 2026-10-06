@@ -140,17 +140,22 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
       const round = await getSelectionRound(roundId);
       if (round.mode === 'group') {
         // A group round is closed before anyone gets here, and only its
-        // creator could close it anyway. Two members can review at once;
-        // the second is told rather than shown a misleading "Added".
+        // creator could close it anyway. Another member may have added or
+        // set it aside meanwhile; say so rather than fail on every retry.
         if (round.status === 'applied') {
           showToast('Already added to This Week');
+          router.dismissTo('/');
+          return;
+        }
+        if (round.status === 'cancelled') {
+          showToast('That round was set aside');
           router.dismissTo('/');
           return;
         }
       } else if (round.status === 'active') {
         await closeSelectionRound(roundId);
       }
-      await applySelectionRound(
+      const applied = await applySelectionRound(
         roundId,
         weeklyPlanId,
         validRecipeIds.map((id) => ({
@@ -158,6 +163,13 @@ export function ReviewScreen({ roundId, recipeIds }: ReviewScreenProps) {
           multiplier: multiplierById[id] ?? DEFAULT_MULTIPLIER,
         })),
       );
+      // Apply is idempotent, so two members tapping Add together both
+      // succeed; only the one whose apply landed actually added anything.
+      if (round.mode === 'group' && applied && applied.appliedBy !== userId) {
+        showToast('Already added to This Week');
+        router.dismissTo('/');
+        return;
+      }
       showToast(
         validRecipeIds.length === 1
           ? 'Added 1 to This Week'

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import * as api from './api';
@@ -6,15 +6,24 @@ import type { SelectionRound, SelectionRoundResults } from './api';
 import * as deckCards from './deckCards';
 import { ResultsScreen } from './ResultsScreen';
 import { ToastProvider } from '../components/Toast';
+import { trackEvent } from '../observability';
 import { useSession } from '../session/SessionProvider';
 
 jest.mock('./api');
 jest.mock('./deckCards');
+jest.mock('../observability', () => ({ trackEvent: jest.fn() }));
+// Keeps the latest focus effect so a test can leave and come back.
+let mockFocusEffect: (() => (() => void) | void) | null = null;
+let mockFocusCleanup: (() => void) | void = undefined;
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
-  useFocusEffect: jest.fn((effect: () => void) => {
+  useFocusEffect: jest.fn((effect: () => (() => void) | void) => {
     const { useEffect } = jest.requireActual('react');
-    useEffect(() => effect(), [effect]);
+    mockFocusEffect = effect;
+    useEffect(() => {
+      mockFocusCleanup = effect();
+      return mockFocusCleanup;
+    }, [effect]);
   }),
 }));
 jest.mock('../session/SessionProvider', () => ({ useSession: jest.fn() }));
@@ -128,6 +137,11 @@ function renderAs(userId: string) {
   );
 }
 
+afterEach(() => {
+  if (typeof mockFocusCleanup === 'function') mockFocusCleanup();
+  mockFocusCleanup = undefined;
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
   (useRouter as jest.Mock).mockReturnValue({ replace, push, dismissTo });
@@ -215,10 +229,66 @@ it('drops the list and the continue button when nobody picked anything', async (
   expect(dismissTo).toHaveBeenCalledWith('/');
 });
 
-it('only offers planning by hand when there is at most one clear match', async () => {
+it('always lets the household set an unwanted round aside', async () => {
   await renderAs('alex');
   await waitFor(() => expect(screen.getByText('Your matches')).toBeTruthy());
-  expect(screen.queryByTestId('results-plan-by-hand')).toBeNull();
+  await fireEvent.press(screen.getByTestId('results-plan-by-hand'));
+  await waitFor(() => expect(mockedApi.cancelSelectionRound).toHaveBeenCalledWith('round-1'));
+  expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it('with only one clear match, keeps single picks behind a button', async () => {
+  mockedApi.getSelectionRoundResults.mockResolvedValue(
+    results({ candidates: [results().candidates[0]!, results().candidates[1]!] }),
+  );
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByText('Only one clear match')).toBeTruthy());
+
+  expect(screen.queryByText('Lentil Soup')).toBeNull();
+  await fireEvent.press(screen.getByTestId('results-show-mixed'));
+  expect(screen.getByText('Lentil Soup')).toBeTruthy();
+});
+
+it('keeps changed ticks and reports the results once when coming back from review', async () => {
+  await renderAs('blair');
+  await waitFor(() => expect(screen.getByTestId('results-row-soup')).toBeTruthy());
+  await fireEvent.press(screen.getByTestId('results-row-soup'));
+
+  await act(async () => {
+    if (typeof mockFocusCleanup === 'function') mockFocusCleanup();
+    mockFocusCleanup = mockFocusEffect!();
+  });
+  await waitFor(() => expect(mockedApi.getSelectionRound).toHaveBeenCalledTimes(2));
+
+  expect(screen.getByTestId('results-row-soup')).toHaveProp('accessibilityState', {
+    checked: true,
+    disabled: false,
+  });
+  expect(
+    (trackEvent as jest.Mock).mock.calls.filter(([name]) => name === 'selection_results_viewed'),
+  ).toEqual([['selection_results_viewed', { unanimous: 2, majority: 0, mixed: 1 }]]);
+});
+
+it('reloads when setting the round aside fails, e.g. someone just added it', async () => {
+  mockedApi.cancelSelectionRound.mockRejectedValue(new Error('selection round is not cancellable'));
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByTestId('results-plan-by-hand')).toBeTruthy());
+
+  mockedApi.getSelectionRound.mockResolvedValue(round({ status: 'applied', appliedBy: 'blair' }));
+  await fireEvent.press(screen.getByTestId('results-plan-by-hand'));
+
+  await waitFor(() => expect(screen.getByText('Added to This Week')).toBeTruthy());
+  expect(screen.getByText("Couldn't set the round aside — try again")).toBeTruthy();
+});
+
+it('says so when nobody finished, rather than that nobody picked anything', async () => {
+  mockedApi.getSelectionRoundResults.mockResolvedValue(
+    results({ completedParticipantCount: 0, candidates: [] }),
+  );
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByTestId('results-empty')).toBeTruthy());
+  expect(screen.getByText('Nobody finished, so no picks counted.')).toBeTruthy();
+  expect(trackEvent).toHaveBeenCalledWith('selection_no_match');
 });
 
 it('shows an applied round read-only, saying who added it', async () => {
@@ -227,7 +297,9 @@ it('shows an applied round read-only, saying who added it', async () => {
   await renderAs('blair');
 
   await waitFor(() => expect(screen.getByText('Added to This Week')).toBeTruthy());
-  expect(screen.getByTestId('results-intro')).toHaveTextContent('Alex added these to This Week.');
+  expect(screen.getByTestId('results-intro')).toHaveTextContent(
+    'Alex added picks from this round to This Week.',
+  );
   expect(screen.queryByTestId('results-continue')).toBeNull();
   expect(screen.getByTestId('results-row-tacos')).toBeDisabled();
 });

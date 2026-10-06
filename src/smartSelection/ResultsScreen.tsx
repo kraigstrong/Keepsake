@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -59,15 +59,23 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [showMixed, setShowMixed] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // A load can land after the user has left; `replace` would then act on
+  // whatever screen is on top instead.
+  const focusedRef = useRef(false);
+  // Ticks start from the defaults once; coming back from review keeps any
+  // the user changed. Results are reported once per visit to a round.
+  const initializedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const round = await getSelectionRound(roundId);
+      if (!focusedRef.current) return;
       if (round.status === 'active') {
         router.replace(`/smart-selection/${roundId}/waiting`);
         return;
       }
       if (round.status === 'cancelled' || round.status === 'pending_candidates') {
+        if (round.status === 'cancelled') showToast('That round was set aside');
         router.dismissTo('/');
         return;
       }
@@ -78,6 +86,9 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
       const sections = resultSections(results, titles, userId);
 
       setLoaded({ round, sections, completedCount: results.completedParticipantCount });
+      setLoadError(false);
+      if (initializedRef.current) return;
+      initializedRef.current = true;
       setChecked(
         new Set(
           [...sections.unanimous, ...sections.majority, ...sections.mixed]
@@ -85,23 +96,26 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
             .map((row) => row.recipeId),
         ),
       );
-      setLoadError(false);
-
-      const strong = sections.unanimous.length + sections.majority.length;
       trackEvent('selection_results_viewed', {
         unanimous: sections.unanimous.length,
         majority: sections.majority.length,
         mixed: sections.mixed.length,
       });
-      if (strong === 0) trackEvent('selection_no_match');
+      if (sections.unanimous.length + sections.majority.length === 0) {
+        trackEvent('selection_no_match');
+      }
     } catch {
       setLoadError(true);
     }
-  }, [roundId, router, userId]);
+  }, [roundId, router, showToast, userId]);
 
   useFocusEffect(
     useCallback(() => {
+      focusedRef.current = true;
       void load();
+      return () => {
+        focusedRef.current = false;
+      };
     }, [load]),
   );
 
@@ -120,8 +134,10 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
       await cancelSelectionRound(roundId);
       router.dismissTo('/');
     } catch {
+      // Most often someone else just added the picks; reloading shows that.
       showToast("Couldn't set the round aside — try again");
       setIsCancelling(false);
+      void load();
     }
   }
 
@@ -150,13 +166,16 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
   const applied = round.status === 'applied';
   const strong = sections.unanimous.length + sections.majority.length;
   const anything = strong + sections.mixed.length > 0;
-  const mixedVisible = strong > 0 || showMixed;
+  // With one clear match or none, single picks wait behind a button (1l).
+  const mixedVisible = strong > 1 || showMixed;
   // Keep deck order across sections so review lists them as people saw them.
   const orderedChecked = round.candidates
     .map((candidate) => candidate.recipeId)
     .filter((recipeId) => checked.has(recipeId));
-  const appliedBy = round.participants.find((p) => p.userId === round.appliedBy);
-  const appliedByName = round.appliedBy === userId ? 'You' : (appliedBy?.displayName ?? 'Someone');
+  const appliedByName =
+    round.appliedBy === userId
+      ? 'You'
+      : round.participants.find((p) => p.userId === round.appliedBy)?.displayName;
 
   function renderSection(key: keyof ResultSections, rows: ResultRow[]) {
     if (rows.length === 0) return null;
@@ -205,7 +224,9 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
         </Text>
         <Text style={styles.subtitle} testID="results-intro">
           {applied
-            ? `${appliedByName} added these to This Week.`
+            ? appliedByName
+              ? `${appliedByName} added picks from this round to This Week.`
+              : 'Picks from this round were added to This Week.'
             : resultsIntro(completedCount, round.participants.length)}
         </Text>
       </View>
@@ -219,7 +240,9 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
           </>
         ) : (
           <Text style={styles.empty} testID="results-empty">
-            Nobody picked anything this round.
+            {completedCount === 0
+              ? 'Nobody finished, so no picks counted.'
+              : 'Nobody picked anything this round.'}
           </Text>
         )}
       </ScrollView>
@@ -247,13 +270,13 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
             )}
             {!mixedVisible && sections.mixed.length > 0 && (
               <Button
-                title="See what got a single yes"
+                title="See the other picks"
                 variant="secondary"
                 onPress={() => setShowMixed(true)}
                 testID="results-show-mixed"
               />
             )}
-            {strong <= 1 && (
+            {
               <Button
                 title="Plan it by hand instead"
                 variant="secondary"
@@ -261,7 +284,7 @@ export function ResultsScreen({ roundId }: ResultsScreenProps) {
                 disabled={isCancelling}
                 testID="results-plan-by-hand"
               />
-            )}
+            }
           </>
         )}
       </View>

@@ -32,7 +32,7 @@ const mockedHouseholdApi = householdApi as jest.Mocked<typeof householdApi>;
 const mockedUseRouter = useRouter as jest.Mock;
 const push = jest.fn();
 
-const groupFlagDefault = FLAGS.groupMealSelection;
+const groupFlagDefault = FLAGS.groupMealSelection ?? false;
 
 afterEach(() => {
   FLAGS.groupMealSelection = groupFlagDefault;

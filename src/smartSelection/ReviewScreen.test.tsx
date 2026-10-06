@@ -99,7 +99,7 @@ beforeEach(() => {
     ]),
   );
   mockedApi.closeSelectionRound.mockResolvedValue(undefined);
-  mockedApi.applySelectionRound.mockResolvedValue(undefined);
+  mockedApi.applySelectionRound.mockResolvedValue({ appliedBy: 'user-1' });
 });
 
 it('shows an error state when loading the plan/details fails', async () => {
@@ -290,10 +290,13 @@ describe('group round (#242)', () => {
     await waitFor(() => expect(screen.getByText('Add 1 to This Week')).toBeTruthy());
   });
 
-  it('applies without trying to close the round', async () => {
+  it('applies without trying to close the round, even one that reads active', async () => {
     renderScreen(['r1', 'r2']);
     await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
 
+    // The solo path closes an active round before applying; a group one
+    // must not, since only its creator could and it's closed already.
+    mockedApi.getSelectionRound.mockResolvedValue(testRound({ mode: 'group', status: 'active' }));
     await fireEvent.press(screen.getByTestId('review-submit'));
 
     await waitFor(() =>
@@ -304,6 +307,31 @@ describe('group round (#242)', () => {
     );
     expect(mockedApi.closeSelectionRound).not.toHaveBeenCalled();
     expect(dismissTo).toHaveBeenCalledWith('/');
+  });
+
+  it('tells whoever lost a simultaneous add that it was already added', async () => {
+    mockedApi.applySelectionRound.mockResolvedValue({ appliedBy: 'someone-else' });
+    renderScreen(['r1']);
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('review-submit'));
+
+    await waitFor(() => expect(screen.getByText('Already added to This Week')).toBeTruthy());
+    expect(screen.queryByText('Added 1 to This Week')).toBeNull();
+    expect(dismissTo).toHaveBeenCalledWith('/');
+  });
+
+  it('leaves quietly if the round was set aside meanwhile', async () => {
+    renderScreen(['r1']);
+    await waitFor(() => expect(screen.getByText('Herb Roast Chicken')).toBeTruthy());
+
+    mockedApi.getSelectionRound.mockResolvedValue(
+      testRound({ mode: 'group', status: 'cancelled' }),
+    );
+    await fireEvent.press(screen.getByTestId('review-submit'));
+
+    await waitFor(() => expect(screen.getByText('That round was set aside')).toBeTruthy());
+    expect(mockedApi.applySelectionRound).not.toHaveBeenCalled();
   });
 
   it('tells the second person to arrive that it was already added', async () => {

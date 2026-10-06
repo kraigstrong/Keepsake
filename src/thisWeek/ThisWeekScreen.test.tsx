@@ -506,7 +506,7 @@ describe('Help me choose entry point (FLAGS.smartMealSelection)', () => {
 });
 
 describe('group Help Me Choose (#241)', () => {
-  const groupFlagDefault = FLAGS.groupMealSelection;
+  const groupFlagDefault = FLAGS.groupMealSelection ?? false;
 
   const participants = [
     { userId: 'user-2', completedAt: null, displayName: 'Blair', decidedCount: 0, yesCount: 0 },

@@ -320,12 +320,17 @@ export interface ApplySelectionRoundSelection {
  * plan; archived/deleted/already-in-plan recipes are silently dropped,
  * a recipe_id that was never a candidate of this round is the one error.
  */
+export interface AppliedSelectionRound {
+  /** Whoever's apply actually landed — an idempotent replay returns the first one's. */
+  appliedBy: string | null;
+}
+
 export async function applySelectionRound(
   roundId: string,
   weeklyPlanId: string,
   selections: ApplySelectionRoundSelection[],
-): Promise<void> {
-  const { error } = await supabase.rpc('apply_selection_round', {
+): Promise<AppliedSelectionRound | null> {
+  const { data, error } = await supabase.rpc('apply_selection_round', {
     round_id: roundId,
     weekly_plan_id: weeklyPlanId,
     selections: selections.map((s) => ({ recipe_id: s.recipeId, multiplier: s.multiplier })),
@@ -347,6 +352,8 @@ export async function applySelectionRound(
   // Reporting the real number needs the RPC to return it — see
   // docs/roadmap.md's Not-yet-triaged (Codex, PR #115).
   trackEvent('selection_round_applied', { requestedCount: selections.length });
+  const row = data as { applied_by: string | null } | null;
+  return row ? { appliedBy: row.applied_by } : null;
 }
 
 export interface SelectionDecisionRecord {
