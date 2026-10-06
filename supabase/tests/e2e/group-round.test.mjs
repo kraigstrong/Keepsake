@@ -7,10 +7,17 @@
 // also serves the Edge Functions); run with `npm run test:e2e`.
 
 import assert from 'node:assert/strict';
-import { before, test } from 'node:test';
+import { after, before, test } from 'node:test';
 
 import { currentWeekKey } from '../../../src/thisWeek/weekKey.ts';
-import { localSupabaseConfig, rpc, rpcError, seedHousehold, startRound } from './fixture.mjs';
+import {
+  localSupabaseConfig,
+  removeSeeded,
+  rpc,
+  rpcError,
+  seedHousehold,
+  startRound,
+} from './fixture.mjs';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -18,6 +25,7 @@ let config;
 before(() => {
   config = localSupabaseConfig();
 });
+after(() => removeSeeded(config));
 
 async function decisionAuthors(client, roundId) {
   const { data, error } = await client

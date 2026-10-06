@@ -35,6 +35,11 @@ export function localSupabaseConfig() {
   return { url: vars.API_URL, anonKey: vars.ANON_KEY, serviceRoleKey: vars.SERVICE_ROLE_KEY };
 }
 
+// Everything seedHousehold creates, so removeSeeded can take it away
+// again: pgTAP's whole-table assertions assume a database holding only
+// their own fixtures.
+const seeded = { householdIds: [], userIds: [] };
+
 function statelessClient(url, key) {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
@@ -94,6 +99,7 @@ export async function seedHousehold(config, { memberNames, recipeCount = 16 }) {
       email_confirm: true,
     });
     if (error) throw new Error(`createUser ${name}: ${error.message}`);
+    seeded.userIds.push(data.user.id);
 
     const client = statelessClient(config.url, config.anonKey);
     const { error: signInError } = await client.auth.signInWithPassword({ email, password });
@@ -110,6 +116,7 @@ export async function seedHousehold(config, { memberNames, recipeCount = 16 }) {
   const [owner, ...joiners] = members;
   const household = await rpc(owner.client, 'create_household');
   const householdId = Array.isArray(household) ? household[0].id : household.id;
+  seeded.householdIds.push(householdId);
 
   for (const joiner of joiners) {
     // create_invitation allows one per household per 30s. Ageing the
@@ -156,6 +163,28 @@ export async function seedHousehold(config, { memberNames, recipeCount = 16 }) {
     recipeIds,
     members: Object.fromEntries(members.map((m) => [m.name, m])),
   };
+}
+
+/** Deletes every household (and so, by cascade, its data) and account seeded in this process. */
+export async function removeSeeded(config) {
+  const admin = statelessClient(config.url, config.serviceRoleKey);
+  if (seeded.householdIds.length > 0) {
+    // Recipes first, as delete_own_account does: cascading into them from
+    // the household would tombstone them against a half-deleted household.
+    const { error: recipesError } = await admin
+      .from('recipes')
+      .delete()
+      .in('household_id', seeded.householdIds);
+    if (recipesError) throw new Error(`remove recipes: ${recipesError.message}`);
+    const { error } = await admin.from('households').delete().in('id', seeded.householdIds);
+    if (error) throw new Error(`remove households: ${error.message}`);
+  }
+  for (const userId of seeded.userIds) {
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (error) throw new Error(`remove user: ${error.message}`);
+  }
+  seeded.householdIds.length = 0;
+  seeded.userIds.length = 0;
 }
 
 /** Starts a round through the real select-candidates Edge Function, as the app does. */
