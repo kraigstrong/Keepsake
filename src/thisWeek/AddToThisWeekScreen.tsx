@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchRecipes, type RecipeSummary } from '../recipes/api';
-import { Chip } from '../components/Chip';
+import { ToggleRow } from '../components/ToggleRow';
 import { useMealsOnlyPreference } from '../recipes/useMealsOnlyPreference';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
@@ -155,13 +155,13 @@ export function AddToThisWeekScreen({ planId }: AddToThisWeekScreenProps) {
               />
               <View style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }}>
                 {mealsPreferenceReady && (
-                  <Chip
+                  <ToggleRow
                     label="Meals only"
-                    selected={mealsOnly}
-                    onPress={() => {
-                      setMealsOnly(!mealsOnly);
+                    value={mealsOnly}
+                    onValueChange={(value) => {
+                      setMealsOnly(value);
                       // A hidden selection must not be submitted accidentally.
-                      if (!mealsOnly)
+                      if (value)
                         setSelectedIds((ids) =>
                           ids.filter((id) => recipes.some((r) => r.id === id && r.isMeal)),
                         );

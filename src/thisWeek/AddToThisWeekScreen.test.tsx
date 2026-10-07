@@ -187,12 +187,12 @@ it('Meals only composes with search and removes hidden non-meal selections', asy
   await renderScreen();
   await waitFor(() => expect(screen.getByTestId('add-to-this-week-meals-only')).toBeTruthy());
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-cake'));
-  await fireEvent.press(screen.getByTestId('add-to-this-week-meals-only'));
+  await fireEvent(screen.getByTestId('add-to-this-week-meals-only'), 'valueChange', true);
   expect(screen.queryByTestId('add-to-this-week-recipe-cake')).toBeNull();
   expect(screen.getByTestId('add-to-this-week-next')).toBeDisabled();
   await fireEvent.changeText(screen.getByTestId('add-to-this-week-search'), 'Chicken');
   expect(screen.getByTestId('add-to-this-week-recipe-meal')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('add-to-this-week-meals-only'));
+  await fireEvent(screen.getByTestId('add-to-this-week-meals-only'), 'valueChange', false);
   await fireEvent.press(screen.getByTestId('add-to-this-week-recipe-cake'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-next'));
   await fireEvent.press(screen.getByTestId('add-to-this-week-submit'));

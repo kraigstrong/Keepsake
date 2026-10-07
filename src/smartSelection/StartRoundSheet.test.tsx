@@ -105,9 +105,7 @@ it('uses the remembered planning preference when starting a round', async () => 
   mockedApi.startSelectionRound.mockResolvedValue({ roundId: 'meals-round', candidateCount: 3 });
   await renderSheet();
   await waitFor(() =>
-    expect(screen.getByTestId('start-round-meals-only')).toHaveProp('accessibilityState', {
-      selected: true,
-    }),
+    expect(screen.getByTestId('start-round-meals-only')).toHaveProp('value', true),
   );
   await fireEvent.press(screen.getByTestId('start-round-solo'));
   expect(mockedApi.startSelectionRound).toHaveBeenCalledWith({

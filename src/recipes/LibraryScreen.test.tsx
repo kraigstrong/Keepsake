@@ -584,9 +584,7 @@ it('Meals only hides non-meals, counts the filter, applies during search, and ca
     }),
   );
   await fireEvent.press(screen.getByTestId('library-filter-button'));
-  expect(screen.getByTestId('library-meals-only')).toHaveProp('accessibilityState', {
-    selected: true,
-  });
+  expect(screen.getByTestId('library-meals-only')).toHaveProp('value', true);
   await fireEvent.press(screen.getByTestId('library-filter-clear'));
   await fireEvent.changeText(screen.getByTestId('library-search-input'), '');
   await waitFor(() => expect(screen.getByText('Chicken cake')).toBeTruthy());
@@ -616,7 +614,7 @@ it('offers Turkey as a protein filter and combines it with Meals only', async ()
       .props.data.map((r: LibraryRecipe) => r.id)
       .sort(),
   ).toEqual(['other', 'turkey']);
-  await fireEvent.press(screen.getByTestId('library-meals-only'));
+  await fireEvent(screen.getByTestId('library-meals-only'), 'valueChange', true);
   expect(
     screen.getByTestId('library-recipe-list').props.data.map((r: LibraryRecipe) => r.id),
   ).toEqual(['turkey']);
