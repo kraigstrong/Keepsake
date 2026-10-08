@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { startSelectionRound, type StartSelectionRoundRequest } from './api';
 import { DEFAULT_DEADLINE_KEY, deadlinePresets, type DeadlinePreset } from './deadlinePresets';
 import { Chip } from '../components/Chip';
+import { ToggleRow } from '../components/ToggleRow';
 import { CheckIcon } from '../components/icons/CheckIcon';
 import { useMealsOnlyPreference } from '../recipes/useMealsOnlyPreference';
 import { Button } from '../components/Button';
@@ -278,12 +279,14 @@ export function StartRoundSheet({ visible, onDismiss }: StartRoundSheetProps) {
       </View>
 
       {ready && (
-        <Chip
-          label="Meals only"
-          selected={mealsOnly}
-          onPress={() => setMealsOnly(!mealsOnly)}
-          testID="start-round-meals-only"
-        />
+        <View style={styles.section}>
+          <ToggleRow
+            label="Meals only"
+            value={mealsOnly}
+            onValueChange={setMealsOnly}
+            testID="start-round-meals-only"
+          />
+        </View>
       )}
       <Button
         title="Pick on my own"

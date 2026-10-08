@@ -87,6 +87,15 @@ const mockedUseRouter = useRouter as jest.Mock;
 const mockedUseSession = useSession as jest.Mock;
 const mockedSmartSelectionApi = smartSelectionApi as jest.Mocked<typeof smartSelectionApi>;
 
+// Tomorrow at 8 PM local, not now + 26h: after 10 PM that lands two days
+// out and reads as a weekday instead of "tomorrow".
+function tomorrowEvening(): string {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 1);
+  deadline.setHours(20, 0, 0, 0);
+  return deadline.toISOString();
+}
+
 function selectionRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
   return {
     id: 'round-1',
@@ -517,7 +526,7 @@ describe('group Help Me Choose (#241)', () => {
       id: 'round-g',
       mode: 'group',
       createdBy: 'user-2',
-      closesAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
+      closesAt: tomorrowEvening(),
       participants,
       candidates: Array.from({ length: 12 }, (_, position) => ({
         recipeId: `r${position}`,

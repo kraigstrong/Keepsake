@@ -16,6 +16,7 @@ import { SORT_MODES, sortRecipes, type SortMode } from './librarySort';
 import { readSortPreference, writeSortPreference } from './sortPreference';
 import { useAddSheet } from '../components/AddSheetContext';
 import { Chip } from '../components/Chip';
+import { ToggleRow } from '../components/ToggleRow';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
@@ -407,10 +408,10 @@ export function LibraryScreen() {
         <ScrollView style={styles.filterSheetScroll}>
           {mealsPreferenceReady && (
             <View style={styles.filterSection}>
-              <Chip
+              <ToggleRow
                 label="Meals only"
-                selected={mealsOnly}
-                onPress={() => setMealsOnly(!mealsOnly)}
+                value={mealsOnly}
+                onValueChange={setMealsOnly}
                 testID="library-meals-only"
               />
             </View>

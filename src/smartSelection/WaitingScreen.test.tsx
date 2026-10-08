@@ -55,6 +55,15 @@ const mockedUseSession = useSession as jest.Mock;
 const replace = jest.fn();
 const dismissTo = jest.fn();
 
+// Tomorrow at 8 PM local, not now + 26h: after 10 PM that lands two days
+// out and reads as a weekday instead of "tomorrow".
+function tomorrowEvening(): string {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 1);
+  deadline.setHours(20, 0, 0, 0);
+  return deadline.toISOString();
+}
+
 function groupRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
   return {
     id: 'round-1',
@@ -64,7 +73,7 @@ function groupRound(overrides: Partial<SelectionRound> = {}): SelectionRound {
     mealsOnly: false,
     status: 'active',
     targetCount: 4,
-    closesAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
+    closesAt: tomorrowEvening(),
     candidateStrategyVersion: 'heuristic-v1',
     revealedAt: null,
     createdAt: '2026-10-06T10:00:00.000Z',
