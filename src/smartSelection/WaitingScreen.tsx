@@ -25,7 +25,6 @@ import {
   nudgeMessage,
   participantName,
   progressLabel,
-  unfinishedOthers,
 } from './groupRound';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
@@ -47,7 +46,8 @@ export interface WaitingScreenProps {
 /**
  * 1h — who's finished and who's still swiping in a group round. The
  * creator can close early; anyone can remind the others through the share
- * sheet (no push yet, #244). A closed round moves everyone to the results.
+ * sheet (no push yet, #244), and Done goes back to This Week. A closed
+ * round moves everyone to the results.
  */
 export function WaitingScreen({ roundId }: WaitingScreenProps) {
   const router = useRouter();
@@ -157,7 +157,6 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
   const isCreator = round.createdBy === userId;
   const deckSize = round.candidates.length;
   const me = round.participants.find((participant) => participant.userId === userId);
-  const unfinished = unfinishedOthers(round, userId);
   // Null once the creator's account is gone (ADR-0028): then nobody can
   // close early, and only the deadline will.
   const creatorName = round.createdBy
@@ -167,6 +166,43 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
   const deadline = round.closesAt ? describeDeadline(new Date(round.closesAt)) : null;
   const note = isCreator ? closeEarlyNote(round, userId) : null;
   const canKeepSwiping = me !== undefined && me.decidedCount < deckSize;
+  // Nothing is left to wait for, so closing becomes the creator's next step.
+  const readyToClose =
+    isCreator && round.participants.every((participant) => participant.completedAt !== null);
+
+  function title(): string {
+    if (role === 'watching') return 'Picking meals';
+    if (readyToClose) return "You're ready to see the matches";
+    if (role === 'finished' && !isCreator) return 'Thanks for picking';
+    return 'Waiting for everyone';
+  }
+
+  function subtitle(): string | null {
+    if (readyToClose) return "Everyone's finished picking.";
+    if (!deadline) return null;
+    if (isCreator) return `Closes ${deadline}, or when you close it.`;
+    // Nobody sees matches before the round closes, and there's no push to
+    // say when it has (#244), so tell a finished member where to look.
+    if (role === 'finished') {
+      return creatorName
+        ? `You'll find the matches on This Week once ${creatorName} closes the round, or ${deadline}.`
+        : `You'll find the matches on This Week once the round closes ${deadline}.`;
+    }
+    return creatorName
+      ? `${creatorName} can close it early. Otherwise it closes ${deadline}.`
+      : `Closes ${deadline}.`;
+  }
+
+  const headerSubtitle = subtitle();
+  const closeButton = (variant: 'primary' | 'secondary') => (
+    <Button
+      title="Close round & see matches"
+      variant={variant}
+      onPress={handleClose}
+      disabled={isClosing}
+      testID="waiting-close"
+    />
+  );
 
   return (
     <View style={styles.screen} testID="waiting-screen">
@@ -178,16 +214,10 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
         >
           <Text style={styles.headerAction}>This Week</Text>
         </Pressable>
-        <Text style={styles.title}>
-          {role === 'watching' ? 'Picking meals' : 'Waiting for everyone'}
-        </Text>
-        {deadline && (
+        <Text style={styles.title}>{title()}</Text>
+        {headerSubtitle && (
           <Text style={styles.subtitle} testID="waiting-deadline">
-            {isCreator
-              ? `Closes ${deadline}, or when you close it.`
-              : creatorName
-                ? `${creatorName} can close it early. Otherwise it closes ${deadline}.`
-                : `Closes ${deadline}.`}
+            {headerSubtitle}
           </Text>
         )}
       </View>
@@ -236,31 +266,27 @@ export function WaitingScreen({ roundId }: WaitingScreenProps) {
         )}
       </ScrollView>
 
+      {/* Leaving is the default for anyone who has finished. Closing early
+          is a deliberate act, so it leads only once nobody is left to wait for. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+        {readyToClose && closeButton('primary')}
+        {role !== 'swiping' && (
+          <Button
+            title="Done"
+            variant={readyToClose ? 'secondary' : 'primary'}
+            onPress={() => router.dismissTo('/')}
+            testID="waiting-dismiss"
+          />
+        )}
         {canKeepSwiping && (
           <Button
             title={role === 'swiping' ? 'Keep going' : 'Keep swiping'}
-            variant={isCreator ? 'secondary' : 'primary'}
+            variant={role === 'swiping' ? 'primary' : 'secondary'}
             onPress={() => router.replace(`/smart-selection/${roundId}`)}
             testID="waiting-keep-swiping"
           />
         )}
-        {isCreator && (
-          <Button
-            title="Close round & see matches"
-            onPress={handleClose}
-            disabled={isClosing}
-            testID="waiting-close"
-          />
-        )}
-        {unfinished.length > 0 && (
-          <Button
-            title="Nudge everyone"
-            variant="secondary"
-            onPress={() => share(nudgeMessage(round))}
-            testID="waiting-nudge"
-          />
-        )}
+        {isCreator && !readyToClose && closeButton('secondary')}
       </View>
     </View>
   );
