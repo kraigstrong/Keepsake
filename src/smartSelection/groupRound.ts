@@ -72,7 +72,7 @@ export function closeEarlyNote(round: SelectionRound, userId: string | null): st
   return `${joinNames(unfinished)} ${verb} finished. Closing now means their picks won't count.`;
 }
 
-/** Share-sheet text for Remind / Nudge everyone; no push exists yet (#244). */
+/** Share-sheet text for Remind; no push exists yet (#244). */
 export function nudgeMessage(round: SelectionRound, now: Date = new Date()): string {
   const deadline = round.closesAt
     ? ` — the round closes ${describeDeadline(new Date(round.closesAt), now)}`

@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
-import { AppState, Share } from 'react-native';
+import { AppState, Share, StyleSheet } from 'react-native';
 
 import * as api from './api';
 import type { SelectionRound } from './api';
 import { WaitingScreen } from './WaitingScreen';
 import { ToastProvider } from '../components/Toast';
 import { useSession } from '../session/SessionProvider';
+import { colors } from '../theme/tokens';
 
 // AppState.addEventListener is already a jest mock in this environment;
 // read the registered listeners off its calls rather than replacing it,
@@ -35,6 +36,18 @@ jest.mock(
   'react-native-safe-area-context',
   () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
 );
+
+// The filled accent button is the action the screen leads with.
+function isPrimary(testID: string): boolean {
+  const style = StyleSheet.flatten(screen.getByTestId(testID).props.style);
+  return style.backgroundColor === colors.accent;
+}
+
+function everyoneFinished(overrides: Partial<SelectionRound> = {}): SelectionRound {
+  const round = groupRound(overrides);
+  round.participants[1] = { ...round.participants[1]!, completedAt: '2026-10-06T12:00:00.000Z' };
+  return round;
+}
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedUseRouter = useRouter as jest.Mock;
@@ -157,7 +170,17 @@ it('reloads instead of stranding the creator when closing fails', async () => {
   expect(screen.getByText("Couldn't close the round")).toBeTruthy();
 });
 
-it('reminds through the share sheet, and offers Nudge everyone only while someone is unfinished', async () => {
+it('leads a finished creator with Done while others are still picking', async () => {
+  await renderAs('alex');
+  await waitFor(() => expect(screen.getByTestId('waiting-dismiss')).toBeTruthy());
+
+  expect(isPrimary('waiting-dismiss')).toBe(true);
+  expect(isPrimary('waiting-close')).toBe(false);
+  await fireEvent.press(screen.getByTestId('waiting-dismiss'));
+  expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it('reminds through the share sheet', async () => {
   await renderAs('alex');
   await waitFor(() => expect(screen.getByTestId('waiting-remind-blair')).toBeTruthy());
   expect(screen.queryByTestId('waiting-remind-alex')).toBeNull();
@@ -168,26 +191,49 @@ it('reminds through the share sheet, and offers Nudge everyone only while someon
       /^Still time to pick this week's meals in Keepsake — the round closes tomorrow at/,
     ),
   });
-  await fireEvent.press(screen.getByTestId('waiting-nudge'));
-  expect(Share.share).toHaveBeenCalledTimes(2);
 });
 
-it('hides reminders once everyone else has finished', async () => {
-  const everyoneDone = groupRound();
-  everyoneDone.participants[1] = { ...everyoneDone.participants[1]!, completedAt: 'x' };
-  mockedApi.getSelectionRound.mockResolvedValue(everyoneDone);
+it('invites the creator to see the matches once everyone has finished', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(everyoneFinished());
   await renderAs('alex');
-  await waitFor(() => expect(screen.getByText('Waiting for everyone')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("You're ready to see the matches")).toBeTruthy());
 
-  expect(screen.queryByTestId('waiting-nudge')).toBeNull();
+  expect(screen.getByTestId('waiting-deadline')).toHaveTextContent("Everyone's finished picking.");
+  expect(screen.queryByTestId('waiting-remind-blair')).toBeNull();
   expect(screen.queryByTestId('waiting-close-early-note')).toBeNull();
-  expect(screen.getByTestId('waiting-close')).toBeTruthy();
+  expect(isPrimary('waiting-close')).toBe(true);
+  expect(isPrimary('waiting-dismiss')).toBe(false);
+});
+
+it("thanks a finished member who can't close, and lets them leave", async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(everyoneFinished());
+  await renderAs('blair');
+  await waitFor(() => expect(screen.getByText('Thanks for picking')).toBeTruthy());
+
+  expect(screen.getByTestId('waiting-deadline')).toHaveTextContent(
+    /^You'll find the matches on This Week once Alex closes the round, or tomorrow at .*\.$/,
+  );
+  expect(screen.queryByTestId('waiting-close')).toBeNull();
+  expect(isPrimary('waiting-dismiss')).toBe(true);
+  await fireEvent.press(screen.getByTestId('waiting-dismiss'));
+  expect(dismissTo).toHaveBeenCalledWith('/');
+});
+
+it('tells a finished member the deadline alone decides once the creator has left', async () => {
+  mockedApi.getSelectionRound.mockResolvedValue(everyoneFinished({ createdBy: null }));
+  await renderAs('blair');
+  await waitFor(() => expect(screen.getByTestId('waiting-deadline')).toBeTruthy());
+  expect(screen.getByTestId('waiting-deadline')).toHaveTextContent(
+    /^You'll find the matches on This Week once the round closes tomorrow at .*\.$/,
+  );
 });
 
 it('offers Keep swiping to anyone who left cards undecided, and not otherwise', async () => {
   await renderAs('blair');
   await waitFor(() => expect(screen.getByTestId('waiting-keep-swiping')).toBeTruthy());
   expect(screen.getByText('Keep going')).toBeTruthy();
+  expect(isPrimary('waiting-keep-swiping')).toBe(true);
+  expect(screen.queryByTestId('waiting-dismiss')).toBeNull();
   await fireEvent.press(screen.getByTestId('waiting-keep-swiping'));
   expect(replace).toHaveBeenCalledWith('/smart-selection/round-1');
 });
@@ -205,6 +251,7 @@ it('lets a member outside the round watch, without swiping or closing', async ()
   expect(screen.queryByTestId('waiting-keep-swiping')).toBeNull();
   expect(screen.queryByTestId('waiting-close')).toBeNull();
   expect(screen.getByText('Alex')).toBeTruthy();
+  expect(isPrimary('waiting-dismiss')).toBe(true);
 });
 
 it('moves to the results once the round has closed', async () => {
